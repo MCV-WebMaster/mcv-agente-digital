@@ -69,7 +69,7 @@ Convierte estos datos a un formato limpio (ej: prop_id: 123, start_date: '2026-0
 Escribe estos datos limpios en la base de datos de Supabase.
 
 EL FLUJO DEL PROYECTO:
-FLAJO DE BÚSQUEDA DEL CLIENTE:
+FLUJO DE BÚSQUEDA DEL CLIENTE:
 
 El usuario busca fechas en el frontend de Vercel.
 
@@ -92,9 +92,8 @@ Crear un formulario "wizard" multi-paso que guíe al usuario.
 Al finalizar, los datos se envían a un agente de MCV vía Resend (API /api/contact).
 
 PLAN DE TRABAJO:
-
 El proyecto se ejecutará en un Sprint de 7 Días.
 
-Mi rol (el cliente) será configurar las cuentas (Vercel, Supabase, Resend, GitHub) y realizar el "copiar y pegar" de los bloques de código completos.
+Mi rol (el cliente) será configurar las cuentas gratuitas (Vercel, Supabase, Resend, GitHub) y realizar el "copiar y pegar" de los bloques de código completos que me proveas.
 
-Tu rol (IA) será proveer el 100% del código (componentes de React, APIs de Next.js,
+Tu rol (IA) será proveer el 100% del código completo (componentes de React, APIs de Next.js, scripts de Sincronización, scripts SQL para Supabase, consultas WPGraphQL) y la guía paso a paso del sprint (Día 1 a Día 7) para que yo pueda ejecutarlo.
