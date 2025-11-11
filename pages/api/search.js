@@ -15,7 +15,6 @@ export default async function handler(req, res) {
     // 2. Empezar a construir la consulta en Supabase
     let query = supabase
       .from('property_availability')
-      // --- INICIO DE LA CORRECCIÓN ---
       .select(`
         property_id, 
         property_slug, 
@@ -25,10 +24,7 @@ export default async function handler(req, res) {
         accepts_pets, 
         has_pool, 
         barrio_costa
-      `, 
-      { distinctOn: 'property_id' } // Esta es la sintaxis correcta de Supabase
-      )
-      // --- FIN DE LA CORRECCIÓN ---
+      `)
       .eq('status', 'Disponible'); // ¡Solo traer propiedades "Disponibles"!
 
     // 3. Aplicar los filtros que el usuario envió
@@ -55,19 +51,39 @@ export default async function handler(req, res) {
       query = query.eq('barrio_costa', barrio);
     }
 
-    // 4. Ejecutar la consulta
+    // 4. Ejecutar la consulta (traerá duplicados)
     const { data, error } = await query;
 
     if (error) {
       throw error;
     }
 
-    // 5. Devolver los resultados
+    // --- INICIO DE LA CORRECCIÓN (Tarea 3.5) ---
+    // 'data' tiene 356 filas (con duplicados).
+    // Vamos a filtrarlas por 'property_id' usando JavaScript.
+    
+    const uniquePropertiesMap = new Map();
+    
+    data.forEach(property => {
+      // Si la propiedad NO está en el mapa, la añadimos.
+      // Si ya está, la ignoramos.
+      if (!uniquePropertiesMap.has(property.property_id)) {
+        uniquePropertiesMap.set(property.property_id, property);
+      }
+    });
+
+    // Convertimos el mapa de vuelta a un array
+    const uniqueResults = Array.from(uniquePropertiesMap.values());
+    // 'uniqueResults' ahora solo tiene una entrada por property_id
+    // --- FIN DE LA CORRECCIÓN ---
+
+
+    // 5. Devolver los resultados ÚNICOS
     res.status(200).json({ 
       status: 'OK',
       filters: req.query,
-      count: data.length,
-      results: data 
+      count: uniqueResults.length, // Devolvemos el count corregido
+      results: uniqueResults      // Devolvemos los resultados únicos
     });
 
   } catch (error) {
