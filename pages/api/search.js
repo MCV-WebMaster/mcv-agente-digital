@@ -13,9 +13,6 @@ export default async function handler(req, res) {
     } = req.query;
 
     // 2. Empezar a construir la consulta en Supabase
-    // Pedimos solo los datos principales de la propiedad.
-    // Usaremos .distinct() para no repetir la misma propiedad
-    // si está disponible en múltiples quincenas.
     let query = supabase
       .from('property_availability')
       .select(`
@@ -28,41 +25,35 @@ export default async function handler(req, res) {
         has_pool, 
         barrio_costa
       `)
+      .distinct('property_id') // <-- CORRECCIÓN: .distinct() va aquí
       .eq('status', 'Disponible'); // ¡Solo traer propiedades "Disponibles"!
 
     // 3. Aplicar los filtros que el usuario envió
 
     // --- Filtro de Fechas (El "Gran Desafío") ---
-    // Esta lógica busca períodos de alquiler (ej. una quincena)
-    // que "envuelvan" completamente las fechas del usuario.
-    // Período DB: [--- start_date --- (Usuario) --- (Usuario) end_date --- end_date ---]
     if (startDate) {
-      query = query.lte('start_date', startDate); // La quincena debe empezar ANTES de que el usuario llegue
+      query = query.lte('start_date', startDate); 
     }
     if (endDate) {
-      query = query.gte('end_date', endDate); // La quincena debe terminar DESPUÉS de que el usuario se vaya
+      query = query.gte('end_date', endDate);
     }
 
     // --- Otros Filtros ---
     if (pax) {
-      // Traer propiedades con capacidad >= a la solicitada
       query = query.gte('pax', parseInt(pax, 10)); 
     }
     if (pets === 'true') {
-      // Traer propiedades que aceptan mascotas
       query = query.eq('accepts_pets', true);
     }
     if (pool === 'true') {
-      // Traer propiedades que tienen pileta
       query = query.eq('has_pool', true);
     }
     if (barrio) {
-      // Traer propiedades de un barrio específico
       query = query.eq('barrio_costa', barrio);
     }
 
-    // 4. Ejecutar la consulta (pidiendo que no repita propiedades)
-    const { data, error } = await query.distinct('property_id');
+    // 4. Ejecutar la consulta
+    const { data, error } = await query; // <-- CORRECCIÓN: Se quitó .distinct() de aquí
 
     if (error) {
       throw error;
