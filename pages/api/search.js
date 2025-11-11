@@ -15,6 +15,7 @@ export default async function handler(req, res) {
     // 2. Empezar a construir la consulta en Supabase
     let query = supabase
       .from('property_availability')
+      // --- INICIO DE LA CORRECCIÓN ---
       .select(`
         property_id, 
         property_slug, 
@@ -24,8 +25,10 @@ export default async function handler(req, res) {
         accepts_pets, 
         has_pool, 
         barrio_costa
-      `)
-      .distinct('property_id') // <-- CORRECCIÓN: .distinct() va aquí
+      `, 
+      { distinctOn: 'property_id' } // Esta es la sintaxis correcta de Supabase
+      )
+      // --- FIN DE LA CORRECCIÓN ---
       .eq('status', 'Disponible'); // ¡Solo traer propiedades "Disponibles"!
 
     // 3. Aplicar los filtros que el usuario envió
@@ -53,7 +56,7 @@ export default async function handler(req, res) {
     }
 
     // 4. Ejecutar la consulta
-    const { data, error } = await query; // <-- CORRECCIÓN: Se quitó .distinct() de aquí
+    const { data, error } = await query;
 
     if (error) {
       throw error;
