@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
-import DatePicker, { registerLocale } from 'react-datepicker'; // ¡NUEVO!
-import es from 'date-fns/locale/es'; // ¡NUEVO!
-registerLocale('es', es); // Registrar idioma español
+import DatePicker, { registerLocale } from 'react-datepicker';
+import es from 'date-fns/locale/es';
+registerLocale('es', es);
 
 export default function SearchPage() {
   
@@ -15,6 +15,7 @@ export default function SearchPage() {
     tipo: null,
     barrio: null,
     pax: '',
+    pax_or_more: false, // ¡NUEVO!
     pets: false,
     pool: false,
     bedrooms: '',
@@ -22,11 +23,10 @@ export default function SearchPage() {
     maxMts: '',
     minPrice: '',
     maxPrice: '',
-    startDate: null, // ¡NUEVO!
-    endDate: null,   // ¡NUEVO!
+    startDate: null,
+    endDate: null,
   });
 
-  // Estado local para el DatePicker
   const [dateRange, setDateRange] = useState([null, null]);
 
   // --- ESTADO DE LÓGICA ---
@@ -120,43 +120,36 @@ export default function SearchPage() {
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrio: null,
-      pax: '', pets: false, pool: false, bedrooms: '',
+      pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null,
     };
     
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
-
       if (name === 'operacion') {
         newState = { ...defaultState, operacion: value };
-        setDateRange([null, null]); // Resetear calendario
+        setDateRange([null, null]);
       }
-      if (name === 'zona') {
-        newState.barrio = null;
-      }
-      if (name === 'tipo') {
-        if (value === 'lote') {
-          newState = { ...newState,
-            bedrooms: '', pax: '', pets: false, pool: false,
-            minMts: '', maxMts: '',
-          };
-        }
+      if (name === 'zona') newState.barrio = null;
+      if (name === 'tipo' && value === 'lote') {
+        newState = { ...newState,
+          bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
+          minMts: '', maxMts: '',
+        };
       }
       return newState;
     });
   };
 
-  // ¡NUEVO! Manejador para el calendario
   const handleDateChange = (dates) => {
     const [start, end] = dates;
-    setDateRange(dates); // Actualiza el estado visual del calendario
-    // Actualiza los filtros reales solo si ambas fechas están seleccionadas
+    setDateRange(dates);
     if (start && end) {
       setFilters(prev => ({
         ...prev,
-        startDate: start.toISOString().split('T')[0], // Formato YYYY-MM-DD
-        endDate: end.toISOString().split('T')[0],   // Formato YYYY-MM-DD
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
       }));
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
@@ -173,11 +166,10 @@ export default function SearchPage() {
   const removeFilter = (name) => {
     const defaultFilters = {
       operacion: null, zona: null, tipo: null, barrio: null,
-      pax: '', pets: false, pool: false, bedrooms: '',
+      pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null,
     };
-    
     if (name === 'operacion') {
       setFilters(defaultFilters);
       setDateRange([null, null]);
@@ -188,8 +180,7 @@ export default function SearchPage() {
     }
   };
 
-  // --- 4. LÓGICA DE RENDERIZADO DEL ASISTENTE ---
-  
+  // --- 4. RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -211,7 +202,6 @@ export default function SearchPage() {
       );
     }
     
-    // Paso 1: ¿Qué buscas?
     if (!filters.operacion) {
       return (
         <div className="text-center">
@@ -231,7 +221,6 @@ export default function SearchPage() {
       );
     }
 
-    // Paso 2: ¿Dónde buscas?
     if (!filters.zona) {
       return (
         <div className="text-center">
@@ -253,7 +242,6 @@ export default function SearchPage() {
         <h2 className="text-lg font-bold mb-4 text-mcv-gris">Afiná tu búsqueda:</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           
-          {/* --- Filtro TIPO --- */}
           <div>
             <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
             <select
@@ -269,7 +257,6 @@ export default function SearchPage() {
             </select>
           </div>
 
-          {/* --- Filtro BARRIO (Dinámico) --- */}
           {listas.barrios[filters.zona] && listas.barrios[filters.zona].length > 0 && (
             <div>
               <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio</label>
@@ -287,7 +274,6 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* --- Filtro DORMITORIOS (Oculto para Lotes) --- */}
           {filters.tipo !== 'lote' && (
             <div>
               <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
@@ -301,10 +287,10 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* --- Filtro PAX (Solo Alquileres) --- */}
+          {/* --- ¡NUEVA LÓGICA DE PAX! --- */}
           {filters.operacion !== 'venta' && (
-            <div>
-              <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas (mín)</label>
+            <div className="col-span-2 md:col-span-1">
+              <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
                 type="number" id="pax" name="pax" min="0"
                 value={filters.pax}
@@ -312,10 +298,18 @@ export default function SearchPage() {
                 placeholder="Ej: 6"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
               />
+              <label className="flex items-center gap-1 cursor-pointer mt-1">
+                <input
+                  type="checkbox" name="pax_or_more"
+                  checked={filters.pax_or_more}
+                  onChange={() => handleCheckboxChange('pax_or_more')}
+                  className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                />
+                <span className="text-xs text-gray-600">o más</span>
+              </label>
             </div>
           )}
           
-          {/* --- Filtros PRECIO (Mín y Máx) --- */}
           <div>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
@@ -335,7 +329,6 @@ export default function SearchPage() {
             />
           </div>
 
-          {/* --- Filtros MTS2 (Solo Venta/Anual, no Lotes) --- */}
           {filters.operacion !== 'alquiler_temporal' && filters.tipo !== 'lote' && (
             <>
               <div>
@@ -357,7 +350,6 @@ export default function SearchPage() {
             </>
           )}
 
-          {/* --- Filtros FECHAS (Solo Alquiler Temporal) --- */}
           {filters.operacion === 'alquiler_temporal' && (
             <div className="col-span-2">
               <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas</label>
@@ -376,7 +368,6 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* --- Checkboxes (Pileta y Mascotas) --- */}
           {filters.tipo !== 'lote' && (
             <div className="flex flex-col gap-2 pt-6 col-span-2 md:col-span-1">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -386,7 +377,7 @@ export default function SearchPage() {
                   onChange={() => handleCheckboxChange('pool')}
                   className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                 />
-                <span className="text-sm text-gray-700">Con Pileta / Jacuzzi</span>
+                <span className="text-sm text-gray-700">Con Pileta</span>
               </label>
               
               {filters.operacion !== 'venta' && (
@@ -413,10 +404,8 @@ export default function SearchPage() {
     <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         
-        {/* --- NUEVO ENCABEZADO DE 3 COLUMNAS --- */}
         <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
           
-          {/* Columna Izquierda (25%) */}
           <div className="w-full md:w-1/4">
             <img 
               src="/logo_mcv_rectangular.png" 
@@ -425,20 +414,17 @@ export default function SearchPage() {
             />
           </div>
           
-          {/* Columna Central (50%) - AQUÍ VA EL BUSCADOR */}
           <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
             <div className="mb-4">{renderFiltrosActivos()}</div>
             {renderAsistente()} 
           </div>
           
-          {/* Columna Derecha (25%) */}
           <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
             <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Agente Digital</h1>
             <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
           </div>
         </header>
 
-        {/* --- Resultados (Abajo) --- */}
         <main>
           {isSearching ? (
             <Spinner />
@@ -459,7 +445,6 @@ export default function SearchPage() {
                 </div>
               </>
             ) : (
-              // No mostrar "0 resultados" si aún no se eligió zona
               (filters.zona || isSearching) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>
@@ -468,7 +453,6 @@ export default function SearchPage() {
               )
             )
           ) : (
-             // Estado inicial (sin operación seleccionada)
              !isLoading && (
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
