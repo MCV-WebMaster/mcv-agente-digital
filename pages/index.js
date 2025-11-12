@@ -6,21 +6,20 @@ import ActiveFilterTag from '@/components/ActiveFilterTag';
 export default function SearchPage() {
   
   // --- ESTADO PRINCIPAL ---
-  const [filters, setFilters] = useState({
-    operacion: 'venta', // Valor por defecto
-    zona: null,
-    tipo: null,
-    barrio: null,
-    pax: '',
-    pets: false,
-    pool: false,
-    bedrooms: '',
-    minMts: '',
-    maxMts: '',
-    minPrice: '',
-    maxPrice: '',
-    // (Faltan: startDate, endDate - se agregan en Día 8)
-  });
+const [filters, setFilters] = useState({
+  operacion: null, // <-- CORREGIDO: Inicia vacío
+  zona: null,
+  tipo: null,
+  barrio: null,
+  pax: '',
+  pets: false,
+  pool: false,
+  bedrooms: '',
+  minMts: '',
+  maxMts: '',
+  minPrice: '',
+  maxPrice: '',
+});
 
   // --- ESTADO DE RESULTADOS Y LISTAS DE FILTROS ---
   const [results, setResults] = useState([]);
