@@ -6,28 +6,30 @@ import ActiveFilterTag from '@/components/ActiveFilterTag';
 export default function SearchPage() {
   
   // --- ESTADO PRINCIPAL ---
-const [filters, setFilters] = useState({
-  operacion: null, // <-- CORREGIDO: Inicia vacío
-  zona: null,
-  tipo: null,
-  barrio: null,
-  pax: '',
-  pets: false,
-  pool: false,
-  bedrooms: '',
-  minMts: '',
-  maxMts: '',
-  minPrice: '',
-  maxPrice: '',
-});
+  const [filters, setFilters] = useState({
+    operacion: null, // Inicia en null
+    zona: null,
+    tipo: null,
+    barrio: null,
+    pax: '',
+    pets: false,
+    pool: false,
+    bedrooms: '',
+    minMts: '',
+    maxMts: '',
+    minPrice: '',
+    maxPrice: '',
+  });
 
-  // --- ESTADO DE RESULTADOS Y LISTAS DE FILTROS ---
+  // --- ESTADO DE LÓGICA ---
   const [results, setResults] = useState([]);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Carga inicial de filtros
+  const [isSearching, setIsSearching] = useState(false); // Carga de propiedades
   const [error, setError] = useState(null);
-  
-  // Mapeo simple para los placeholders de precio
+  const [hasLoadedFilters, setHasLoadedFilters] = useState(false); // Controla el flujo
+
+  // Mapeo para placeholders de precio
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
@@ -37,6 +39,7 @@ const [filters, setFilters] = useState({
   // --- 1. CARGAR LISTAS DE FILTROS (Zonas y Barrios) ---
   useEffect(() => {
     async function loadFilters() {
+      setIsLoading(true); // Inicia la carga general
       try {
         const res = await fetch('/api/get-filters');
         const data = await res.json();
@@ -45,17 +48,30 @@ const [filters, setFilters] = useState({
             zonas: Object.keys(data.filtros).sort(),
             barrios: data.filtros
           });
+          setHasLoadedFilters(true); // ¡Éxito!
+        } else {
+          throw new Error("Error al cargar los filtros desde la API.");
         }
       } catch (err) {
         console.error("Error cargando listas de filtros:", err);
+        setError("No se pudieron cargar los filtros. Intente recargar la página.");
+      } finally {
+        setIsLoading(false); // Termina la carga general
       }
     }
     loadFilters();
-  }, []);
+  }, []); // El array vacío [] asegura que solo se ejecute 1 vez
 
   // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
-    setIsLoading(true);
+    // No buscar si los filtros principales no están seteados
+    if (!currentFilters.operacion || !currentFilters.zona) {
+      setResults([]); // Limpiar resultados si se resetea la zona/operación
+      setIsSearching(false);
+      return;
+    }
+    
+    setIsSearching(true);
     setError(null);
 
     try {
@@ -66,7 +82,6 @@ const [filters, setFilters] = useState({
       });
 
       if (!response.ok) {
-        // Capturamos el error de la API si lo hay
         const errData = await response.json();
         throw new Error(errData.error || 'La respuesta de la red no fue OK');
       }
@@ -81,46 +96,46 @@ const [filters, setFilters] = useState({
       console.error('Error al buscar propiedades:', err);
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      setIsSearching(false);
     }
   }, []);
 
   // useEffect "vigila" los filtros. Si cambian, llama a fetchProperties()
   useEffect(() => {
-    // Usamos un debounce para no llamar a la API en cada tecla
-    const handler = setTimeout(() => {
-      fetchProperties(filters);
-    }, 500); // Espera 500ms después de que el usuario deja de teclear
-    return () => clearTimeout(handler); // Limpia el timeout
-  }, [filters, fetchProperties]);
+    // Solo buscar si los filtros iniciales (operacion y zona) están listos
+    if (hasLoadedFilters && filters.operacion && filters.zona) {
+      const handler = setTimeout(() => {
+        fetchProperties(filters);
+      }, 500); // Espera 500ms después de que el usuario deja de teclear
+      return () => clearTimeout(handler);
+    } else {
+      setResults([]); // Limpiar resultados si no hay operación o zona
+    }
+  }, [filters, hasLoadedFilters, fetchProperties]);
 
   // --- 3. MANEJADORES DE EVENTOS ---
   const handleFilterChange = (name, value) => {
-    // Si cambia la operación, limpiar filtros específicos
-    if (name === 'operacion') {
-      setFilters(prev => ({
-        ...prev,
-        operacion: value,
-        tipo: null,
-        barrio: null,
-        pax: '',
-        pets: false,
-        pool: false,
-        bedrooms: '',
-        minMts: '',
-        maxMts: '',
-        minPrice: '',
-        maxPrice: '',
-      }));
-    } else if (name === 'zona') {
-      // Si cambia la zona, limpiar el barrio
-      setFilters(prev => ({ ...prev, zona: value, barrio: null }));
-    } else {
-      setFilters(prev => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
+    const defaultState = {
+      operacion: null, zona: null, tipo: null, barrio: null,
+      pax: '', pets: false, pool: false, bedrooms: '',
+      minMts: '', maxMts: '', minPrice: '', maxPrice: '',
+    };
+    
+    setFilters(prev => {
+      let newState = { ...prev, [name]: value };
+
+      // Lógica de reseteo al cambiar filtros principales
+      if (name === 'operacion') {
+        return {
+          ...defaultState,
+          operacion: value, // Mantener solo la nueva operación
+        };
+      }
+      if (name === 'zona') {
+        newState.barrio = null; // Resetear barrio al cambiar zona
+      }
+      return newState;
+    });
   };
 
   const handleCheckboxChange = (name) => {
@@ -130,16 +145,15 @@ const [filters, setFilters] = useState({
     }));
   };
 
-  // Resetea un filtro específico (al hacer clic en la X de la etiqueta)
   const removeFilter = (name) => {
     const defaultFilters = {
-      operacion: 'venta', zona: null, tipo: null, barrio: null,
+      operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
     };
     
     if (name === 'operacion') {
-      setFilters(defaultFilters);
+      setFilters(defaultFilters); // Reseteo total
     } else if (name === 'zona') {
       setFilters(prev => ({ ...prev, zona: null, barrio: null }));
     } else {
@@ -155,11 +169,27 @@ const [filters, setFilters] = useState({
       {filters.zona && <ActiveFilterTag label={`${filters.zona}`} onRemove={() => removeFilter('zona')} />}
       {filters.tipo && <ActiveFilterTag label={`${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
       {filters.barrio && <ActiveFilterTag label={`${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
-      {/* (Se pueden añadir más etiquetas para precio, etc. si lo desea) */}
+      {/* (Se pueden añadir más etiquetas para precio, etc.) */}
     </div>
   );
 
   const renderAsistente = () => {
+    // --- ESTADO DE CARGA INICIAL (esperando filtros) ---
+    if (isLoading) {
+      return <div className="text-center p-10"><Spinner /></div>;
+    }
+    
+    // --- ESTADO DE ERROR (no se cargaron filtros) ---
+    if (error && !hasLoadedFilters) {
+      return (
+         <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
+           <p className="font-bold">{error}</p>
+         </div>
+      );
+    }
+    
+    // --- PASOS DEL ASISTENTE ---
+    
     // Paso 1: ¿Qué buscas?
     if (!filters.operacion) {
       return (
@@ -202,7 +232,7 @@ const [filters, setFilters] = useState({
         <h2 className="text-lg font-bold mb-4 text-mcv-gris">Afiná tu búsqueda:</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           
-          {/* --- Filtro TIPO (Casa, Lote, etc.) --- */}
+          {/* --- Filtro TIPO --- */}
           <div>
             <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
             <select
@@ -269,7 +299,7 @@ const [filters, setFilters] = useState({
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
-              placeholder={pricePlaceholder[filters.operacion]}
+              placeholder={pricePlaceholder[filters.operacion] || 'Ej: 1000'}
               value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
@@ -358,7 +388,8 @@ const [filters, setFilters] = useState({
           {/* Columna Central (50%) - AQUÍ VA EL BUSCADOR */}
           <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
             <div className="mb-4">{renderFiltrosActivos()}</div>
-            {renderAsistente()}
+            {/* El asistente se renderiza aquí */}
+            {renderAsistente()} 
           </div>
           
           {/* Columna Derecha (25%) */}
@@ -370,28 +401,35 @@ const [filters, setFilters] = useState({
 
         {/* --- Resultados (Abajo) --- */}
         <main>
-          {isLoading ? (
+          {isSearching ? ( // Usar el nuevo estado 'isSearching'
             <Spinner />
           ) : error ? (
             <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
               <p className="font-bold">Error al cargar propiedades: {error}</p>
             </div>
-          ) : results.length > 0 ? (
-            <>
-              <h2 className="text-xl font-bold text-mcv-gris mb-4">
-                Resultados ({results.length})
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {results.map(prop => (
-                  <PropertyCard key={prop.property_id} property={prop} />
-                ))}
+          ) : (filters.operacion && filters.zona) ? ( // Solo mostrar si hay una búsqueda activa
+            results.length > 0 ? (
+              <>
+                <h2 className="text-xl font-bold text-mcv-gris mb-4">
+                  Resultados ({results.length})
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {results.map(prop => (
+                    <PropertyCard key={prop.property_id} property={prop} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
+                <p className="text-xl font-bold">No se encontraron propiedades</p>
+                <p>Intente ajustar sus filtros de búsqueda.</p>
               </div>
-            </>
+            )
           ) : (
-            <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
-              <p className="text-xl font-bold">No se encontraron propiedades</p>
-              <p>Intente ajustar sus filtros de búsqueda.</p>
-            </div>
+             <div className="text-center text-gray-500 p-10">
+                <p className="text-xl font-bold">Bienvenido</p>
+                <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>
+              </div>
           )}
         </main>
 
