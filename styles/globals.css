@@ -2,12 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Estilo base con fondo blanco y texto oscuro.
+  Esto coincide con su PDF de estilos.
+*/
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  @apply bg-white text-gray-800;
 }
