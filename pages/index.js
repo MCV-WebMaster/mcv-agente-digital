@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
+import DatePicker, { registerLocale } from 'react-datepicker'; // ¡NUEVO!
+import es from 'date-fns/locale/es'; // ¡NUEVO!
+registerLocale('es', es); // Registrar idioma español
 
 export default function SearchPage() {
   
   // --- ESTADO PRINCIPAL ---
   const [filters, setFilters] = useState({
-    operacion: null, // Inicia en null (CORREGIDO)
+    operacion: null,
     zona: null,
     tipo: null,
     barrio: null,
@@ -19,28 +22,31 @@ export default function SearchPage() {
     maxMts: '',
     minPrice: '',
     maxPrice: '',
-    // (Faltan: startDate, endDate - se agregan en Día 8)
+    startDate: null, // ¡NUEVO!
+    endDate: null,   // ¡NUEVO!
   });
+
+  // Estado local para el DatePicker
+  const [dateRange, setDateRange] = useState([null, null]);
 
   // --- ESTADO DE LÓGICA ---
   const [results, setResults] = useState([]);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
-  const [isLoading, setIsLoading] = useState(true); // Carga inicial de filtros
-  const [isSearching, setIsSearching] = useState(false); // Carga de propiedades
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
-  const [hasLoadedFilters, setHasLoadedFilters] = useState(false); // Controla el flujo
+  const [hasLoadedFilters, setHasLoadedFilters] = useState(false);
 
-  // Mapeo para placeholders de precio
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- 1. CARGAR LISTAS DE FILTROS (Zonas y Barrios) ---
+  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     async function loadFilters() {
-      setIsLoading(true); // Inicia la carga general
+      setIsLoading(true);
       try {
         const res = await fetch('/api/get-filters');
         const data = await res.json();
@@ -49,7 +55,7 @@ export default function SearchPage() {
             zonas: Object.keys(data.filtros).sort(),
             barrios: data.filtros
           });
-          setHasLoadedFilters(true); // ¡Éxito!
+          setHasLoadedFilters(true);
         } else {
           throw new Error("No se encontraron filtros. Revise la data.");
         }
@@ -57,23 +63,23 @@ export default function SearchPage() {
         console.error("Error cargando listas de filtros:", err);
         setError("No se pudieron cargar los filtros. Intente recargar la página.");
       } finally {
-        setIsLoading(false); // Termina la carga general
+        setIsLoading(false);
       }
     }
     loadFilters();
-  }, []); // El array vacío [] asegura que solo se ejecute 1 vez
+  }, []);
 
   // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
-    // No buscar si los filtros principales no están seteados
-    if (!currentFilters.operacion || !currentFilters.zona) {
-      setResults([]); // Limpiar resultados si se resetea la zona/operación
+    if (!currentFilters.operacion) {
+      setResults([]); 
       setIsSearching(false);
       return;
     }
     
     setIsSearching(true);
     setError(null);
+    setResults([]);
 
     try {
       const response = await fetch('/api/search', {
@@ -101,16 +107,12 @@ export default function SearchPage() {
     }
   }, []);
 
-  // useEffect "vigila" los filtros. Si cambian, llama a fetchProperties()
   useEffect(() => {
-    // Solo buscar si los filtros iniciales (operacion y zona) están listos
-    if (hasLoadedFilters && filters.operacion && filters.zona) {
+    if (hasLoadedFilters) {
       const handler = setTimeout(() => {
         fetchProperties(filters);
-      }, 500); // Espera 500ms después de que el usuario deja de teclear
+      }, 500); 
       return () => clearTimeout(handler);
-    } else {
-      setResults([]); // Limpiar resultados si no hay operación o zona
     }
   }, [filters, hasLoadedFilters, fetchProperties]);
 
@@ -120,34 +122,45 @@ export default function SearchPage() {
       operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
+      startDate: null, endDate: null,
     };
     
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
 
-      // Lógica de reseteo al cambiar filtros principales
       if (name === 'operacion') {
-        return {
-          ...defaultState,
-          operacion: value, // Mantener solo la nueva operación
-        };
+        newState = { ...defaultState, operacion: value };
+        setDateRange([null, null]); // Resetear calendario
       }
       if (name === 'zona') {
-        newState.barrio = null; // Resetear barrio al cambiar zona
+        newState.barrio = null;
       }
       if (name === 'tipo') {
-        // Si se selecciona "Lote", limpiar filtros irrelevantes
         if (value === 'lote') {
-          newState.bedrooms = '';
-          newState.pax = '';
-          newState.pets = false;
-          newState.pool = false;
-          newState.minMts = '';
-          newState.maxMts = '';
+          newState = { ...newState,
+            bedrooms: '', pax: '', pets: false, pool: false,
+            minMts: '', maxMts: '',
+          };
         }
       }
       return newState;
     });
+  };
+
+  // ¡NUEVO! Manejador para el calendario
+  const handleDateChange = (dates) => {
+    const [start, end] = dates;
+    setDateRange(dates); // Actualiza el estado visual del calendario
+    // Actualiza los filtros reales solo si ambas fechas están seleccionadas
+    if (start && end) {
+      setFilters(prev => ({
+        ...prev,
+        startDate: start.toISOString().split('T')[0], // Formato YYYY-MM-DD
+        endDate: end.toISOString().split('T')[0],   // Formato YYYY-MM-DD
+      }));
+    } else {
+      setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
+    }
   };
 
   const handleCheckboxChange = (name) => {
@@ -162,10 +175,12 @@ export default function SearchPage() {
       operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
+      startDate: null, endDate: null,
     };
     
     if (name === 'operacion') {
-      setFilters(defaultFilters); // Reseteo total
+      setFilters(defaultFilters);
+      setDateRange([null, null]);
     } else if (name === 'zona') {
       setFilters(prev => ({ ...prev, zona: null, barrio: null }));
     } else {
@@ -178,19 +193,16 @@ export default function SearchPage() {
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
-      {filters.zona && <ActiveFilterTag label={`${filters.zona}`} onRemove={() => removeFilter('zona')} />}
-      {filters.tipo && <ActiveFilterTag label={`${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
-      {filters.barrio && <ActiveFilterTag label={`${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
+      {filters.zona && <ActiveFilterTag label={`Zona: ${filters.zona}`} onRemove={() => removeFilter('zona')} />}
+      {filters.tipo && <ActiveFilterTag label={`Tipo: ${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
+      {filters.barrio && <ActiveFilterTag label={`Barrio: ${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
     </div>
   );
 
   const renderAsistente = () => {
-    // --- ESTADO DE CARGA INICIAL (esperando filtros) ---
     if (isLoading) {
       return <div className="text-center p-10"><Spinner /></div>;
     }
-    
-    // --- ESTADO DE ERROR (no se cargaron filtros) ---
     if (error && !hasLoadedFilters) {
       return (
          <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
@@ -198,8 +210,6 @@ export default function SearchPage() {
          </div>
       );
     }
-    
-    // --- PASOS DEL ASISTENTE ---
     
     // Paso 1: ¿Qué buscas?
     if (!filters.operacion) {
@@ -347,6 +357,25 @@ export default function SearchPage() {
             </>
           )}
 
+          {/* --- Filtros FECHAS (Solo Alquiler Temporal) --- */}
+          {filters.operacion === 'alquiler_temporal' && (
+            <div className="col-span-2">
+              <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas</label>
+              <DatePicker
+                id="dateRange"
+                selectsRange={true}
+                startDate={dateRange[0]}
+                endDate={dateRange[1]}
+                onChange={handleDateChange}
+                locale="es"
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Seleccione un rango de fechas"
+                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                isClearable={true}
+              />
+            </div>
+          )}
+
           {/* --- Checkboxes (Pileta y Mascotas) --- */}
           {filters.tipo !== 'lote' && (
             <div className="flex flex-col gap-2 pt-6 col-span-2 md:col-span-1">
@@ -399,7 +428,6 @@ export default function SearchPage() {
           {/* Columna Central (50%) - AQUÍ VA EL BUSCADOR */}
           <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
             <div className="mb-4">{renderFiltrosActivos()}</div>
-            {/* El asistente se renderiza aquí */}
             {renderAsistente()} 
           </div>
           
@@ -412,13 +440,13 @@ export default function SearchPage() {
 
         {/* --- Resultados (Abajo) --- */}
         <main>
-          {isSearching ? ( // Usar el nuevo estado 'isSearching'
+          {isSearching ? (
             <Spinner />
           ) : error ? (
             <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
               <p className="font-bold">Error al cargar propiedades: {error}</p>
             </div>
-          ) : (filters.operacion && filters.zona) ? ( // Solo mostrar si hay una búsqueda activa
+          ) : (filters.operacion && hasLoadedFilters) ? (
             results.length > 0 ? (
               <>
                 <h2 className="text-xl font-bold text-mcv-gris mb-4">
@@ -431,16 +459,22 @@ export default function SearchPage() {
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
-                <p className="text-xl font-bold">No se encontraron propiedades</p>
-                <p>Intente ajustar sus filtros de búsqueda.</p>
-              </div>
+              // No mostrar "0 resultados" si aún no se eligió zona
+              (filters.zona || isSearching) && (
+                <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
+                  <p className="text-xl font-bold">No se encontraron propiedades</p>
+                  <p>Intente ajustar sus filtros de búsqueda.</p>
+                </div>
+              )
             )
           ) : (
-             <div className="text-center text-gray-500 p-10">
+             // Estado inicial (sin operación seleccionada)
+             !isLoading && (
+              <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>
               </div>
+             )
           )}
         </main>
 
