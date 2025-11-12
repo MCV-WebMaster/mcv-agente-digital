@@ -1,75 +1,65 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 
-// --- IDs de Categoría (de su lista de Estatik) ---
-const CATEGORIA_VENTA = 198;
-const CATEGORIA_ALQUILER_TEMPORAL = 197;
-const CATEGORIA_ALQUILER_ANUAL = [193, 194]; // Amueblado o Sin Muebles
-
-// --- IDs de Tipo (de su lista de Estatik) ---
-const TIPO_CASA = 162;
-const TIPO_DEPARTAMENTO = 163;
-const TIPO_LOTE = 167;
-
-
 export default function SearchPage() {
   
-  // --- ESTADO PRINCIPAL ---
-  const [step, setStep] = useState(1); // 1: Operación, 2: Zona, 3: Filtros, 4: Resultados
-  
-  // Guardamos todos los filtros en un solo objeto
+  // --- ESTADO DE FILTROS ---
   const [filters, setFilters] = useState({
-    operacion: null, // 'venta', 'alquiler_temporal', 'alquiler_anual'
-    zona: null,      // 'GBA Sur', 'Costa Esmeralda'
-    tipo: null,      // 'casa', 'departamento', 'lote'
+    operacion: 'venta', // Valor por defecto
+    zona: '',
+    tipo: '',
+    barrio: '',
     pax: '',
     pets: false,
     pool: false,
     bedrooms: '',
     startDate: '',
     endDate: '',
+    minPrice: '',
+    maxPrice: '',
+    minMts: '',
+    maxMts: '',
   });
 
-  // --- ESTADO DE RESULTADOS ---
+  // --- ESTADO DE RESULTADOS Y LISTAS DE FILTROS ---
   const [results, setResults] = useState([]);
+  const [listas, setListas] = useState({ zonas: [], barrios: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // --- LÓGICA DE BÚSQUEDA ---
-  const handleSearch = async () => {
+  // --- 1. CARGAR LISTAS DE FILTROS (Zonas y Barrios) ---
+  useEffect(() => {
+    async function loadFilters() {
+      try {
+        const res = await fetch('/api/get-filters');
+        const data = await res.json();
+        if (data.status === 'OK') {
+          setListas({ zonas: data.zonas, barrios: data.barrios });
+        }
+      } catch (err) {
+        console.error("Error cargando listas de filtros:", err);
+      }
+    }
+    loadFilters();
+  }, []); // El array vacío [] asegura que solo se ejecute 1 vez
+
+  // --- 2. LÓGICA DE BÚSQUEDA (se llama con el botón) ---
+  const handleSearch = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    setStep(4); // Mover a la página de resultados
-
-    // 1. Limpiar filtros irrelevantes
-    const finalFilters = { ...filters };
-    if (filters.operacion === 'venta') {
-      delete finalFilters.pax;
-      delete finalFilters.pets;
-      delete finalFilters.startDate;
-      delete finalFilters.endDate;
-    }
-    if (filters.operacion === 'alquiler_temporal') {
-      delete finalFilters.bedrooms;
-    }
+    setResults([]); // Limpiar resultados anteriores
 
     try {
-      // 2. Llamar a nuestra API (¡usando POST!)
       const response = await fetch('/api/search', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(finalFilters), // Enviamos los filtros en el body
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(filters),
       });
 
-      if (!response.ok) {
-        throw new Error('La respuesta de la red no fue OK');
-      }
+      if (!response.ok) throw new Error('La respuesta de la red no fue OK');
       
       const data = await response.json();
-      
       if (data.status === 'OK') {
         setResults(data.results);
       } else {
@@ -81,9 +71,9 @@ export default function SearchPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters]); // Se ejecuta cuando 'filters' cambia
 
-  // --- MANEJADORES DE EVENTOS ---
+  // --- 3. MANEJADORES DE EVENTOS ---
   const handleFilterChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFilters(prev => ({
@@ -92,152 +82,213 @@ export default function SearchPage() {
     }));
   };
 
-  // Funciones para manejar los pasos del "Asistente"
-  const selectOperacion = (op) => {
-    setFilters(prev => ({ ...prev, operacion: op }));
-    setStep(2); // Ir al paso 2 (Zona)
-  };
-  
-  const selectZona = (zona) => {
-    setFilters(prev => ({ ...prev, zona: zona }));
-    setStep(3); // Ir al paso 3 (Filtros)
-  };
-
-  const resetSearch = () => {
-    setFilters({
-      operacion: null, zona: null, tipo: null,
-      pax: '', pets: false, pool: false, bedrooms: '',
-      startDate: '', endDate: '',
-    });
-    setResults([]);
-    setError(null);
-    setIsLoading(false);
-    setStep(1); // Volver al inicio
-  };
-
-  // --- RENDERIZADO (El HTML) ---
-
-  const renderStep = () => {
-    switch (step) {
-      // --- PASO 1: ¿QUÉ BUSCAS? ---
-      case 1:
-        return (
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-8">¿Qué estás buscando?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <button onClick={() => selectOperacion('venta')} className="p-8 bg-mcv-azul text-white rounded-lg shadow-lg hover:bg-opacity-80 transition-all text-2xl font-bold">
-                Comprar
-              </button>
-              <button onClick={() => selectOperacion('alquiler_temporal')} className="p-8 bg-mcv-verde text-white rounded-lg shadow-lg hover:bg-opacity-80 transition-all text-2xl font-bold">
-                Alquiler Temporal
-              </button>
-              <button onClick={() => selectOperacion('alquiler_anual')} className="p-8 bg-mcv-gris text-white rounded-lg shadow-lg hover:bg-opacity-80 transition-all text-2xl font-bold">
-                Alquiler Anual
-              </button>
-            </div>
-          </div>
-        );
-
-      // --- PASO 2: ¿DÓNDE BUSCAS? ---
-      case 2:
-        return (
-          <div className="text-center">
-            <button onClick={() => setStep(1)} className="text-mcv-azul mb-6">&larr; Volver</button>
-            <h2 className="text-3xl font-bold mb-8">¿En qué zona?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <button onClick={() => selectZona('Costa Esmeralda')} className="p-8 bg-gray-100 border border-gray-300 text-mcv-gris rounded-lg shadow-lg hover:bg-gray-200 transition-all text-2xl font-bold">
-                Costa Atlántica
-              </button>
-              <button onClick={() => selectZona('GBA Sur')} className="p-8 bg-gray-100 border border-gray-300 text-mcv-gris rounded-lg shadow-lg hover:bg-gray-200 transition-all text-2xl font-bold">
-                GBA Zona Sur
-              </button>
-              {/* Añadir más zonas si es necesario */}
-            </div>
-          </div>
-        );
+  // --- 4. RENDERIZADO (El HTML) ---
+  return (
+    <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
         
-      // --- PASO 3: FILTROS ESPECÍFICOS ---
-      case 3:
-        return (
-          <div>
-            <button onClick={() => setStep(2)} className="text-mcv-azul mb-6">&larr; Volver</button>
-            <h2 className="text-3xl font-bold mb-6 text-center">Afiná tu búsqueda</h2>
-            <div className="p-6 bg-gray-50 border border-gray-200 rounded-lg">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Filtro: Tipo de Propiedad */}
-                <div>
-                  <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Propiedad</label>
-                  <select
-                    id="tipo"
-                    name="tipo"
-                    value={filters.tipo || ''}
-                    onChange={handleFilterChange}
-                    className="w-full p-2 rounded-md bg-white border border-gray-300 focus:border-mcv-azul focus:ring-mcv-azul"
-                  >
-                    <option value="">Cualquiera</option>
-                    <option value="casa">Casa</option>
-                    <option value="departamento">Departamento</option>
-                    {filters.operacion === 'venta' && <option value="lote">Lote</option>}
-                  </select>
-                </div>
+        {/* --- Encabezado y Logo --- */}
+        <header className="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 border-b border-gray-200">
+          <img 
+            src="/logo_mcv_rectangular.png" 
+            alt="Logo MCV Propiedades" 
+            className="w-48 md:w-64"
+          />
+          <div className="text-center md:text-right mt-4 md:mt-0">
+            <h1 className="text-3xl font-bold text-mcv-azul">Agente Digital</h1>
+            <p className="text-lg text-gray-500">Encuentre su propiedad ideal</p>
+          </div>
+        </header>
 
-                {/* Filtros de VENTA */}
-                {filters.operacion === 'venta' && (
+        {/* --- Contenedor Principal: Filtros + Resultados --- */}
+        <div className="flex flex-col md:flex-row gap-8">
+
+          {/* --- Columna de Filtros (Izquierda) --- */}
+          <aside className="w-full md:w-1/3 lg:w-1/4 p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm h-fit">
+            
+            <h2 className="text-2xl font-bold mb-4 text-mcv-gris">Filtros</h2>
+            
+            <div className="space-y-4">
+              
+              {/* --- ¿QUÉ BUSCAS? (Operación) --- */}
+              <div>
+                <label htmlFor="operacion" className="block text-sm font-bold text-gray-700 mb-1">¿Qué buscás?</label>
+                <select
+                  id="operacion"
+                  name="operacion"
+                  value={filters.operacion}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 rounded-md bg-white border border-gray-300 focus:border-mcv-azul focus:ring-mcv-azul"
+                >
+                  <option value="venta">Comprar</option>
+                  <option value="alquiler_temporal">Alquiler Temporal</option>
+                  <option value="alquiler_anual">Alquiler Anual</option>
+                </select>
+              </div>
+
+              {/* --- ¿DÓNDE BUSCAS? (Zona) --- */}
+              <div>
+                <label htmlFor="zona" className="block text-sm font-bold text-gray-700 mb-1">¿En qué zona?</label>
+                <select
+                  id="zona"
+                  name="zona"
+                  value={filters.zona}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 rounded-md bg-white border border-gray-300 focus:border-mcv-azul focus:ring-mcv-azul"
+                >
+                  <option value="">Todas las zonas</option>
+                  {listas.zonas.map(z => (
+                    <option key={z} value={z}>{z}</option>
+                  ))}
+                </select>
+              </div>
+
+              <hr className="border-gray-200"/>
+              
+              <h3 className="text-xl font-bold mb-2 text-mcv-gris">Afiná tu búsqueda</h3>
+
+              {/* --- TIPO DE PROPIEDAD --- */}
+              <div>
+                <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Propiedad</label>
+                <select
+                  id="tipo"
+                  name="tipo"
+                  value={filters.tipo}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 rounded-md bg-white border border-gray-300 focus:border-mcv-azul focus:ring-mcv-azul"
+                >
+                  <option value="">Cualquiera</option>
+                  <option value="casa">Casa</option>
+                  <option value="departamento">Departamento</option>
+                  {filters.operacion === 'venta' && <option value="lote">Lote</option>}
+                </select>
+              </div>
+
+              {/* --- BARRIO --- */}
+              <div>
+                <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio</label>
+                <select
+                  id="barrio"
+                  name="barrio"
+                  value={filters.barrio}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 rounded-md bg-white border border-gray-300 focus:border-mcv-azul focus:ring-mcv-azul"
+                >
+                  <option value="">Todos los barrios</option>
+                  {listas.barrios.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* --- FILTROS DE VIVIENDA (Dormitorios, Mts2) --- */}
+              {filters.tipo !== 'lote' && (
+                <>
                   <div>
                     <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dormitorios (mínimo)</label>
                     <input
                       type="number"
                       id="bedrooms"
                       name="bedrooms"
+                      min="0"
                       value={filters.bedrooms}
                       onChange={handleFilterChange}
                       placeholder="Ej: 3"
                       className="w-full p-2 rounded-md bg-white border border-gray-300"
                     />
                   </div>
-                )}
-                
-                {/* Filtros de ALQUILER TEMPORAL */}
-                {filters.operacion === 'alquiler_temporal' && (
-                  <>
+                  <div className="flex gap-2">
                     <div>
-                      <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas (mínimo)</label>
-                      <input
-                        type="number"
-                        id="pax"
-                        name="pax"
-                        value={filters.pax}
-                        onChange={handleFilterChange}
-                        placeholder="Ej: 6"
+                      <label htmlFor="minMts" className="block text-sm font-medium text-gray-700">Mts2 (mín)</label>
+                      <input 
+                        type="number" id="minMts" name="minMts"
+                        value={filters.minMts} onChange={handleFilterChange}
                         className="w-full p-2 rounded-md bg-white border border-gray-300"
                       />
                     </div>
-                    {/* Filtro: Fechas (Placeholder) */}
-                    <div className="flex gap-2">
-                      <div>
-                        <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">Desde</label>
-                        <input 
-                          type="date" id="startDate" name="startDate"
-                          value={filters.startDate} onChange={handleFilterChange}
-                          className="w-full p-2 rounded-md bg-white border border-gray-300"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">Hasta</label>
-                        <input 
-                          type="date" id="endDate" name="endDate"
-                          value={filters.endDate} onChange={handleFilterChange}
-                          className="w-full p-2 rounded-md bg-white border border-gray-300"
-                        />
-                      </div>
+                    <div>
+                      <label htmlFor="maxMts" className="block text-sm font-medium text-gray-700">Mts2 (máx)</label>
+                      <input 
+                        type="number" id="maxMts" name="maxMts"
+                        value={filters.maxMts} onChange={handleFilterChange}
+                        className="w-full p-2 rounded-md bg-white border border-gray-300"
+                      />
                     </div>
-                  </>
-                )}
+                  </div>
+                </>
+              )}
 
-                {/* Filtros Comunes (Mascotas y Pileta) */}
-                {filters.tipo !== 'lote' && (
-                  <div className="flex flex-col gap-2 pt-6">
+              {/* --- FILTROS DE ALQUILER TEMPORAL (PAX, Fechas) --- */}
+              {filters.operacion === 'alquiler_temporal' && (
+                <>
+                  <hr className="border-gray-200"/>
+                  <div>
+                    <label htmlFor="pax" className="block text-sm font-bold text-gray-700 mb-1">Personas (mínimo)</label>
+                    <input
+                      type="number" id="pax" name="pax"
+                      value={filters.pax} onChange={handleFilterChange}
+                      placeholder="Ej: 6"
+                      className="w-full p-2 rounded-md bg-white border border-gray-300"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <div>
+                      <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">Desde</label>
+                      <input 
+                        type="date" id="startDate" name="startDate"
+                        value={filters.startDate} onChange={handleFilterChange}
+                        className="w-full p-2 rounded-md bg-white border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">Hasta</label>
+                      <input 
+                        type="date" id="endDate" name="endDate"
+                        value={filters.endDate} onChange={handleFilterChange}
+                        className="w-full p-2 rounded-md bg-white border border-gray-300"
+                      />
+                    </div>
+                  </div>
+                  {/* Filtro de Precio para Alquiler Temporal */}
+                  <div className="flex gap-2">
+                    <div>
+                      <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700">Precio (mín)</label>
+                      <input 
+                        type="number" id="minPrice" name="minPrice"
+                        placeholder="Ej: 1000"
+                        value={filters.minPrice} onChange={handleFilterChange}
+                        className="w-full p-2 rounded-md bg-white border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700">Precio (máx)</label>
+                      <input 
+                        type="number" id="maxPrice" name="maxPrice"
+                        placeholder="Ej: 5000"
+                        value={filters.maxPrice} onChange={handleFilterChange}
+                        className="w-full p-2 rounded-md bg-white border border-gray-300"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* --- Checkboxes (Pileta y Mascotas, condicional) --- */}
+              {filters.tipo !== 'lote' && (
+                <div className="flex flex-col gap-2 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="pool"
+                      checked={filters.pool}
+                      onChange={handleFilterChange}
+                      className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                    />
+                    <span className="text-gray-700">Con Pileta / Jacuzzi</span>
+                  </label>
+                  
+                  {/* Ocultar mascotas si es 'venta' */}
+                  {filters.operacion !== 'venta' && (
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -248,41 +299,26 @@ export default function SearchPage() {
                       />
                       <span className="text-gray-700">Acepta Mascotas</span>
                     </label>
-                    
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="pool"
-                        checked={filters.pool}
-                        onChange={handleFilterChange}
-                        className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                      />
-                      <span className="text-gray-700">Con Pileta</span>
-                    </label>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
               
               {/* Botón de Búsqueda */}
-              <div className="text-center mt-8">
+              <div className="text-center mt-6">
                 <button
                   onClick={handleSearch}
-                  className="w-full md:w-1/2 p-3 bg-mcv-verde text-white font-bold rounded-lg shadow-lg text-xl hover:bg-opacity-90"
+                  disabled={isLoading} // Deshabilitar mientras carga
+                  className="w-full p-3 bg-mcv-verde text-white font-bold rounded-lg shadow-lg text-xl hover:bg-opacity-90 disabled:bg-gray-400"
                 >
-                  Buscar
+                  {isLoading ? 'Buscando...' : 'Buscar'}
                 </button>
               </div>
-            </div>
-          </div>
-        );
 
-      // --- PASO 4: RESULTADOS ---
-      case 4:
-        return (
-          <div>
-            <button onClick={resetSearch} className="text-mcv-azul mb-6">&larr; Empezar Nueva Búsqueda</button>
-            <h2 className="text-3xl font-bold mb-6 text-center">Propiedades Encontradas ({results.length})</h2>
-            
+            </div>
+          </aside>
+
+          {/* --- Columna de Resultados (Derecha) --- */}
+          <main className="w-full md:w-2/3 lg:w-3/4">
             {isLoading ? (
               <Spinner />
             ) : error ? (
@@ -298,42 +334,12 @@ export default function SearchPage() {
               </div>
             ) : (
               <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
-                <p className="text-xl">No se encontraron propiedades.</p>
-                <p>Intente ajustar sus filtros o <button onClick={resetSearch} className="text-mcv-azul hover:underline">empezar de nuevo</button>.</p>
+                <p className="text-xl font-bold">No se encontraron propiedades</p>
+                <p>Intente ajustar sus filtros de búsqueda.</p>
               </div>
             )}
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  // --- RENDERIZADO PRINCIPAL DE LA PÁGINA ---
-  return (
-    <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* Encabezado y Logo */}
-        <header className="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 border-b border-gray-200">
-          <img 
-            src="/logo_mcv_rectangular.png" 
-            alt="Logo MCV Propiedades" 
-            className="w-48 md:w-64"
-          />
-          <div className="text-center md:text-right mt-4 md:mt-0">
-            <h1 className="text-3xl font-bold text-mcv-azul">Agente Digital</h1>
-            <p className="text-lg text-gray-500">Encuentre su propiedad ideal</p>
-          </div>
-        </header>
-
-        {/* Contenido principal (el Asistente) */}
-        <main>
-          {renderStep()}
-        </main>
-        
-        {/* (Aquí podríamos añadir el Asistente de Chat en el futuro) */}
+          </main>
+        </div>
 
       </div>
     </div>
