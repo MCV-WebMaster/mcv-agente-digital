@@ -1,18 +1,29 @@
 import { supabase } from '@/lib/supabaseClient';
 
+// Esta función ahora calcula el precio mínimo
+function getMinPrice(propertyPeriods) {
+  let minPrice = Infinity;
+  let hasPrice = false;
+
+  propertyPeriods.forEach(period => {
+    if (period.price) {
+      // Extraer el número del precio (ej. "$5.700" -> 5700)
+      const priceNum = parseInt(period.price.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(priceNum) && priceNum < minPrice) {
+        minPrice = priceNum;
+        hasPrice = true;
+      }
+    }
+  });
+
+  return hasPrice ? minPrice : null;
+}
+
+
 export default async function handler(req, res) {
   try {
-    // 1. Obtener los filtros de la URL (req.query)
-    const { 
-      startDate, // ej: 2026-01-05
-      endDate,   // ej: 2026-01-12
-      pax,       // ej: 4
-      pets,      // ej: "true"
-      pool,      // ej: "true"
-      barrio     // ej: "Maritimo III"
-    } = req.query;
+    const { startDate, endDate, pax, pets, pool, barrio } = req.query;
 
-    // 2. Empezar a construir la consulta en Supabase
     let query = supabase
       .from('property_availability')
       .select(`
@@ -23,67 +34,54 @@ export default async function handler(req, res) {
         pax, 
         accepts_pets, 
         has_pool, 
-        barrio_costa
-      `)
-      .eq('status', 'Disponible'); // ¡Solo traer propiedades "Disponibles"!
+        barrio_costa,
+        price 
+      `) // ¡AÑADIMOS 'price'!
+      .eq('status', 'Disponible');
 
-    // 3. Aplicar los filtros que el usuario envió
+    // Aplicar filtros
+    if (startDate) query = query.lte('start_date', startDate); 
+    if (endDate) query = query.gte('end_date', endDate);
+    if (pax) query = query.gte('pax', parseInt(pax, 10)); 
+    if (pets === 'true') query = query.eq('accepts_pets', true);
+    if (pool === 'true') query = query.eq('has_pool', true);
+    if (barrio) query = query.eq('barrio_costa', barrio);
 
-    // --- Filtro de Fechas (El "Gran Desafío") ---
-    if (startDate) {
-      query = query.lte('start_date', startDate); 
-    }
-    if (endDate) {
-      query = query.gte('end_date', endDate);
-    }
-
-    // --- Otros Filtros ---
-    if (pax) {
-      query = query.gte('pax', parseInt(pax, 10)); 
-    }
-    if (pets === 'true') {
-      query = query.eq('accepts_pets', true);
-    }
-    if (pool === 'true') {
-      query = query.eq('has_pool', true);
-    }
-    if (barrio) {
-      query = query.eq('barrio_costa', barrio);
-    }
-
-    // 4. Ejecutar la consulta (traerá duplicados)
     const { data, error } = await query;
+    if (error) throw error;
 
-    if (error) {
-      throw error;
-    }
-
-    // --- INICIO DE LA CORRECCIÓN (Tarea 3.5) ---
-    // 'data' tiene 356 filas (con duplicados).
-    // Vamos a filtrarlas por 'property_id' usando JavaScript.
-    
-    const uniquePropertiesMap = new Map();
-    
-    data.forEach(property => {
-      // Si la propiedad NO está en el mapa, la añadimos.
-      // Si ya está, la ignoramos.
-      if (!uniquePropertiesMap.has(property.property_id)) {
-        uniquePropertiesMap.set(property.property_id, property);
+    // --- CORRECCIÓN LÓGICA DE PRECIOS ---
+    // Agrupamos todos los períodos por propiedad
+    const propertiesMap = new Map();
+    data.forEach(period => {
+      if (!propertiesMap.has(period.property_id)) {
+        // Si es la primera vez que vemos esta propiedad, la guardamos
+        propertiesMap.set(period.property_id, {
+          ...period, // Guardamos todos los datos (slug, título, etc.)
+          periods: [] // Creamos un array para sus períodos
+        });
       }
+      // Añadimos el período (con su precio) al array
+      propertiesMap.get(period.property_id).periods.push(period);
     });
 
-    // Convertimos el mapa de vuelta a un array
-    const uniqueResults = Array.from(uniquePropertiesMap.values());
-    // 'uniqueResults' ahora solo tiene una entrada por property_id
+    // Ahora, calculamos el precio mínimo para cada propiedad
+    const resultsWithMinPrice = [];
+    propertiesMap.forEach(prop => {
+      const minPrice = getMinPrice(prop.periods);
+      resultsWithMinPrice.push({
+        ...prop, // Todos los datos (slug, título, etc.)
+        min_price: minPrice, // Añadimos el nuevo campo 'min_price'
+        periods: undefined // Ya no necesitamos enviar los períodos
+      });
+    });
     // --- FIN DE LA CORRECCIÓN ---
 
-
-    // 5. Devolver los resultados ÚNICOS
     res.status(200).json({ 
       status: 'OK',
       filters: req.query,
-      count: uniqueResults.length, // Devolvemos el count corregido
-      results: uniqueResults      // Devolvemos los resultados únicos
+      count: resultsWithMinPrice.length,
+      results: resultsWithMinPrice 
     });
 
   } catch (error) {
