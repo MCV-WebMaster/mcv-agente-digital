@@ -1,24 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag'; // Usamos el mismo componente
-
-// --- Mapeo de IDs (de su lista de Estatik) ---
-const CATEGORY_IDS = {
-  VENTA: 198,
-  ALQUILER_TEMPORAL: 197,
-  ALQUILER_ANUAL: [193, 194],
-};
-
-const TYPE_IDS = {
-  CASA: 162,
-  DEPARTAMENTO: 163,
-  LOTE: 167,
-};
+import ActiveFilterTag from '@/components/ActiveFilterTag';
 
 export default function SearchPage() {
   
-  // --- ESTADO PRINCIPAL (Sin cambios) ---
+  // --- ESTADO PRINCIPAL ---
   const [filters, setFilters] = useState({
     operacion: 'venta', // Valor por defecto
     zona: null,
@@ -30,16 +17,25 @@ export default function SearchPage() {
     bedrooms: '',
     minMts: '',
     maxMts: '',
-    // (Faltan: startDate, endDate, minPrice, maxPrice - se agregan en Día 8)
+    minPrice: '',
+    maxPrice: '',
+    // (Faltan: startDate, endDate - se agregan en Día 8)
   });
 
-  // --- ESTADO DE RESULTADOS Y LISTAS DE FILTROS (Sin cambios) ---
+  // --- ESTADO DE RESULTADOS Y LISTAS DE FILTROS ---
   const [results, setResults] = useState([]);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Mapeo simple para los placeholders de precio
+  const pricePlaceholder = {
+    venta: "Ej: 300000",
+    alquiler_temporal: "Ej: 1500",
+    alquiler_anual: "Ej: 1000"
+  };
 
-  // --- 1. CARGAR LISTAS DE FILTROS (Sin cambios) ---
+  // --- 1. CARGAR LISTAS DE FILTROS (Zonas y Barrios) ---
   useEffect(() => {
     async function loadFilters() {
       try {
@@ -47,7 +43,7 @@ export default function SearchPage() {
         const data = await res.json();
         if (data.status === 'OK') {
           setListas({ 
-            zonas: Object.keys(data.filtros),
+            zonas: Object.keys(data.filtros).sort(),
             barrios: data.filtros
           });
         }
@@ -58,11 +54,10 @@ export default function SearchPage() {
     loadFilters();
   }, []);
 
-  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" (Sin cambios) ---
+  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     setIsLoading(true);
     setError(null);
-    setResults([]); 
 
     try {
       const response = await fetch('/api/search', {
@@ -71,7 +66,11 @@ export default function SearchPage() {
         body: JSON.stringify(currentFilters),
       });
 
-      if (!response.ok) throw new Error('La respuesta de la red no fue OK');
+      if (!response.ok) {
+        // Capturamos el error de la API si lo hay
+        const errData = await response.json();
+        throw new Error(errData.error || 'La respuesta de la red no fue OK');
+      }
       
       const data = await response.json();
       if (data.status === 'OK') {
@@ -87,16 +86,42 @@ export default function SearchPage() {
     }
   }, []);
 
+  // useEffect "vigila" los filtros. Si cambian, llama a fetchProperties()
   useEffect(() => {
-    fetchProperties(filters);
+    // Usamos un debounce para no llamar a la API en cada tecla
+    const handler = setTimeout(() => {
+      fetchProperties(filters);
+    }, 500); // Espera 500ms después de que el usuario deja de teclear
+    return () => clearTimeout(handler); // Limpia el timeout
   }, [filters, fetchProperties]);
 
-  // --- 3. MANEJADORES DE EVENTOS (Sin cambios) ---
+  // --- 3. MANEJADORES DE EVENTOS ---
   const handleFilterChange = (name, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    // Si cambia la operación, limpiar filtros específicos
+    if (name === 'operacion') {
+      setFilters(prev => ({
+        ...prev,
+        operacion: value,
+        tipo: null,
+        barrio: null,
+        pax: '',
+        pets: false,
+        pool: false,
+        bedrooms: '',
+        minMts: '',
+        maxMts: '',
+        minPrice: '',
+        maxPrice: '',
+      }));
+    } else if (name === 'zona') {
+      // Si cambia la zona, limpiar el barrio
+      setFilters(prev => ({ ...prev, zona: value, barrio: null }));
+    } else {
+      setFilters(prev => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleCheckboxChange = (name) => {
@@ -106,31 +131,32 @@ export default function SearchPage() {
     }));
   };
 
+  // Resetea un filtro específico (al hacer clic en la X de la etiqueta)
   const removeFilter = (name) => {
-    // Si quitamos 'operacion', reseteamos todo
+    const defaultFilters = {
+      operacion: 'venta', zona: null, tipo: null, barrio: null,
+      pax: '', pets: false, pool: false, bedrooms: '',
+      minMts: '', maxMts: '', minPrice: '', maxPrice: '',
+    };
+    
     if (name === 'operacion') {
-      setFilters({
-        operacion: null, zona: null, tipo: null, barrio: null,
-        pax: '', pets: false, pool: false, bedrooms: '', minMts: '', maxMts: '',
-      });
-      return;
-    }
-    // Si quitamos 'zona', también quitamos 'barrio'
-    if (name === 'zona') {
+      setFilters(defaultFilters);
+    } else if (name === 'zona') {
       setFilters(prev => ({ ...prev, zona: null, barrio: null }));
     } else {
-      setFilters(prev => ({ ...prev, [name]: null }));
+      setFilters(prev => ({ ...prev, [name]: defaultFilters[name] }));
     }
   };
 
-  // --- 4. LÓGICA DE RENDERIZADO DEL ASISTENTE (Sin cambios) ---
+  // --- 4. LÓGICA DE RENDERIZADO DEL ASISTENTE ---
   
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
-      {filters.operacion && <ActiveFilterTag label={`Operación: ${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
-      {filters.zona && <ActiveFilterTag label={`Zona: ${filters.zona}`} onRemove={() => removeFilter('zona')} />}
-      {filters.tipo && <ActiveFilterTag label={`Tipo: ${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
-      {filters.barrio && <ActiveFilterTag label={`Barrio: ${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
+      {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
+      {filters.zona && <ActiveFilterTag label={`${filters.zona}`} onRemove={() => removeFilter('zona')} />}
+      {filters.tipo && <ActiveFilterTag label={`${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
+      {filters.barrio && <ActiveFilterTag label={`${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
+      {/* (Se pueden añadir más etiquetas para precio, etc. si lo desea) */}
     </div>
   );
 
@@ -211,12 +237,12 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* --- Filtro DORMITORIOS (Solo si no es Lote) --- */}
+          {/* --- Filtro DORMITORIOS (Oculto para Lotes) --- */}
           {filters.tipo !== 'lote' && (
             <div>
               <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
               <input
-                type="number" id="bedrooms" name="bedrooms"
+                type="number" id="bedrooms" name="bedrooms" min="0"
                 value={filters.bedrooms}
                 onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
                 placeholder="Ej: 3"
@@ -225,12 +251,12 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* --- Filtro PAX (Solo Alquiler) --- */}
+          {/* --- Filtro PAX (Solo Alquileres) --- */}
           {filters.operacion !== 'venta' && (
             <div>
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas (mín)</label>
               <input
-                type="number" id="pax" name="pax"
+                type="number" id="pax" name="pax" min="0"
                 value={filters.pax}
                 onChange={(e) => handleFilterChange('pax', e.target.value)}
                 placeholder="Ej: 6"
@@ -238,10 +264,52 @@ export default function SearchPage() {
               />
             </div>
           )}
+          
+          {/* --- Filtros PRECIO (Mín y Máx) --- */}
+          <div>
+            <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
+            <input 
+              type="number" id="minPrice" name="minPrice"
+              placeholder={pricePlaceholder[filters.operacion]}
+              value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
+            <input 
+              type="number" id="maxPrice" name="maxPrice"
+              placeholder="Sin límite"
+              value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+            />
+          </div>
+
+          {/* --- Filtros MTS2 (Solo Venta/Anual, no Lotes) --- */}
+          {filters.operacion !== 'alquiler_temporal' && filters.tipo !== 'lote' && (
+            <>
+              <div>
+                <label htmlFor="minMts" className="block text-sm font-medium text-gray-700 mb-1">Mts² (mín)</label>
+                <input 
+                  type="number" id="minMts" name="minMts"
+                  value={filters.minMts} onChange={(e) => handleFilterChange('minMts', e.target.value)}
+                  className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="maxMts" className="block text-sm font-medium text-gray-700 mb-1">Mts² (máx)</label>
+                <input 
+                  type="number" id="maxMts" name="maxMts"
+                  value={filters.maxMts} onChange={(e) => handleFilterChange('maxMts', e.target.value)}
+                  className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                />
+              </div>
+            </>
+          )}
 
           {/* --- Checkboxes (Pileta y Mascotas) --- */}
           {filters.tipo !== 'lote' && (
-            <div className="flex flex-col gap-2 pt-6">
+            <div className="flex flex-col gap-2 pt-6 col-span-2 md:col-span-1">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox" name="pool"
@@ -265,24 +333,22 @@ export default function SearchPage() {
               )}
             </div>
           )}
-          
-          {/* (Aquí faltan filtros de Mts2 y Precio, los agregamos en el próximo paso) */}
 
         </div>
       </div>
     );
   };
   
-  // --- 5. RENDERIZADO PRINCIPAL (¡ESTRUCTURA CAMBIADA!) ---
+  // --- 5. RENDERIZADO PRINCIPAL ---
   return (
     <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         
         {/* --- NUEVO ENCABEZADO DE 3 COLUMNAS --- */}
-        <header className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
+        <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
           
           {/* Columna Izquierda (25%) */}
-          <div className="w-1/4">
+          <div className="w-full md:w-1/4">
             <img 
               src="/logo_mcv_rectangular.png" 
               alt="Logo MCV Propiedades" 
@@ -291,13 +357,13 @@ export default function SearchPage() {
           </div>
           
           {/* Columna Central (50%) - AQUÍ VA EL BUSCADOR */}
-          <div className="w-1/2 px-4">
+          <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
             <div className="mb-4">{renderFiltrosActivos()}</div>
             {renderAsistente()}
           </div>
           
           {/* Columna Derecha (25%) */}
-          <div className="w-1/4 text-right">
+          <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
             <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Agente Digital</h1>
             <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
           </div>
@@ -309,15 +375,19 @@ export default function SearchPage() {
             <Spinner />
           ) : error ? (
             <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
-              <p className="font-bold">Error al cargar propiedades</p>
-              <p>{error}</p>
+              <p className="font-bold">Error al cargar propiedades: {error}</p>
             </div>
           ) : results.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {results.map(prop => (
-                <PropertyCard key={prop.property_id} property={prop} />
-              ))}
-            </div>
+            <>
+              <h2 className="text-xl font-bold text-mcv-gris mb-4">
+                Resultados ({results.length})
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {results.map(prop => (
+                  <PropertyCard key={prop.property_id} property={prop} />
+                ))}
+              </div>
+            </>
           ) : (
             <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
               <p className="text-xl font-bold">No se encontraron propiedades</p>
