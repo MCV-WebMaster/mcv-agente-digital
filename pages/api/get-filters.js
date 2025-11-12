@@ -2,27 +2,32 @@ import { supabase } from '@/lib/supabaseClient';
 
 export default async function handler(req, res) {
   try {
-    // 1. Pedimos a Supabase *todas* las Zonas y Barrios
     const { data, error } = await supabase
       .from('properties')
-      .select('zona, barrio');
+      .select('zona, barrio'); // Traemos solo zona y barrio
 
     if (error) throw error;
 
-    // 2. Filtramos duplicados y nulos
-    const zonasUnicas = [
-      ...new Set(data.map(item => item.zona).filter(Boolean))
-    ].sort();
-    
-    const barriosUnicos = [
-      ...new Set(data.map(item => item.barrio).filter(Boolean))
-    ].sort();
+    // Crear un mapa de Zonas -> [Barrios]
+    const zonasMap = new Map();
+    data.forEach(item => {
+      if (item.zona && item.barrio) {
+        if (!zonasMap.has(item.zona)) {
+          zonasMap.set(item.zona, new Set()); // Usar un Set para evitar duplicados
+        }
+        zonasMap.get(item.zona).add(item.barrio);
+      }
+    });
 
-    // 3. Devolvemos las listas
+    // Convertir el Mapa a un objeto y los Sets a Arrays ordenados
+    const filtros = {};
+    zonasMap.forEach((barriosSet, zona) => {
+      filtros[zona] = [...barriosSet].sort();
+    });
+
     res.status(200).json({ 
       status: 'OK', 
-      zonas: zonasUnicas,
-      barrios: barriosUnicos
+      filtros // ej: { "GBA Sur": ["Quilmes", "Hudson"], "Costa Esmeralda": ["Maritimo", "Senderos"] }
     });
 
   } catch (error) {
