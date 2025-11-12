@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('Iniciando Sincronización (v3 - Completa)...');
+    console.log('Iniciando Sincronización (v4 - Filtro de Activas)...');
 
     // 2. Llamar al Puente PHP en su servidor
     console.log(`Paso 1: Llamando al puente PHP...`);
@@ -34,13 +34,13 @@ export default async function handler(req, res) {
     const propertiesFromWP = bridgeData.data;
     console.log(`Paso 1: Exitoso. ${propertiesFromWP.length} propiedades encontradas por el puente.`);
 
-    // 3. Procesar y Transformar Datos (Usando el nuevo Parser)
-    console.log('Paso 2: Procesando y transformando datos...');
+    // 3. Procesar y Transformar Datos (Usando el nuevo Parser v4)
+    // ¡AHORA FILTRA POR ESTADO ACTIVO!
+    console.log('Paso 2: Procesando y transformando datos (filtrando por Activas)...');
     const { propertiesToInsert, periodsToInsert } = processFullSyncData(propertiesFromWP);
-    console.log(`Paso 2: Exitoso. ${propertiesToInsert.length} propiedades y ${periodsToInsert.length} períodos generados.`);
+    console.log(`Paso 2: Exitoso. ${propertiesToInsert.length} propiedades ACTIVAS y ${periodsToInsert.length} períodos generados.`);
 
     // 4. Limpiar Tablas Viejas en Supabase
-    // ¡IMPORTANTE! Borramos 'periods' primero, porque depende de 'properties'.
     console.log('Paso 3: Limpiando datos antiguos en Supabase...');
     
     // Borrar todos los períodos viejos
@@ -54,24 +54,22 @@ export default async function handler(req, res) {
     console.log('Paso 3: Exitoso. Tablas limpiadas.');
 
     // 5. Insertar Datos Nuevos en Supabase
-    // ¡IMPORTANTE! Insertamos 'properties' primero.
     console.log('Paso 4: Insertando nuevas propiedades...');
     const { data: propertiesData, error: insertPropsError } = await supabase
       .from('properties')
       .insert(propertiesToInsert)
-      .select('property_id'); // Solo devolvemos el ID para ahorrar ancho de banda
+      .select('property_id');
       
     if (insertPropsError) {
       throw new Error(`Error Supabase (insertando properties): ${insertPropsError.message}`);
     }
     console.log(`Paso 4: Exitoso. ${propertiesData.length} propiedades insertadas.`);
 
-    // ¡IMPORTANTE! Insertamos 'periods' después.
     console.log('Paso 5: Insertando nuevos períodos...');
     const { data: periodsData, error: insertPeriodsError } = await supabase
       .from('periods')
       .insert(periodsToInsert)
-      .select('id'); // Solo devolvemos el ID
+      .select('id'); 
 
     if (insertPeriodsError) {
       throw new Error(`Error Supabase (insertando periods): ${insertPeriodsError.message}`);
@@ -79,16 +77,25 @@ export default async function handler(req, res) {
     console.log(`Paso 5: Exitoso. ${periodsData.length} períodos insertados.`);
 
     // 6. Éxito
-    console.log('Sincronización Completa (v3).');
+    console.log('Sincronización Completa (v4).');
     res.status(200).json({ 
       status: 'OK', 
-      properties_found: propertiesFromWP.length,
-      properties_inserted: propertiesData.length,
+      properties_found_total: propertiesFromWP.length,
+      properties_inserted_active: propertiesData.length,
       periods_inserted: periodsData.length
     });
 
   } catch (error) {
     console.error('Error fatal durante la sincronización:', error);
+    if (connection) await connection.end();
+    
+    if (error.code === 'ETIMEDOUT') {
+      return res.status(500).json({ status: 'Error', error: 'Error de Conexión a MySQL (ETIMEDOUT)', message: 'El servidor de Vercel no pudo conectarse a su base de datos (Timeout). Verifique el DB_HOST y si su hosting permite conexiones remotas (Remote MySQL en cPanel).' });
+    }
+    if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+      return res.status(500).json({ status: 'Error', error: 'Acceso Denegado a MySQL', message: 'Las credenciales (DB_USER, DB_PASSWORD) son incorrectas.' });
+    }
+    
     res.status(500).json({ status: 'Error', error: error.message });
   }
 }
