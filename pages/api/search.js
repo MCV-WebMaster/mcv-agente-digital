@@ -1,43 +1,55 @@
 import { supabase } from '@/lib/supabaseClient';
 
-// --- Mapeo de IDs (de su lista de Estatik) ---
+// --- Mapeo de IDs (basado en su lista de Estatik) ---
 const CATEGORY_IDS = {
   VENTA: 198,
   ALQUILER_TEMPORAL: 197,
-  ALQUILER_ANUAL_AMUEBLADO: 193,
-  ALQUILER_ANUAL_SIN_MUEBLES: 194,
+  ALQUILER_ANUAL: [193, 194], // Array: Amueblado o Sin Muebles
 };
 
 const TYPE_IDS = {
   CASA: 162,
   DEPARTAMENTO: 163,
   LOTE: 167,
-  DUPLEX: 165,
-  LOCAL: 166,
-  PH: 269,
 };
+
+const STATUS_ID_ACTIVA = 158;
 // --- Fin del Mapeo ---
 
 export default async function handler(req, res) {
+  // Usaremos POST para poder enviar un JSON de filtros más complejo
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
+    // 1. Obtener los filtros del body de la solicitud
     const { 
-      operacion, zona, tipo, barrio, pax, pets, pool, bedrooms,
-      startDate, endDate,
-      minPrice, maxPrice, // ¡NUEVO!
-      minMts, maxMts      // ¡NUEVO!
+      operacion, // 'venta', 'alquiler_temporal', 'alquiler_anual'
+      zona,      // 'GBA Sur', 'Costa Esmeralda'
+      tipo,      // 'casa', 'departamento', 'lote'
+      barrio,
+      pax,
+      pets,      // boolean (true/false)
+      pool,      // boolean (true/false)
+      bedrooms,
+      startDate, 
+      endDate,
+      minPrice,  // ¡NUEVO!
+      maxPrice   // ¡NUEVO!
     } = req.body;
 
-    // --- Lógica de Alquiler Temporal ---
+    // --- Lógica de Filtro de Alquiler Temporal ---
     if (operacion === 'alquiler_temporal') {
+      
+      // 1. Empezamos consultando los PERÍODOS disponibles
       let periodQuery = supabase
         .from('periods')
-        .select(`property_id, price`) // Traemos el precio
+        .select(`property_id, price`) // Traemos el precio del período
         .eq('status', 'Disponible');
       
+      // 2. Aplicamos filtro de fecha (si existe)
+      // (Implementaremos el calendario avanzado en el Día 7)
       if (startDate && endDate) {
         periodQuery = periodQuery
           .lte('start_date', startDate)
@@ -47,11 +59,12 @@ export default async function handler(req, res) {
       const { data: periodData, error: periodError } = await periodQuery;
       if (periodError) throw periodError;
 
-      // Filtrar por precio ANTES de buscar propiedades
+      // 3. Filtrar por precio ANTES de buscar propiedades
       const priceFilteredPropertyIds = new Set();
       for (const period of periodData) {
         let periodPrice = 0;
         if (period.price) {
+          // Extraer solo números (ej. "$5.700" -> 5700)
           periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
         }
 
@@ -69,10 +82,11 @@ export default async function handler(req, res) {
         return res.status(200).json({ status: 'OK', filters: req.body, count: 0, results: [] });
       }
 
+      // 4. Ahora, buscamos las propiedades que coinciden con esos IDs Y el resto de los filtros
       let propQuery = supabase
         .from('properties')
         .select('*')
-        .in('property_id', availablePropertyIds);
+        .in('property_id', availablePropertyIds); // ¡Filtro clave!
       
       // Aplicar filtros restantes
       if (zona) propQuery = propQuery.eq('zona', zona);
@@ -85,8 +99,6 @@ export default async function handler(req, res) {
       if (pax) propQuery = propQuery.gte('pax', parseInt(pax, 10));
       if (bedrooms) propQuery = propQuery.gte('bedrooms', parseInt(bedrooms, 10));
       
-      // (No filtramos por Mts2 en Alquiler Temporal, como solicitó)
-
       const { data, error } = await propQuery;
       if (error) throw error;
       
@@ -94,14 +106,18 @@ export default async function handler(req, res) {
 
     } 
     
-    // --- Lógica de Venta o Alquiler Anual ---
+    // --- Lógica de Filtro de Venta o Alquiler Anual ---
     else {
-      let query = supabase.from('properties').select('*');
+      let query = supabase.from('properties')
+        .select('*')
+        // ¡FILTRO CRÍTICO! Solo mostrar propiedades "Activas"
+        .contains('status_ids', [STATUS_ID_ACTIVA]); 
 
+      // Filtro de Operación
       if (operacion === 'venta') {
         query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
       } else if (operacion === 'alquiler_anual') {
-        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO, CATEGORY_IDS.ALQUILER_ANUAL_SIN_MUEBLES]);
+        query = query.contains('category_ids', CATEGORY_IDS.ALQUILER_ANUAL);
       }
       
       // Aplicar filtros
@@ -112,14 +128,15 @@ export default async function handler(req, res) {
       if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       if (tipo === 'lote') query = query.contains('type_ids', [TYPE_IDS.LOTE]);
       
-      if (pets) query = query.eq('acepta_mascota', true); // Se ocultará en el frontend, pero la API lo soporta
+      if (pets) query = query.eq('acepta_mascota', true); 
       if (pool) query = query.eq('tiene_piscina', true);
       if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
-
-      // ¡NUEVOS FILTROS!
+      
+      // Filtros de Venta (Mts2 y Precio)
+      if (minPrice) query = query.gte('price', parseInt(minPrice, 10));
+      if (maxPrice) query = query.lte('price', parseInt(maxPrice, 10));
       if (minMts) query = query.gte('mts_cubiertos', parseInt(minMts, 10));
       if (maxMts) query = query.lte('mts_cubiertos', parseInt(maxMts, 10));
-      // (Nota: El precio de VENTA no lo tenemos en el Sincronizador. Lo añadiremos después.)
       
       const { data, error } = await query;
       if (error) throw error;
