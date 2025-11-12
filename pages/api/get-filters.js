@@ -8,18 +8,22 @@ export default async function handler(req, res) {
 
     if (error) throw error;
 
-    // Crear un mapa de Zonas -> [Barrios]
     const zonasMap = new Map();
     data.forEach(item => {
-      if (item.zona && item.barrio) {
+      // 1. Si la zona existe, la agregamos al mapa
+      if (item.zona) {
         if (!zonasMap.has(item.zona)) {
-          zonasMap.set(item.zona, new Set()); // Usar un Set para evitar duplicados
+          zonasMap.set(item.zona, new Set()); // Crear un Set para barrios
         }
-        zonasMap.get(item.zona).add(item.barrio);
+        
+        // 2. Si ADEMÁS tiene un barrio, lo agregamos al Set de esa zona
+        if (item.barrio) {
+          zonasMap.get(item.zona).add(item.barrio);
+        }
       }
     });
 
-    // Convertir el Mapa a un objeto y los Sets a Arrays ordenados
+    // 3. Convertir el Mapa a un objeto y los Sets a Arrays ordenados
     const filtros = {};
     zonasMap.forEach((barriosSet, zona) => {
       filtros[zona] = [...barriosSet].sort();
@@ -27,7 +31,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ 
       status: 'OK', 
-      filtros // ej: { "GBA Sur": ["Quilmes", "Hudson"], "Costa Esmeralda": ["Maritimo", "Senderos"] }
+      filtros // ej: { "GBA Sur": ["Quilmes", ...], "Costa Esmeralda": ["Maritimo", ...] }
     });
 
   } catch (error) {

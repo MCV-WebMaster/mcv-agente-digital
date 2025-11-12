@@ -7,7 +7,7 @@ export default function SearchPage() {
   
   // --- ESTADO PRINCIPAL ---
   const [filters, setFilters] = useState({
-    operacion: null, // Inicia en null
+    operacion: null, // Inicia en null (CORREGIDO)
     zona: null,
     tipo: null,
     barrio: null,
@@ -19,6 +19,7 @@ export default function SearchPage() {
     maxMts: '',
     minPrice: '',
     maxPrice: '',
+    // (Faltan: startDate, endDate - se agregan en Día 8)
   });
 
   // --- ESTADO DE LÓGICA ---
@@ -43,14 +44,14 @@ export default function SearchPage() {
       try {
         const res = await fetch('/api/get-filters');
         const data = await res.json();
-        if (data.status === 'OK') {
+        if (data.status === 'OK' && Object.keys(data.filtros).length > 0) {
           setListas({ 
             zonas: Object.keys(data.filtros).sort(),
             barrios: data.filtros
           });
           setHasLoadedFilters(true); // ¡Éxito!
         } else {
-          throw new Error("Error al cargar los filtros desde la API.");
+          throw new Error("No se encontraron filtros. Revise la data.");
         }
       } catch (err) {
         console.error("Error cargando listas de filtros:", err);
@@ -134,6 +135,17 @@ export default function SearchPage() {
       if (name === 'zona') {
         newState.barrio = null; // Resetear barrio al cambiar zona
       }
+      if (name === 'tipo') {
+        // Si se selecciona "Lote", limpiar filtros irrelevantes
+        if (value === 'lote') {
+          newState.bedrooms = '';
+          newState.pax = '';
+          newState.pets = false;
+          newState.pool = false;
+          newState.minMts = '';
+          newState.maxMts = '';
+        }
+      }
       return newState;
     });
   };
@@ -169,7 +181,6 @@ export default function SearchPage() {
       {filters.zona && <ActiveFilterTag label={`${filters.zona}`} onRemove={() => removeFilter('zona')} />}
       {filters.tipo && <ActiveFilterTag label={`${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
       {filters.barrio && <ActiveFilterTag label={`${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
-      {/* (Se pueden añadir más etiquetas para precio, etc.) */}
     </div>
   );
 
@@ -249,7 +260,7 @@ export default function SearchPage() {
           </div>
 
           {/* --- Filtro BARRIO (Dinámico) --- */}
-          {listas.barrios[filters.zona] && (
+          {listas.barrios[filters.zona] && listas.barrios[filters.zona].length > 0 && (
             <div>
               <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio</label>
               <select
