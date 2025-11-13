@@ -42,10 +42,12 @@ export default function PropertyCard({ property, filters }) {
   const isTemporal = property.category_ids.includes(197) || property.category_ids.includes(196);
   
   if (isTemporal) {
-    if (filters.startDate && filters.endDate) {
-      // Si hay fechas seleccionadas...
-      if (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE) {
-        // ...y están FUERA de temporada
+    const userSelectedDates = filters.startDate && filters.endDate;
+    const isOffSeason = userSelectedDates && (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE);
+
+    if (userSelectedDates) {
+      if (isOffSeason) {
+        // 1. Fechas seleccionadas FUERA de temporada
         alquilerTempDisplay = (
           <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
@@ -53,29 +55,23 @@ export default function PropertyCard({ property, filters }) {
           </div>
         );
       } else {
-        // ...y están DENTRO de temporada
+        // 2. Fechas seleccionadas DENTRO de temporada
         alquilerTempDisplay = min_rental_price ? (
           <div>
             <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
-            <p className="text-xs text-gray-500">en fecha selcc.</p>
+            <p className="text-xs text-gray-500">Valor de referencia</p>
           </div>
-        ) : (
-          // Está en temporada pero no disponible para esas fechas
-          <div>
-            <h4 className="text-lg font-bold text-gray-400">No disponible</h4>
-            <p className="text-xs text-gray-500">en fecha selcc.</p>
-          </div>
-        );
+        ) : null; // Si no hay min_rental_price, la API ya lo filtró (no se muestra)
       }
     } else {
-      // No hay fechas seleccionadas, mostrar "Alquiler desde" (el min_2026_price)
+      // 3. No hay fechas seleccionadas (Default)
       alquilerTempDisplay = min_rental_price ? (
         <div>
           <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
           <p className="text-xs text-gray-500">Alquiler desde</p>
         </div>
       ) : (
-        // Si es temporal pero no tiene precio 2026 (ej. Arelauquen)
+        // (ej. Arelauquen, que no tiene precios 2026)
         <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
             <p className="text-xs text-gray-500">Disponibilidad</p>
@@ -118,7 +114,6 @@ export default function PropertyCard({ property, filters }) {
                 )}
               </>
             ) : (
-              // Espacio reservado si no hay precio de venta/anual
               !isTemporal && <div className="min-h-[40px]"></div>
             )}
           </div>

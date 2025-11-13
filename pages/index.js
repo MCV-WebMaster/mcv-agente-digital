@@ -467,12 +467,12 @@ export default function SearchPage() {
           ) : (filters.operacion && hasLoadedFilters) ? (
             results.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* ¡NUEVO! Pasamos los 'filters' a la tarjeta */}
                 {results.map(prop => (
                   <PropertyCard key={prop.property_id} property={prop} filters={filters} />
                 ))}
               </div>
             ) : (
-              // No mostrar "0 resultados" si aún no se eligió zona (Paso 2)
               (filters.zona || isSearching) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>

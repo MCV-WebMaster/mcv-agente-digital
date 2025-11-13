@@ -19,6 +19,19 @@ const STATUS_ID_ACTIVA = 158;
 const SEASON_START_DATE = '2025-12-19';
 const SEASON_END_DATE = '2026-03-01';
 
+// Helper para calcular días de un rango de fechas
+function getDaysBetween(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 inclusive
+}
+
+// Helper para redondear
+function roundUpToNearestHundred(num) {
+  return Math.ceil(num / 100) * 100;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -27,16 +40,15 @@ export default async function handler(req, res) {
   try {
     const { 
       operacion, zona, tipo, barrio, 
-      pax, pax_or_more, // ¡Lógica de PAX!
+      pax, pax_or_more,
       pets, pool, bedrooms,
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
-      sortBy = 'default' // ¡Lógica de Ordenar!
+      sortBy = 'default'
     } = req.body;
 
     let query = supabase.from('properties').select('*');
     
-    // --- FILTRO DE ESTADO (ACTIVA) ---
     query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
 
     // --- Lógica de Alquiler Temporal ---
@@ -53,14 +65,9 @@ export default async function handler(req, res) {
       if (pets) query = query.eq('acepta_mascota', true);
       if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
 
-      // --- ¡LÓGICA DE PAX! ---
       if (pax) {
         const paxNum = parseInt(pax, 10);
-        if (pax_or_more) {
-          query = query.gte('pax', paxNum); // "o más" (>=)
-        } else {
-          query = query.eq('pax', paxNum); // "exacto" (=)
-        }
+        query = pax_or_more ? query.gte('pax', paxNum) : query.eq('pax', paxNum);
       }
       
       let { data: propertiesData, error: propertiesError } = await query;
@@ -74,27 +81,27 @@ export default async function handler(req, res) {
       // 2. Buscar en la tabla 'periods'
       let periodQuery = supabase
         .from('periods')
-        .select('*')
+        .select('property_id, price, start_date, end_date, duration_days')
         .in('property_id', propertyIds)
-        .eq('status', 'Disponible'); // ¡Lógica de "disponible carnaval" OK!
+        .eq('status', 'Disponible');
 
-      // 3. Filtrar por Fecha (Core)
-      // Si SÍ hay fechas, filtramos por ellas
-      if (startDate && endDate) {
-        // Solo aplicar filtro de fechas si está DENTRO de la temporada
-        if (endDate >= SEASON_START_DATE && startDate <= SEASON_END_DATE) {
-            periodQuery = periodQuery
-            .lte('start_date', startDate) // El período (ej. Ene 16) debe empezar ANTES de la llegada (ej. Ene 20)
-            .gte('end_date', endDate);   // El período (ej. Ene 31) debe terminar DESPUÉS de la salida (ej. Ene 25)
-        }
+      // 3. Lógica de Fechas (Core)
+      const userSelectedDates = startDate && endDate;
+      const isOffSeason = userSelectedDates && (endDate < SEASON_START_DATE || startDate > SEASON_END_DATE);
+
+      // Si la fecha está DENTRO de la temporada, filtramos por períodos
+      if (userSelectedDates && !isOffSeason) {
+        periodQuery = periodQuery
+          .lte('start_date', startDate)
+          .gte('end_date', endDate);
       }
-
+      
       const { data: periodsData, error: periodsError } = await periodQuery;
       if (periodsError) throw periodsError;
 
-      // 4. Mapear precios y filtrar por precio
+      // 4. Mapear precios y filtrar
       const availablePropertyIds = new Set();
-      const minPriceMap = new Map();
+      const finalPriceMap = new Map(); // Mapa para guardar el precio final (calculado o fijo)
 
       for (const period of periodsData) {
         let periodPrice = 0;
@@ -102,17 +109,33 @@ export default async function handler(req, res) {
           periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
         }
 
-        const passesMinPrice = !minPrice || (periodPrice > 0 && periodPrice >= minPrice);
-        const passesMaxPrice = !maxPrice || (periodPrice > 0 && periodPrice <= maxPrice);
+        let finalPrice = periodPrice; // Precio final a mostrar y filtrar
+
+        // --- ¡LÓGICA PRO-RATA! ---
+        if (userSelectedDates && !isOffSeason && periodPrice > 0 && period.duration_days) {
+          const userDuration = getDaysBetween(startDate, endDate);
+          
+          // Solo calcular pro-rata si el usuario pide *menos* que el período completo
+          if (userDuration < period.duration_days) {
+            const dailyRate = periodPrice / period.duration_days;
+            const proRataPrice = dailyRate * (userDuration + 1); // + 1 día extra
+            finalPrice = roundUpToNearestHundred(proRataPrice); // Redondear
+          }
+          // Si pide el período completo o más, se usa el 'finalPrice' original
+        }
+        // --- Fin Lógica Pro-Rata ---
+
+        const passesMinPrice = !minPrice || (finalPrice > 0 && finalPrice >= minPrice);
+        const passesMaxPrice = !maxPrice || (finalPrice > 0 && finalPrice <= maxPrice);
         
-        if (minPrice && periodPrice === 0) continue;
-        if (maxPrice && periodPrice === 0) continue;
+        if (minPrice && finalPrice === 0) continue;
+        if (maxPrice && finalPrice === 0) continue;
 
         if (passesMinPrice && passesMaxPrice) {
           availablePropertyIds.add(period.property_id);
-          if (periodPrice > 0) {
-            if (!minPriceMap.has(period.property_id) || periodPrice < minPriceMap.get(period.property_id)) {
-              minPriceMap.set(period.property_id, periodPrice);
+          if (finalPrice > 0) {
+            if (!finalPriceMap.has(period.property_id) || finalPrice < finalPriceMap.get(period.property_id)) {
+              finalPriceMap.set(period.property_id, finalPrice);
             }
           }
         }
@@ -123,18 +146,17 @@ export default async function handler(req, res) {
         .map(p => ({
           ...p,
           // Inyectar el precio mínimo del período encontrado
-          min_rental_price: minPriceMap.get(p.property_id) || null
+          min_rental_price: finalPriceMap.get(p.property_id) || null
         }));
 
-      // Si hay fechas seleccionadas DENTRO de la temporada, filtramos por las que tienen períodos.
-      if (startDate && endDate && (endDate >= SEASON_START_DATE && startDate <= SEASON_END_DATE)) {
+      // Si hay fechas DENTRO de temporada, filtramos la lista de propiedades
+      if (userSelectedDates && !isOffSeason) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
-      // Si no hay fechas (o están fuera de temporada), mostramos TODAS las propiedades
-      // que coincidieron con los filtros base (pax, zona, etc).
-      // Esto soluciona el bug de Arelauquen y la lógica de "Consultar Disponibilidad".
+      // Si no hay fechas (Default) o es Fuera de Temporada (isOffSeason),
+      // mostramos TODAS las propiedades (Arelauquen, etc.) y la tarjeta dirá "Consultar".
 
-      // 6. ¡NUEVO! Ordenar por Precio
+      // 6. Ordenar por Precio
       if (sortBy === 'price_asc') {
         finalResults.sort((a, b) => (a.min_rental_price || 9999999) - (b.min_rental_price || 9999999));
       } else if (sortBy === 'price_desc') {
@@ -152,18 +174,17 @@ export default async function handler(req, res) {
         query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
         if (minPrice) query = query.gte('price', parseInt(minPrice, 10));
         if (maxPrice) query = query.lte('price', parseInt(maxPrice, 10));
-        if (sortBy === 'price_asc') query = query.order('price', { ascending: true });
-        if (sortBy === 'price_desc') query = query.order('price', { ascending: false });
+        if (sortBy === 'price_asc') query = query.order('price', { ascending: true, nullsFirst: false });
+        if (sortBy === 'price_desc') query = query.order('price', { ascending: false, nullsFirst: false });
 
       } else if (operacion === 'alquiler_anual') {
         query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO}}`);
         if (minPrice) query = query.gte('es_property_price_ars', parseInt(minPrice, 10));
         if (maxPrice) query = query.lte('es_property_price_ars', parseInt(maxPrice, 10));
-        if (sortBy === 'price_asc') query = query.order('es_property_price_ars', { ascending: true });
-        if (sortBy === 'price_desc') query = query.order('es_property_price_ars', { ascending: false });
+        if (sortBy === 'price_asc') query = query.order('es_property_price_ars', { ascending: true, nullsFirst: false });
+        if (sortBy === 'price_desc') query = query.order('es_property_price_ars', { ascending: false, nullsFirst: false });
       }
       
-      // Aplicar filtros comunes
       if (zona) query = query.eq('zona', zona);
       if (barrio) query = query.eq('barrio', barrio);
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
