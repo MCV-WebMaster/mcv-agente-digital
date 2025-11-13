@@ -10,13 +10,13 @@ export default async function handler(req, res) {
 
     const zonasMap = new Map();
     data.forEach(item => {
-      // 1. Si la zona existe, la agregamos al mapa
+      // 1. Si la zona existe (y no es nula), la agregamos al mapa
       if (item.zona) {
         if (!zonasMap.has(item.zona)) {
           zonasMap.set(item.zona, new Set()); // Crear un Set para barrios
         }
         
-        // 2. Si ADEMÁS tiene un barrio, lo agregamos al Set de esa zona
+        // 2. Si ADEMÁS tiene un barrio (y no es nulo), lo agregamos al Set de esa zona
         if (item.barrio) {
           zonasMap.get(item.zona).add(item.barrio);
         }
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ 
       status: 'OK', 
-      filtros // ej: { "GBA Sur": ["Quilmes", ...], "Costa Esmeralda": ["Maritimo", ...] }
+      filtros // ej: { "GBA Sur": ["Club El Carmen", "Quilmes"], "Costa Esmeralda": ["Maritimo", "Senderos"] }
     });
 
   } catch (error) {

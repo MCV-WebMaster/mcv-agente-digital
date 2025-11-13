@@ -23,66 +23,60 @@ export default async function handler(req, res) {
   try {
     const { 
       operacion, zona, tipo, barrio, 
-      pax, pax_or_more, // ¡NUEVO!
+      pax, pax_or_more, // ¡Lógica de PAX!
       pets, pool, bedrooms,
       minPrice, maxPrice, minMts, maxMts,
-      startDate, endDate
+      startDate, endDate,
+      sortBy = 'default' // ¡NUEVO! Ordenar por precio
     } = req.body;
 
     let query = supabase.from('properties').select('*');
-
-    // --- 1. FILTRO DE OPERACIÓN (El más importante) ---
-    if (operacion === 'venta') {
-      query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
-      if (minPrice) query = query.gte('es_property_price', parseInt(minPrice, 10));
-      if (maxPrice) query = query.lte('es_property_price', parseInt(maxPrice, 10));
-
-    } else if (operacion === 'alquiler_anual') {
-      query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO}}`);
-      if (minPrice) query = query.gte('es_property_price_ars', parseInt(minPrice, 10));
-      if (maxPrice) query = query.lte('es_property_price_ars', parseInt(maxPrice, 10));
     
-    } else if (operacion === 'alquiler_temporal') {
-      query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
-      
-      // --- Lógica de Alquiler Temporal (Filtro de Precio y Fecha) ---
-      let { data: propertiesData, error: propertiesError } = await query;
-      if (propertiesError) throw propertiesError;
+    // --- FILTRO DE ESTADO (ACTIVA) ---
+    // Siempre filtrar por Activa (ID 158) o las que no tienen estado (default)
+    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
 
-      // 1. Filtrar propiedades por filtros base (antes de chequear períodos)
-      if (zona) propertiesData = propertiesData.filter(p => p.zona === zona);
-      if (barrio) propertiesData = propertiesData.filter(p => p.barrio === barrio);
-      if (tipo === 'casa') propertiesData = propertiesData.filter(p => p.type_ids.includes(TYPE_IDS.CASA));
-      if (tipo === 'departamento') propertiesData = propertiesData.filter(p => p.type_ids.includes(TYPE_IDS.DEPARTAMENTO));
-      if (pool) propertiesData = propertiesData.filter(p => p.tiene_piscina === true);
-      if (pets) propertiesData = propertiesData.filter(p => p.acepta_mascota === true);
+    // --- Lógica de Alquiler Temporal ---
+    if (operacion === 'alquiler_temporal') {
+      
+      query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
+
+      // 1. Filtrar propiedades por filtros base
+      if (zona) query = query.eq('zona', zona);
+      if (barrio) query = query.eq('barrio', barrio);
+      if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
+      if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
+      if (pool) query = query.eq('tiene_piscina', true);
+      if (pets) query = query.eq('acepta_mascota', true);
+      if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
 
       // --- ¡NUEVA LÓGICA DE PAX! ---
       if (pax) {
         const paxNum = parseInt(pax, 10);
         if (pax_or_more) {
-          // "o más" (>=)
-          propertiesData = propertiesData.filter(p => p.pax >= paxNum);
+          query = query.gte('pax', paxNum); // "o más" (>=)
         } else {
-          // "exacto" (=)
-          propertiesData = propertiesData.filter(p => p.pax === paxNum);
+          query = query.eq('pax', paxNum); // "exacto" (=)
         }
       }
-      // --- Fin Lógica de PAX ---
-
+      
+      let { data: propertiesData, error: propertiesError } = await query;
+      if (propertiesError) throw propertiesError;
+      
       const propertyIds = propertiesData.map(p => p.property_id);
       if (propertyIds.length === 0) {
-        return res.status(200).json({ status: 'OK', filters: req.body, count: 0, results: [] });
+        return res.status(200).json({ status: 'OK', count: 0, results: [] });
       }
 
-      // 2. Ahora, buscar en la tabla 'periods'
+      // 2. Buscar en la tabla 'periods'
       let periodQuery = supabase
         .from('periods')
         .select('*')
         .in('property_id', propertyIds)
-        .eq('status', 'Disponible'); // ¡Gracias a la Tarea 10.2, esto ahora es confiable!
+        .eq('status', 'Disponible'); // ¡Lógica de "disponible carnaval" OK!
 
       // 3. Filtrar por Fecha (Core)
+      // Si SÍ hay fechas, filtramos por ellas
       if (startDate && endDate) {
         periodQuery = periodQuery
           .lte('start_date', startDate)
@@ -102,12 +96,9 @@ export default async function handler(req, res) {
           periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
         }
 
-        // Si el período no tiene precio (ej. "disponible carnaval"), no podemos filtrarlo
-        // por precio, pero sí debemos mostrarlo si el usuario no puso rango de precio.
         const passesMinPrice = !minPrice || (periodPrice > 0 && periodPrice >= minPrice);
         const passesMaxPrice = !maxPrice || (periodPrice > 0 && periodPrice <= maxPrice);
         
-        // Si el usuario SÍ puso rango de precio, y el período no tiene precio, se descarta.
         if (minPrice && periodPrice === 0) continue;
         if (maxPrice && periodPrice === 0) continue;
 
@@ -122,18 +113,58 @@ export default async function handler(req, res) {
       }
 
       // 5. Filtrar las propiedades finales
-      const finalResults = propertiesData
-        .filter(p => availablePropertyIds.has(p.property_id))
+      let finalResults = propertiesData
         .map(p => ({
           ...p,
+          // Inyectar el precio mínimo del período encontrado
           min_rental_price: minPriceMap.get(p.property_id) || null
         }));
 
-      return res.status(200).json({ status: 'OK', filters: req.body, count: finalResults.length, results: finalResults });
-    }
+      // Si no hay fechas seleccionadas (Default View), mostramos *todas*
+      // las propiedades de Alq. Temp. que coincidieron con los filtros base.
+      if (!startDate || !endDate) {
+         finalResults = propertiesData.map(p => ({
+          ...p,
+          // Buscamos el precio más bajo de *todos* sus períodos
+          min_rental_price: minPriceMap.get(p.property_id) || null 
+        }));
+      } else {
+        // Si SÍ hay fechas, filtramos solo las que tienen períodos disponibles
+         finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
+      }
 
-    // --- 2. FILTROS COMUNES (para Venta y Alquiler Anual) ---
-    if (operacion !== 'alquiler_temporal') {
+      // 6. ¡NUEVO! Ordenar por Precio
+      if (sortBy === 'price_asc') {
+        finalResults.sort((a, b) => (a.min_rental_price || 9999999) - (b.min_rental_price || 9999999));
+      } else if (sortBy === 'price_desc') {
+        finalResults.sort((a, b) => (b.min_rental_price || 0) - (a.min_rental_price || 0));
+      }
+
+      return res.status(200).json({ status: 'OK', count: finalResults.length, results: finalResults });
+    
+    } 
+    
+    // --- Lógica de Venta o Alquiler Anual ---
+    else {
+      
+      if (operacion === 'venta') {
+        query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
+        if (minPrice) query = query.gte('price', parseInt(minPrice, 10));
+        if (maxPrice) query = query.lte('price', parseInt(maxPrice, 10));
+        // ¡NUEVO! Ordenar
+        if (sortBy === 'price_asc') query = query.order('price', { ascending: true });
+        if (sortBy === 'price_desc') query = query.order('price', { ascending: false });
+
+      } else if (operacion === 'alquiler_anual') {
+        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO}}`);
+        if (minPrice) query = query.gte('es_property_price_ars', parseInt(minPrice, 10));
+        if (maxPrice) query = query.lte('es_property_price_ars', parseInt(maxPrice, 10));
+        // ¡NUEVO! Ordenar
+        if (sortBy === 'price_asc') query = query.order('es_property_price_ars', { ascending: true });
+        if (sortBy === 'price_desc') query = query.order('es_property_price_ars', { ascending: false });
+      }
+      
+      // Aplicar filtros comunes
       if (zona) query = query.eq('zona', zona);
       if (barrio) query = query.eq('barrio', barrio);
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
@@ -143,13 +174,12 @@ export default async function handler(req, res) {
       if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
       if (minMts) query = query.gte('mts_cubiertos', parseInt(minMts, 10));
       if (maxMts) query = query.lte('mts_cubiertos', parseInt(maxMts, 10));
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      return res.status(200).json({ status: 'OK', count: data.length, results: data });
     }
-
-    // 3. Ejecutar la consulta final (para Venta y Alquiler Anual)
-    const { data, error } = await query;
-    if (error) throw error;
-    
-    return res.status(200).json({ status: 'OK', filters: req.body, count: data.length, results: data });
 
   } catch (error) {
     console.error('Error en API Search:', error.message);

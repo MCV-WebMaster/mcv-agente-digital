@@ -15,7 +15,7 @@ export default function SearchPage() {
     tipo: null,
     barrio: null,
     pax: '',
-    pax_or_more: false, // ¡NUEVO!
+    pax_or_more: false,
     pets: false,
     pool: false,
     bedrooms: '',
@@ -25,12 +25,14 @@ export default function SearchPage() {
     maxPrice: '',
     startDate: null,
     endDate: null,
+    sortBy: 'default', // ¡NUEVO!
   });
 
   const [dateRange, setDateRange] = useState([null, null]);
 
   // --- ESTADO DE LÓGICA ---
   const [results, setResults] = useState([]);
+  const [propertyCount, setPropertyCount] = useState(0); // ¡NUEVO!
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
@@ -52,7 +54,7 @@ export default function SearchPage() {
         const data = await res.json();
         if (data.status === 'OK' && Object.keys(data.filtros).length > 0) {
           setListas({ 
-            zonas: Object.keys(data.filtros).sort(),
+            zonas: Object.keys(data.filtros).sort().reverse(), // ¡NUEVO! Z-A
             barrios: data.filtros
           });
           setHasLoadedFilters(true);
@@ -73,6 +75,7 @@ export default function SearchPage() {
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
+      setPropertyCount(0);
       setIsSearching(false);
       return;
     }
@@ -96,6 +99,7 @@ export default function SearchPage() {
       const data = await response.json();
       if (data.status === 'OK') {
         setResults(data.results);
+        setPropertyCount(data.count); // ¡NUEVO!
       } else {
         throw new Error(data.error || 'Error en la API');
       }
@@ -122,7 +126,7 @@ export default function SearchPage() {
       operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
-      startDate: null, endDate: null,
+      startDate: null, endDate: null, sortBy: 'default'
     };
     
     setFilters(prev => {
@@ -168,7 +172,7 @@ export default function SearchPage() {
       operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
-      startDate: null, endDate: null,
+      startDate: null, endDate: null, sortBy: 'default'
     };
     if (name === 'operacion') {
       setFilters(defaultFilters);
@@ -361,9 +365,10 @@ export default function SearchPage() {
                 onChange={handleDateChange}
                 locale="es"
                 dateFormat="dd/MM/yyyy"
-                placeholderText="Seleccione un rango de fechas"
+                placeholderText="Seleccione un rango"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 isClearable={true}
+                minDate={new Date()} // No se puede seleccionar antes de hoy
               />
             </div>
           )}
@@ -422,10 +427,33 @@ export default function SearchPage() {
           <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
             <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Agente Digital</h1>
             <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
+            {/* --- ¡NUEVO! CONTADOR --- */}
+            {!isSearching && hasLoadedFilters && filters.operacion && (
+              <h2 className="text-lg font-bold text-mcv-verde mt-2">
+                {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
+              </h2>
+            )}
           </div>
         </header>
 
+        {/* --- Resultados (Abajo) --- */}
         <main>
+          {/* --- ¡NUEVO! BOTÓN DE ORDENAR --- */}
+          {!isSearching && results.length > 1 && (
+            <div className="flex justify-end mb-4">
+              <select
+                name="sortBy"
+                value={filters.sortBy}
+                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                className="p-2 rounded-md bg-white border border-gray-300 text-sm"
+              >
+                <option value="default">Ordenar por...</option>
+                <option value="price_asc">Precio: más bajo primero</option>
+                <option value="price_desc">Precio: más alto primero</option>
+              </select>
+            </div>
+          )}
+
           {isSearching ? (
             <Spinner />
           ) : error ? (
@@ -434,17 +462,13 @@ export default function SearchPage() {
             </div>
           ) : (filters.operacion && hasLoadedFilters) ? (
             results.length > 0 ? (
-              <>
-                <h2 className="text-xl font-bold text-mcv-gris mb-4">
-                  Resultados ({results.length})
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {results.map(prop => (
-                    <PropertyCard key={prop.property_id} property={prop} />
-                  ))}
-                </div>
-              </>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {results.map(prop => (
+                  <PropertyCard key={prop.property_id} property={prop} />
+                ))}
+              </div>
             ) : (
+              // No mostrar "0 resultados" si aún no se eligió zona (Paso 2)
               (filters.zona || isSearching) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>
