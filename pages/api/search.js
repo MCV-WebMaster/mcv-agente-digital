@@ -68,7 +68,7 @@ export default async function handler(req, res) {
       // 2. Buscar en la tabla 'periods'
       let periodQuery = supabase
         .from('periods')
-        .select('property_id, price') // Solo necesitamos el precio
+        .select('property_id, price')
         .in('property_id', propertyIds)
         .eq('status', 'Disponible'); 
 
@@ -106,7 +106,6 @@ export default async function handler(req, res) {
           availablePropertyIds.add(period.property_id);
           if (periodPrice > 0) {
             if (!minPriceMap.has(period.property_id) || periodPrice < minPriceMap.get(period.property_id)) {
-              // Guardamos el precio más bajo del período (ej. $1.400)
               minPriceMap.set(period.property_id, periodPrice);
             }
           }
@@ -121,8 +120,10 @@ export default async function handler(req, res) {
           min_rental_price: minPriceMap.get(p.property_id) || null
         }));
 
-      // Si hay fechas DENTRO de temporada, filtramos la lista de propiedades
+      // --- ¡LÓGICA "NO DISPONIBLE" CORREGIDA! ---
       if (userSelectedDates && !isOffSeason) {
+         // Si el usuario seleccionó fechas en temporada,
+         // filtramos la lista de propiedades y mostramos SOLO las que tienen disponibilidad.
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
       // Si no hay fechas (Default) o es Fuera de Temporada (isOffSeason),

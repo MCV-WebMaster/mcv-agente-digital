@@ -61,13 +61,15 @@ export default function PropertyCard({ property, filters }) {
           <p className="text-xs text-gray-500">Alquiler desde</p>
         </div>
       ) : (
-        // (ej. Arelauquen, o si solo decía "disponible carnaval" sin precio)
+        // (ej. Arelauquen, o "disponible carnaval" sin precio)
         <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
             <p className="text-xs text-gray-500">Disponibilidad</p>
         </div>
       );
     }
+    // NOTA: El caso "No disponible" ya no existe.
+    // La API (Tarea 10.20) filtra y elimina esas propiedades.
   }
 
 

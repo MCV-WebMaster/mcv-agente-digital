@@ -6,9 +6,6 @@ import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 registerLocale('es', es);
 
-// Fechas de la Temporada 2026
-const SEASON_START_DATE = '2025-12-19';
-
 export default function SearchPage() {
   
   // --- ESTADO PRINCIPAL ---
@@ -473,8 +470,7 @@ export default function SearchPage() {
                 ))}
               </div>
             ) : (
-              // No mostrar "0 resultados" si aún no se eligió zona (Paso 2)
-              (filters.zona || isSearching) && (
+              (filters.zona || (filters.operacion && !isSearching)) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>
                   <p>Intente ajustar sus filtros de búsqueda.</p>
