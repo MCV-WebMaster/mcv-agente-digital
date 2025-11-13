@@ -8,7 +8,6 @@ registerLocale('es', es);
 
 export default function SearchPage() {
   
-  // --- ESTADO PRINCIPAL ---
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -29,12 +28,10 @@ export default function SearchPage() {
   });
 
   const [dateRange, setDateRange] = useState([null, null]);
-
-  // --- ESTADO DE LÓGICA ---
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
-  const [isLoadingFilters, setIsLoadingFilters] = useState(false); // ¡NUEVO!
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
 
@@ -44,18 +41,17 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- 1. CARGAR LISTAS DE FILTROS (¡MODIFICADO!) ---
+  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     async function loadFilters() {
       if (!filters.operacion) {
-        setListas({ zonas: [], barrios: {} }); // Limpiar zonas si no hay operación
+        setListas({ zonas: [], barrios: {} });
         return;
       }
       
-      setIsLoadingFilters(true); // Inicia la carga de filtros
+      setIsLoadingFilters(true);
       setError(null);
       try {
-        // ¡NUEVO! Envía la operación a la API
         const res = await fetch(`/api/get-filters?operacion=${filters.operacion}`);
         const data = await res.json();
         if (data.status === 'OK') {
@@ -70,11 +66,11 @@ export default function SearchPage() {
         console.error("Error cargando listas de filtros:", err);
         setError(err.message);
       } finally {
-        setIsLoadingFilters(false); // Termina la carga de filtros
+        setIsLoadingFilters(false);
       }
     }
     loadFilters();
-  }, [filters.operacion]); // Se ejecuta CADA VEZ que cambia la operación
+  }, [filters.operacion]);
 
   // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
@@ -230,19 +226,30 @@ export default function SearchPage() {
     }
 
     if (!filters.zona) {
+      // --- ¡NUEVO! COLORES DE BOTONES ---
+      const buttonColors = [
+        'bg-mcv-azul text-white hover:bg-opacity-80',
+        'bg-mcv-verde text-white hover:bg-opacity-80',
+        'bg-mcv-gris text-white hover:bg-opacity-80',
+      ];
+      
       return (
         <div className="text-center">
           <h2 className="text-xl font-bold mb-4">¿En qué zona?</h2>
           {listas.zonas.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {listas.zonas.map(zona => (
-                <button key={zona} onClick={() => handleFilterChange('zona', zona)} className="p-4 bg-gray-100 border border-gray-300 text-mcv-gris rounded-lg shadow-lg hover:bg-gray-200 transition-all text-lg font-bold">
+              {listas.zonas.map((zona, index) => (
+                <button 
+                  key={zona} 
+                  onClick={() => handleFilterChange('zona', zona)} 
+                  className={`p-4 rounded-lg shadow-lg transition-all text-lg font-bold ${buttonColors[index % buttonColors.length]}`}
+                >
                   {zona}
                 </button>
               ))}
             </div>
           ) : (
-             <p className="text-gray-500">No hay zonas disponibles para esta operación.</p>
+             <p className="text-gray-500">No hay zonas disponibles para "{filters.operacion}".</p>
           )}
         </div>
       );
@@ -375,13 +382,14 @@ export default function SearchPage() {
                 placeholderText="Seleccione un rango"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 isClearable={true}
-                minDate={new Date()} // No se puede seleccionar antes de hoy
+                minDate={new Date()}
               />
             </div>
           )}
 
+          {/* --- ¡NUEVO! LAYOUT DE CHECKBOX --- */}
           {filters.tipo !== 'lote' && (
-            <div className="flex flex-col gap-2 pt-6 col-span-2 md:col-span-1">
+            <div className="col-span-2 flex flex-row gap-4 pt-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox" name="pool"
@@ -469,13 +477,11 @@ export default function SearchPage() {
           ) : (filters.operacion) ? (
             results.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* ¡NUEVO! Pasamos los 'filters' a la tarjeta */}
                 {results.map(prop => (
                   <PropertyCard key={prop.property_id} property={prop} filters={filters} />
                 ))}
               </div>
             ) : (
-              // No mostrar "0 resultados" si aún no se eligió zona (Paso 2)
               (filters.zona || isSearching) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>
@@ -484,8 +490,7 @@ export default function SearchPage() {
               )
             )
           ) : (
-             // Estado inicial (sin operación seleccionada)
-             !isLoadingFilters && !isSearching && ( // Corregido de !isLoading
+             !isLoadingFilters && !isSearching && (
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>
