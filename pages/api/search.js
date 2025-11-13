@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
+// --- IDs de Taxonomía ---
 const CATEGORY_IDS = {
   VENTA: 198,
   ALQUILER_TEMPORAL: 197,
@@ -12,9 +13,15 @@ const TYPE_IDS = {
   LOTE: 167,
 };
 const STATUS_ID_ACTIVA = 158;
+// --- Fin del Mapeo ---
 
 const SEASON_START_DATE = '2025-12-19';
 const SEASON_END_DATE = '2026-03-01';
+
+// Formatea el texto de búsqueda para FTS (ej. "cancha polo" -> "cancha & polo")
+function formatFTSQuery(text) {
+  return text.trim().split(' ').filter(Boolean).join(' & ');
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -23,23 +30,35 @@ export default async function handler(req, res) {
 
   try {
     const { 
-      operacion, zona, tipo, barrio, 
+      operacion, zona, tipo, 
+      barrios, // ¡NUEVO! (Array)
       pax, pax_or_more,
       pets, pool, bedrooms,
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
-      sortBy = 'default'
+      sortBy = 'default',
+      searchText // ¡NUEVO! (Texto Libre)
     } = req.body;
 
     let query = supabase.from('properties').select('*');
     query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
 
+    // --- ¡NUEVO! FILTRO DE TEXTO LIBRE (FTS) ---
+    if (searchText) {
+      const ftsQuery = formatFTSQuery(searchText);
+      query = query.textSearch('fts', ftsQuery, { config: 'spanish' });
+    }
+
+    // --- Lógica de Alquiler Temporal ---
     if (operacion === 'alquiler_temporal') {
       
       query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
 
+      // 1. Filtrar propiedades por filtros base
       if (zona) query = query.eq('zona', zona);
-      if (barrio) query = query.eq('barrio', barrio);
+      // ¡NUEVO! Multi-Barrio
+      if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
+      
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       if (pool) query = query.eq('tiene_piscina', true);
@@ -59,6 +78,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ status: 'OK', count: 0, results: [] });
       }
 
+      // 2. Buscar TODOS los períodos disponibles para calcular el "Alquiler desde"
       const { data: allPeriodsData, error: allPeriodsError } = await supabase
         .from('periods')
         .select('property_id, price')
@@ -81,6 +101,7 @@ export default async function handler(req, res) {
         }
       }
 
+      // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
       const isOffSeason = userSelectedDates && (endDate < SEASON_START_DATE || startDate > SEASON_END_DATE);
       let availablePropertyIds = new Set(propertyIds); 
@@ -114,6 +135,7 @@ export default async function handler(req, res) {
         }
       }
 
+      // 4. Filtrar y Mapear Resultados Finales
       let finalResults = propertiesData
         .map(p => ({
           ...p,
@@ -144,6 +166,7 @@ export default async function handler(req, res) {
     
     } 
     
+    // --- Lógica de Venta o Alquiler Anual ---
     else {
       if (operacion === 'venta') {
         query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
@@ -161,7 +184,9 @@ export default async function handler(req, res) {
       }
       
       if (zona) query = query.eq('zona', zona);
-      if (barrio) query = query.eq('barrio', barrio);
+      // ¡NUEVO! Multi-Barrio
+      if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
+      
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       if (tipo === 'lote') query = query.contains('type_ids', [TYPE_IDS.LOTE]);
