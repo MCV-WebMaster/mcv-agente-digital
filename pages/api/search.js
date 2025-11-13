@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
 
-// --- IDs de Taxonomía ---
 const CATEGORY_IDS = {
   VENTA: 198,
   ALQUILER_TEMPORAL: 197,
@@ -13,7 +12,6 @@ const TYPE_IDS = {
   LOTE: 167,
 };
 const STATUS_ID_ACTIVA = 158;
-// --- Fin del Mapeo ---
 
 const SEASON_START_DATE = '2025-12-19';
 const SEASON_END_DATE = '2026-03-01';
@@ -36,12 +34,10 @@ export default async function handler(req, res) {
     let query = supabase.from('properties').select('*');
     query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
 
-    // --- Lógica de Alquiler Temporal ---
     if (operacion === 'alquiler_temporal') {
       
       query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
 
-      // 1. Filtrar propiedades por filtros base
       if (zona) query = query.eq('zona', zona);
       if (barrio) query = query.eq('barrio', barrio);
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
@@ -63,7 +59,6 @@ export default async function handler(req, res) {
         return res.status(200).json({ status: 'OK', count: 0, results: [] });
       }
 
-      // 2. Buscar TODOS los períodos disponibles para calcular el "Alquiler desde"
       const { data: allPeriodsData, error: allPeriodsError } = await supabase
         .from('periods')
         .select('property_id, price')
@@ -74,8 +69,7 @@ export default async function handler(req, res) {
       const minPriceMap = new Map();
       for (const period of allPeriodsData) {
         let periodPrice = 0;
-        if (period.price) { // <-- ¡PROTECCIÓN INICIAL!
-          // ¡ESTA ES LA LÍNEA QUE CORRIGE EL BUG `replace`!
+        if (period.price) {
           if (typeof period.price === 'string' && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
              periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
           }
@@ -87,7 +81,6 @@ export default async function handler(req, res) {
         }
       }
 
-      // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
       const isOffSeason = userSelectedDates && (endDate < SEASON_START_DATE || startDate > SEASON_END_DATE);
       let availablePropertyIds = new Set(propertyIds); 
@@ -109,7 +102,7 @@ export default async function handler(req, res) {
         for (const period of filteredPeriodsData) {
             availablePropertyIds.add(period.property_id);
             let periodPrice = null;
-            if (period.price) { // <-- ¡PROTECCIÓN OTRA VEZ!
+            if (period.price) {
               if (typeof period.price === 'string' && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
                  periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || null;
               }
@@ -121,7 +114,6 @@ export default async function handler(req, res) {
         }
       }
 
-      // 4. Filtrar y Mapear Resultados Finales
       let finalResults = propertiesData
         .map(p => ({
           ...p,
@@ -142,7 +134,6 @@ export default async function handler(req, res) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
       
-      // 5. Ordenar por Precio
       if (sortBy === 'price_asc') {
         finalResults.sort((a, b) => (a.min_rental_price || 9999999) - (b.min_rental_price || 9999999));
       } else if (sortBy === 'price_desc') {
@@ -153,7 +144,6 @@ export default async function handler(req, res) {
     
     } 
     
-    // --- Lógica de Venta o Alquiler Anual ---
     else {
       if (operacion === 'venta') {
         query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);

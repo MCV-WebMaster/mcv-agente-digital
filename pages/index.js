@@ -250,7 +250,7 @@ export default function SearchPage() {
               ))}
             </div>
           ) : (
-             <p className="text-gray-500">No hay zonas disponibles para "{filters.operacion}".</p>
+             <p className="text-gray-500">No hay zonas disponibles para "{filters.operacion.replace('_', ' ')}".</p>
           )}
         </div>
       );

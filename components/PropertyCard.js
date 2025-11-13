@@ -60,11 +60,8 @@ export default function PropertyCard({ property, filters }) {
           <p className="text-xs text-gray-500">Valor Período</p>
         </div>
       ) : (
-        // La API ya lo filtró, pero por si acaso
-        <div>
-          <h4 className="text-lg font-bold text-gray-400">No Disponible</h4>
-          <p className="text-xs text-gray-500">en fecha selcc.</p>
-        </div>
+        // La API ya lo filtró, esto no debería mostrarse
+        null 
       );
       
       // ¡NUEVO! Lógica de Leyenda
