@@ -68,8 +68,6 @@ export default function PropertyCard({ property, filters }) {
         </div>
       );
     }
-    // NOTA: El caso "No disponible" ya no existe.
-    // La API (Tarea 10.20) filtra y elimina esas propiedades.
   }
 
 

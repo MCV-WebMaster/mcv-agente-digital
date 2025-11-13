@@ -66,50 +66,52 @@ export default async function handler(req, res) {
       }
 
       // 2. Buscar en la tabla 'periods'
-      let periodQuery = supabase
+      // Pedimos TODOS los períodos disponibles para esta propiedad
+      let allPeriodsQuery = supabase
         .from('periods')
         .select('property_id, price')
         .in('property_id', propertyIds)
-        .eq('status', 'Disponible'); 
+        .eq('status', 'Disponible');
+        
+      const { data: allPeriodsData, error: allPeriodsError } = await allPeriodsQuery;
+      if (allPeriodsError) throw allPeriodsError;
 
       // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
       const isOffSeason = userSelectedDates && (endDate < SEASON_START_DATE || startDate > SEASON_END_DATE);
 
-      // Si la fecha está DENTRO de la temporada, filtramos por períodos
+      let availablePropertyIds = new Set(allPeriodsData.map(p => p.property_id));
+      
+      // Si el usuario SÍ seleccionó fechas DENTRO de temporada
       if (userSelectedDates && !isOffSeason) {
-        periodQuery = periodQuery
+        let filteredPeriodQuery = supabase
+          .from('periods')
+          .select('property_id')
+          .in('property_id', propertyIds)
+          .eq('status', 'Disponible')
           .lte('start_date', startDate)
           .gte('end_date', endDate);
+          
+        const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
+        if (filteredPeriodsError) throw filteredPeriodsError;
+        
+        // Sobreescribimos availablePropertyIds solo con las que cumplen el filtro de fecha
+        availablePropertyIds = new Set(filteredPeriodsData.map(p => p.property_id));
       }
-      
-      const { data: periodsData, error: periodsError } = await periodQuery;
-      if (periodsError) throw periodsError;
 
       // 4. Mapear precios y filtrar
-      const availablePropertyIds = new Set();
       const minPriceMap = new Map(); // Mapa para guardar el precio más bajo
 
-      for (const period of periodsData) {
+      for (const period of allPeriodsData) { // Usamos allPeriodsData para el precio "desde"
         let periodPrice = 0;
         if (period.price) {
           periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
         }
 
-        const passesMinPrice = !minPrice || (periodPrice > 0 && periodPrice >= minPrice);
-        const passesMaxPrice = !maxPrice || (periodPrice > 0 && periodPrice <= maxPrice);
-        
-        if (minPrice && periodPrice === 0) continue;
-        if (maxPrice && periodPrice === 0) continue;
-
-        if (passesMinPrice && passesMaxPrice) {
-          availablePropertyIds.add(period.property_id);
-          if (periodPrice > 0) {
+        if (periodPrice > 0) {
             if (!minPriceMap.has(period.property_id) || periodPrice < minPriceMap.get(period.property_id)) {
-              // Guardamos el precio más bajo del período (ej. $1.100)
               minPriceMap.set(period.property_id, periodPrice);
             }
-          }
         }
       }
 
@@ -117,19 +119,29 @@ export default async function handler(req, res) {
       let finalResults = propertiesData
         .map(p => ({
           ...p,
-          // Inyectar el precio mínimo (NO pro-rata)
           min_rental_price: minPriceMap.get(p.property_id) || null
-        }));
+        }))
+        // Filtro de precio (se aplica al min_rental_price)
+        .filter(p => {
+            const price = p.min_rental_price;
+            const passesMinPrice = !minPrice || (price && price >= minPrice);
+            const passesMaxPrice = !maxPrice || (price && price <= maxPrice);
+            return passesMinPrice && passesMaxPrice;
+        });
+
 
       // --- ¡LÓGICA "NO DISPONIBLE" CORREGIDA! ---
       if (userSelectedDates && !isOffSeason) {
-         // Si el usuario seleccionó fechas en temporada,
-         // filtramos la lista de propiedades y mostramos SOLO las que tienen disponibilidad.
+         // Si se seleccionaron fechas en temporada, filtramos por las que SÍ están disponibles
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
+      } else if (userSelectedDates && isOffSeason) {
+         // Si se seleccionaron fechas FUERA de temporada, mostramos todo (lógica "Consultar")
+         // No se hace nada, finalResults ya tiene todo.
+      } else {
+         // Si NO se seleccionaron fechas, mostramos todo (Arelauquen, etc.)
+         // No se hace nada, finalResults ya tiene todo.
       }
-      // Si no hay fechas (Default) o es Fuera de Temporada (isOffSeason),
-      // mostramos TODAS las propiedades (Arelauquen, etc.).
-
+      
       // 6. Ordenar por Precio
       if (sortBy === 'price_asc') {
         finalResults.sort((a, b) => (a.min_rental_price || 9999999) - (b.min_rental_price || 9999999));
