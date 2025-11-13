@@ -105,7 +105,10 @@ export default async function handler(req, res) {
       for (const period of allPeriodsData) { // Usamos allPeriodsData para el precio "desde"
         let periodPrice = 0;
         if (period.price) {
-          periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
+          // Usamos el parser v7 (solo $ o números)
+          if (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/)) {
+             periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
+          }
         }
 
         if (periodPrice > 0) {
@@ -119,13 +122,22 @@ export default async function handler(req, res) {
       let finalResults = propertiesData
         .map(p => ({
           ...p,
+          // Inyectar el precio mínimo (NO pro-rata)
           min_rental_price: minPriceMap.get(p.property_id) || null
         }))
         // Filtro de precio (se aplica al min_rental_price)
         .filter(p => {
             const price = p.min_rental_price;
+            // Si no hay min/max precio, pasan todas (incluidas las "Consultar")
+            if (!minPrice && !maxPrice) return true; 
+            
+            // Si hay precio, filtramos
             const passesMinPrice = !minPrice || (price && price >= minPrice);
             const passesMaxPrice = !maxPrice || (price && price <= maxPrice);
+            
+            // Si el usuario puso un precio, la propiedad debe tener un precio
+            if ((minPrice || maxPrice) && !price) return false;
+            
             return passesMinPrice && passesMaxPrice;
         });
 
@@ -134,12 +146,6 @@ export default async function handler(req, res) {
       if (userSelectedDates && !isOffSeason) {
          // Si se seleccionaron fechas en temporada, filtramos por las que SÍ están disponibles
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
-      } else if (userSelectedDates && isOffSeason) {
-         // Si se seleccionaron fechas FUERA de temporada, mostramos todo (lógica "Consultar")
-         // No se hace nada, finalResults ya tiene todo.
-      } else {
-         // Si NO se seleccionaron fechas, mostramos todo (Arelauquen, etc.)
-         // No se hace nada, finalResults ya tiene todo.
       }
       
       // 6. Ordenar por Precio

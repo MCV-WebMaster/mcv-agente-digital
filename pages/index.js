@@ -45,7 +45,6 @@ export default function SearchPage() {
   };
 
   // --- 1. CARGAR LISTAS DE FILTROS (¡MODIFICADO!) ---
-  // Esta función ahora depende de 'filters.operacion'
   useEffect(() => {
     async function loadFilters() {
       if (!filters.operacion) {
@@ -217,7 +216,7 @@ export default function SearchPage() {
         </div>
       );
     }
-
+    
     if (isLoadingFilters) {
       return <div className="text-center p-10"><Spinner /></div>;
     }
@@ -270,7 +269,6 @@ export default function SearchPage() {
             </select>
           </div>
 
-          {/* ¡CORREGIDO! Ahora 'listas.barrios[filters.zona]' existe */}
           {listas.barrios[filters.zona] && listas.barrios[filters.zona].length > 0 && (
             <div>
               <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio</label>
@@ -301,7 +299,6 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* --- ¡NUEVA LÓGICA DE PAX! --- */}
           {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
             <div className="col-span-2 md:col-span-1">
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
@@ -488,7 +485,7 @@ export default function SearchPage() {
             )
           ) : (
              // Estado inicial (sin operación seleccionada)
-             !isLoading && (
+             !isLoadingFilters && !isSearching && ( // Corregido de !isLoading
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>
