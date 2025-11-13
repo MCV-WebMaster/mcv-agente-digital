@@ -70,7 +70,7 @@ export default async function handler(req, res) {
         .from('periods')
         .select('property_id, price')
         .in('property_id', propertyIds)
-        .eq('status', 'Disponible'); // ¡Lógica de "disponible carnaval" OK!
+        .eq('status', 'Disponible'); 
 
       // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
