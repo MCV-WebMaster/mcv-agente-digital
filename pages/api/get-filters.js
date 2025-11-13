@@ -13,6 +13,7 @@ const STATUS_ID_ACTIVA = 158;
 
 export default async function handler(req, res) {
   try {
+    // ¡NUEVO! Leemos la operación de la query
     const { operacion } = req.query;
 
     if (!operacion) {
@@ -22,8 +23,9 @@ export default async function handler(req, res) {
     let query = supabase
       .from('properties')
       .select('zona, barrio')
-      .or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); 
+      .or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); // Siempre solo activas
 
+    // --- ¡NUEVO! Filtro contextual por operación ---
     if (operacion === 'venta') {
       query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
     } else if (operacion === 'alquiler_anual') {
@@ -31,6 +33,7 @@ export default async function handler(req, res) {
     } else if (operacion === 'alquiler_temporal') {
       query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
     }
+    // --- Fin del filtro ---
 
     const { data, error } = await query;
     if (error) throw error;
@@ -54,7 +57,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ 
       status: 'OK', 
-      filtros
+      filtros // ej: { "GBA Sur": ["Club El Carmen", "Quilmes"]} (ya no incluirá Arelauquen si se pide Venta)
     });
 
   } catch (error) {

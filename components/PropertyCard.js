@@ -60,7 +60,8 @@ export default function PropertyCard({ property, filters }) {
           <p className="text-xs text-gray-500">Valor Período</p>
         </div>
       ) : (
-        // La API ya lo filtró, esto no debería mostrarse
+        // La API (v8) ya filtra esto, por lo que este código
+        // no debería ejecutarse, pero es una protección.
         null 
       );
       
