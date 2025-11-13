@@ -74,8 +74,9 @@ export default async function handler(req, res) {
       const minPriceMap = new Map();
       for (const period of allPeriodsData) {
         let periodPrice = 0;
-        if (period.price) {
-          if (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/)) {
+        if (period.price) { // <-- ¡PROTECCIÓN INICIAL!
+          // ¡ESTA ES LA LÍNEA QUE CORRIGE EL BUG `replace`!
+          if (typeof period.price === 'string' && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
              periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
           }
         }
@@ -89,14 +90,13 @@ export default async function handler(req, res) {
       // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
       const isOffSeason = userSelectedDates && (endDate < SEASON_START_DATE || startDate > SEASON_END_DATE);
-      let availablePropertyIds = new Set(propertyIds); // Default: todas están disponibles (para "Consultar")
-      const periodDetailsMap = new Map(); // ¡NUEVO! Para guardar el precio y duración específicos
+      let availablePropertyIds = new Set(propertyIds); 
+      const periodDetailsMap = new Map();
 
       if (userSelectedDates && !isOffSeason) {
-        // Si hay fechas DENTRO de temporada, filtramos por ellas
         let filteredPeriodQuery = supabase
           .from('periods')
-          .select('property_id, price, duration_days') // ¡Pedimos los detalles!
+          .select('property_id, price, duration_days')
           .in('property_id', propertyIds)
           .eq('status', 'Disponible')
           .lte('start_date', startDate)
@@ -105,12 +105,17 @@ export default async function handler(req, res) {
         const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
         if (filteredPeriodsError) throw filteredPeriodsError;
         
-        availablePropertyIds = new Set(); // Resetear
+        availablePropertyIds = new Set();
         for (const period of filteredPeriodsData) {
             availablePropertyIds.add(period.property_id);
-            // Guardar los detalles del período específico encontrado
+            let periodPrice = null;
+            if (period.price) { // <-- ¡PROTECCIÓN OTRA VEZ!
+              if (typeof period.price === 'string' && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
+                 periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || null;
+              }
+            }
             periodDetailsMap.set(period.property_id, {
-                price: parseInt(period.price.replace(/[^0-9]/g, ''), 10) || null,
+                price: periodPrice,
                 duration: period.duration_days
             });
         }
@@ -120,11 +125,10 @@ export default async function handler(req, res) {
       let finalResults = propertiesData
         .map(p => ({
           ...p,
-          min_rental_price: minPriceMap.get(p.property_id) || null, // "Alquiler desde"
-          found_period_price: periodDetailsMap.get(p.property_id)?.price || null, // Precio Específico
-          found_period_duration: periodDetailsMap.get(p.property_id)?.duration || null // Duración Específica
+          min_rental_price: minPriceMap.get(p.property_id) || null,
+          found_period_price: periodDetailsMap.get(p.property_id)?.price || null,
+          found_period_duration: periodDetailsMap.get(p.property_id)?.duration || null
         }))
-        // Filtro de precio (se aplica al min_rental_price)
         .filter(p => {
             const price = p.min_rental_price;
             if (!minPrice && !maxPrice) return true; 
@@ -134,7 +138,6 @@ export default async function handler(req, res) {
             return passesMinPrice && passesMaxPrice;
         });
 
-      // --- ¡LÓGICA "NO DISPONIBLE" CORREGIDA! ---
       if (userSelectedDates && !isOffSeason) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }

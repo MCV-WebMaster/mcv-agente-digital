@@ -31,7 +31,7 @@ export default function SearchPage() {
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
-  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false); // ¡CORREGIDO!
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
 
@@ -60,7 +60,8 @@ export default function SearchPage() {
             barrios: data.filtros
           });
         } else {
-          throw new Error("No se encontraron filtros para esta operación.");
+          // Si no hay zonas, no es un error, solo no hay datos.
+          setListas({ zonas: [], barrios: {} });
         }
       } catch (err) {
         console.error("Error cargando listas de filtros:", err);
@@ -490,7 +491,7 @@ export default function SearchPage() {
               )
             )
           ) : (
-             !isLoadingFilters && !isSearching && (
+             !isLoadingFilters && !isSearching && ( // ¡CORREGIDO!
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>

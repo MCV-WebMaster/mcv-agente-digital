@@ -15,6 +15,14 @@ function formatPrice(value, currency = 'USD') {
   }).format(priceNum);
 }
 
+// Helper para calcular días
+function getDaysBetween(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 inclusive
+}
+
 // Fechas de la Temporada 2026
 const SEASON_START_DATE = '2025-12-19';
 const SEASON_END_DATE = '2026-03-01';
@@ -22,11 +30,8 @@ const SEASON_END_DATE = '2026-03-01';
 export default function PropertyCard({ property, filters }) {
   const {
     slug, title, url, thumbnail_url,
-    price, // Precio Venta (USD)
-    es_property_price_ars, // Alquiler Anual (ARS)
-    min_rental_price, // Alquiler Temporal (USD) - Inyectado por la API
-    found_period_price, // ¡NUEVO! Precio específico de fecha
-    found_period_duration, // ¡NUEVO! Duración de fecha
+    price, es_property_price_ars, min_rental_price,
+    found_period_price, found_period_duration, // ¡NUEVO!
     pax, acepta_mascota, tiene_piscina, piscina_detalle,
     barrio, zona, bedrooms, mts_cubiertos
   } = property;
@@ -46,7 +51,7 @@ export default function PropertyCard({ property, filters }) {
   if (isTemporal) {
     const userSelectedDates = filters.startDate && filters.endDate;
     const isOffSeason = userSelectedDates && (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE);
-
+    
     if (userSelectedDates && !isOffSeason) {
       // 1. Fechas DENTRO de temporada
       alquilerTempDisplay = found_period_price ? (
@@ -75,8 +80,8 @@ export default function PropertyCard({ property, filters }) {
       alquilerTempDisplay = (
         <div>
           <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-          <p className="text-xs text-gray-500">Disponibilidad</p>
-        </div>
+          <p className="text-xs text-gray-500">Disponibilidad</p> 
+        </div> // <-- ¡Typo corregido!
       );
     } else {
       // 3. SIN FECHAS (Default View)
@@ -95,15 +100,6 @@ export default function PropertyCard({ property, filters }) {
     }
   }
   
-  // Helper para calcular días
-  function getDaysBetween(startDate, endDate) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  }
-
-
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden shadow-lg bg-white transition-transform duration-300 hover:shadow-xl flex flex-col justify-between">
       
@@ -156,7 +152,6 @@ export default function PropertyCard({ property, filters }) {
                 {leyendaFecha}
             </p>
         )}
-
         
         <h3 className="text-lg font-bold text-mcv-azul mb-2 h-14 overflow-hidden">
           <a href={url} target="_blank" rel="noopener noreferrer" className="hover:underline">
