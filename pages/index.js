@@ -15,7 +15,7 @@ export default function SearchPage() {
     tipo: null,
     barrio: null,
     pax: '',
-    pax_or_more: false, // ¡NUEVO!
+    pax_or_more: false,
     pets: false,
     pool: false,
     bedrooms: '',
@@ -25,19 +25,18 @@ export default function SearchPage() {
     maxPrice: '',
     startDate: null,
     endDate: null,
-    sortBy: 'default', // ¡NUEVO!
+    sortBy: 'default',
   });
 
   const [dateRange, setDateRange] = useState([null, null]);
 
   // --- ESTADO DE LÓGICA ---
   const [results, setResults] = useState([]);
-  const [propertyCount, setPropertyCount] = useState(0); // ¡NUEVO!
+  const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false); // ¡NUEVO!
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
-  const [hasLoadedFilters, setHasLoadedFilters] = useState(false);
 
   const pricePlaceholder = {
     venta: "Ej: 300000",
@@ -45,31 +44,38 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- 1. CARGAR LISTAS DE FILTROS ---
+  // --- 1. CARGAR LISTAS DE FILTROS (¡MODIFICADO!) ---
+  // Esta función ahora depende de 'filters.operacion'
   useEffect(() => {
     async function loadFilters() {
-      setIsLoading(true);
+      if (!filters.operacion) {
+        setListas({ zonas: [], barrios: {} }); // Limpiar zonas si no hay operación
+        return;
+      }
+      
+      setIsLoadingFilters(true); // Inicia la carga de filtros
+      setError(null);
       try {
-        const res = await fetch('/api/get-filters');
+        // ¡NUEVO! Envía la operación a la API
+        const res = await fetch(`/api/get-filters?operacion=${filters.operacion}`);
         const data = await res.json();
-        if (data.status === 'OK' && Object.keys(data.filtros).length > 0) {
+        if (data.status === 'OK') {
           setListas({ 
-            zonas: Object.keys(data.filtros).sort().reverse(), // ¡NUEVO! Z-A
+            zonas: Object.keys(data.filtros).sort().reverse(), // Z-A
             barrios: data.filtros
           });
-          setHasLoadedFilters(true);
         } else {
-          throw new Error("No se encontraron filtros. Revise la data.");
+          throw new Error("No se encontraron filtros para esta operación.");
         }
       } catch (err) {
         console.error("Error cargando listas de filtros:", err);
-        setError("No se pudieron cargar los filtros. Intente recargar la página.");
+        setError(err.message);
       } finally {
-        setIsLoading(false);
+        setIsLoadingFilters(false); // Termina la carga de filtros
       }
     }
     loadFilters();
-  }, []);
+  }, [filters.operacion]); // Se ejecuta CADA VEZ que cambia la operación
 
   // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
@@ -99,7 +105,7 @@ export default function SearchPage() {
       const data = await response.json();
       if (data.status === 'OK') {
         setResults(data.results);
-        setPropertyCount(data.count); // ¡NUEVO!
+        setPropertyCount(data.count);
       } else {
         throw new Error(data.error || 'Error en la API');
       }
@@ -112,13 +118,11 @@ export default function SearchPage() {
   }, []);
 
   useEffect(() => {
-    if (hasLoadedFilters) {
-      const handler = setTimeout(() => {
-        fetchProperties(filters);
-      }, 500); 
-      return () => clearTimeout(handler);
-    }
-  }, [filters, hasLoadedFilters, fetchProperties]);
+    const handler = setTimeout(() => {
+      fetchProperties(filters);
+    }, 500); 
+    return () => clearTimeout(handler);
+  }, [filters, fetchProperties]);
 
   // --- 3. MANEJADORES DE EVENTOS ---
   const handleFilterChange = (name, value) => {
@@ -195,17 +199,6 @@ export default function SearchPage() {
   );
 
   const renderAsistente = () => {
-    if (isLoading) {
-      return <div className="text-center p-10"><Spinner /></div>;
-    }
-    if (error && !hasLoadedFilters) {
-      return (
-         <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
-           <p className="font-bold">{error}</p>
-         </div>
-      );
-    }
-    
     if (!filters.operacion) {
       return (
         <div className="text-center">
@@ -225,18 +218,33 @@ export default function SearchPage() {
       );
     }
 
+    if (isLoadingFilters) {
+      return <div className="text-center p-10"><Spinner /></div>;
+    }
+    
+    if (error && !listas.zonas.length) {
+       return (
+         <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
+           <p className="font-bold">{error}</p>
+         </div>
+      );
+    }
+
     if (!filters.zona) {
       return (
         <div className="text-center">
           <h2 className="text-xl font-bold mb-4">¿En qué zona?</h2>
-          {/* ¡NUEVO! Botones de Zona Ordenados Z-A */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {listas.zonas.map(zona => (
-              <button key={zona} onClick={() => handleFilterChange('zona', zona)} className="p-4 bg-gray-100 border border-gray-300 text-mcv-gris rounded-lg shadow-lg hover:bg-gray-200 transition-all text-lg font-bold">
-                {zona}
-              </button>
-            ))}
-          </div>
+          {listas.zonas.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {listas.zonas.map(zona => (
+                <button key={zona} onClick={() => handleFilterChange('zona', zona)} className="p-4 bg-gray-100 border border-gray-300 text-mcv-gris rounded-lg shadow-lg hover:bg-gray-200 transition-all text-lg font-bold">
+                  {zona}
+                </button>
+              ))}
+            </div>
+          ) : (
+             <p className="text-gray-500">No hay zonas disponibles para esta operación.</p>
+          )}
         </div>
       );
     }
@@ -430,7 +438,7 @@ export default function SearchPage() {
             <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Agente Digital</h1>
             <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
             {/* --- ¡NUEVO! CONTADOR --- */}
-            {!isSearching && hasLoadedFilters && filters.operacion && (
+            {!isSearching && filters.operacion && (
               <h2 className="text-lg font-bold text-mcv-verde mt-2">
                 {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
               </h2>
@@ -459,9 +467,9 @@ export default function SearchPage() {
             <Spinner />
           ) : error ? (
             <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
-              <p className="font-bold">Error al cargar propiedades: {error}</p>
+              <p className="font-bold">Error al cargar: {error}</p>
             </div>
-          ) : (filters.operacion && hasLoadedFilters) ? (
+          ) : (filters.operacion) ? (
             results.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* ¡NUEVO! Pasamos los 'filters' a la tarjeta */}
@@ -479,6 +487,7 @@ export default function SearchPage() {
               )
             )
           ) : (
+             // Estado inicial (sin operación seleccionada)
              !isLoading && (
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>

@@ -1,11 +1,41 @@
 import { supabase } from '@/lib/supabaseClient';
 
+// --- IDs de Taxonomía ---
+const CATEGORY_IDS = {
+  VENTA: 198,
+  ALQUILER_TEMPORAL: 197,
+  ALQUILER_ANUAL: 194,
+  ALQUILER_ANUAL_AMUEBLADO: 193,
+};
+const STATUS_ID_ACTIVA = 158;
+// --- Fin del Mapeo ---
+
+
 export default async function handler(req, res) {
   try {
-    const { data, error } = await supabase
-      .from('properties')
-      .select('zona, barrio'); 
+    // ¡NUEVO! Leemos la operación de la query
+    const { operacion } = req.query;
 
+    if (!operacion) {
+      return res.status(400).json({ status: 'Error', error: 'Operación no especificada' });
+    }
+
+    let query = supabase
+      .from('properties')
+      .select('zona, barrio')
+      .or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); // Siempre solo activas
+
+    // --- ¡NUEVO! Filtro contextual por operación ---
+    if (operacion === 'venta') {
+      query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
+    } else if (operacion === 'alquiler_anual') {
+      query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO}}`);
+    } else if (operacion === 'alquiler_temporal') {
+      query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
+    }
+    // --- Fin del filtro ---
+
+    const { data, error } = await query;
     if (error) throw error;
 
     const zonasMap = new Map();
@@ -27,7 +57,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ 
       status: 'OK', 
-      filtros 
+      filtros // ej: { "GBA Sur": ["Club El Carmen", "Quilmes"]} (ya no incluirá Arelauquen si se pide Venta)
     });
 
   } catch (error) {
