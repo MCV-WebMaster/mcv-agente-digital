@@ -470,7 +470,8 @@ export default function SearchPage() {
                 ))}
               </div>
             ) : (
-              (filters.zona || (filters.operacion && !isSearching)) && (
+              // No mostrar "0 resultados" si aún no se eligió zona (Paso 2)
+              (filters.zona || isSearching) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>
                   <p>Intente ajustar sus filtros de búsqueda.</p>

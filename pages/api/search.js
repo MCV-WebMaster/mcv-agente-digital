@@ -70,7 +70,7 @@ export default async function handler(req, res) {
         .from('periods')
         .select('property_id, price')
         .in('property_id', propertyIds)
-        .eq('status', 'Disponible'); 
+        .eq('status', 'Disponible'); // ¡Lógica de "disponible carnaval" OK!
 
       // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
@@ -106,6 +106,7 @@ export default async function handler(req, res) {
           availablePropertyIds.add(period.property_id);
           if (periodPrice > 0) {
             if (!minPriceMap.has(period.property_id) || periodPrice < minPriceMap.get(period.property_id)) {
+              // Guardamos el precio más bajo del período (ej. $1.100)
               minPriceMap.set(period.property_id, periodPrice);
             }
           }
