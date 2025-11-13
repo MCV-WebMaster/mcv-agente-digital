@@ -15,7 +15,11 @@ function formatPrice(value, currency = 'USD') {
   }).format(priceNum);
 }
 
-export default function PropertyCard({ property }) {
+// Fechas de la Temporada 2026
+const SEASON_START_DATE = '2025-12-19';
+const SEASON_END_DATE = '2026-03-01';
+
+export default function PropertyCard({ property, filters }) {
   const {
     slug, title, url, thumbnail_url,
     price, // Precio Venta (USD)
@@ -31,12 +35,55 @@ export default function PropertyCard({ property }) {
 
   // --- Lógica de Precios ---
   const ventaPrice = formatPrice(price, 'USD');
-  const alquilerTempPrice = formatPrice(min_rental_price, 'USD');
   const alquilerAnualPrice = formatPrice(es_property_price_ars, 'ARS');
+  let alquilerTempDisplay;
 
-  // Determinar si es de Alquiler Temporal para mostrar "Consultar"
+  // Lógica de "Consultar Disponibilidad"
   const isTemporal = property.category_ids.includes(197) || property.category_ids.includes(196);
   
+  if (isTemporal) {
+    if (filters.startDate && filters.endDate) {
+      // Si hay fechas seleccionadas...
+      if (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE) {
+        // ...y están FUERA de temporada
+        alquilerTempDisplay = (
+          <div>
+            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
+            <p className="text-xs text-gray-500">Disponibilidad</p>
+          </div>
+        );
+      } else {
+        // ...y están DENTRO de temporada
+        alquilerTempDisplay = min_rental_price ? (
+          <div>
+            <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
+            <p className="text-xs text-gray-500">en fecha selcc.</p>
+          </div>
+        ) : (
+          // Está en temporada pero no disponible para esas fechas
+          <div>
+            <h4 className="text-lg font-bold text-gray-400">No disponible</h4>
+            <p className="text-xs text-gray-500">en fecha selcc.</p>
+          </div>
+        );
+      }
+    } else {
+      // No hay fechas seleccionadas, mostrar "Alquiler desde" (el min_2026_price)
+      alquilerTempDisplay = min_rental_price ? (
+        <div>
+          <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
+          <p className="text-xs text-gray-500">Alquiler desde</p>
+        </div>
+      ) : (
+        // Si es temporal pero no tiene precio 2026 (ej. Arelauquen)
+        <div>
+            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
+            <p className="text-xs text-gray-500">Disponibilidad</p>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden shadow-lg bg-white transition-transform duration-300 hover:shadow-xl flex flex-col justify-between">
       
@@ -55,34 +102,33 @@ export default function PropertyCard({ property }) {
         <div className="flex justify-between items-start mb-2 min-h-[50px]">
           {/* Columna Izquierda: Venta o Alq. Anual */}
           <div className="flex-1 pr-2">
-            {ventaPrice && (
-              <div>
-                <h4 className="text-xl font-bold text-mcv-verde">{ventaPrice}</h4>
-                <p className="text-xs text-gray-500">Venta</p>
-              </div>
-            )}
-            {alquilerAnualPrice && (
-              <div>
-                <h4 className="text-xl font-bold text-mcv-verde">{alquilerAnualPrice}</h4>
-                <p className="text-xs text-gray-500">Alquiler Anual</p>
-              </div>
+            {(ventaPrice || alquilerAnualPrice) ? (
+              <>
+                {ventaPrice && (
+                  <div>
+                    <h4 className="text-xl font-bold text-mcv-verde">{ventaPrice}</h4>
+                    <p className="text-xs text-gray-500">Venta</p>
+                  </div>
+                )}
+                {alquilerAnualPrice && (
+                  <div>
+                    <h4 className="text-xl font-bold text-mcv-verde">{alquilerAnualPrice}</h4>
+                    <p className="text-xs text-gray-500">Alquiler Anual</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              // Espacio reservado si no hay precio de venta/anual
+              !isTemporal && <div className="min-h-[40px]"></div>
             )}
           </div>
           
           {/* Columna Derecha: Alquiler Temporal */}
-          <div className="flex-1 pl-2 border-l border-gray-200">
-            {alquilerTempPrice ? (
-              <div>
-                <h4 className="text-xl font-bold text-mcv-verde">{alquilerTempPrice}</h4>
-                <p className="text-xs text-gray-500">Alquiler desde</p>
-              </div>
-            ) : (isTemporal && !ventaPrice && !alquilerAnualPrice) ? (
-              <div>
-                <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-                <p className="text-xs text-gray-500">Disponibilidad</p>
-              </div>
-            ) : null}
-          </div>
+          {isTemporal && (
+            <div className="flex-1 pl-2 border-l border-gray-200">
+              {alquilerTempDisplay}
+            </div>
+          )}
         </div>
         
         <h3 className="text-lg font-bold text-mcv-azul mb-2 h-14 overflow-hidden">
@@ -94,21 +140,21 @@ export default function PropertyCard({ property }) {
         <p className="text-sm text-mcv-gris mb-4">{barrio || zona || 'Ubicación no especificada'}</p>
 
         <div className="flex flex-wrap gap-2 text-sm">
-          {bedrooms && (
+          {bedrooms ? (
             <span className="bg-gray-200 text-mcv-gris px-2 py-1 rounded-full">
               {bedrooms} Dorm.
             </span>
-          )}
-          {mts_cubiertos && (
+          ) : null}
+          {mts_cubiertos ? (
              <span className="bg-gray-200 text-mcv-gris px-2 py-1 rounded-full">
               {mts_cubiertos} mts²
             </span>
-          )}
-          {pax && (
+          ) : null}
+          {pax ? (
             <span className="bg-gray-200 text-mcv-gris px-2 py-1 rounded-full">
               {pax} Pax
             </span>
-          )}
+          ) : null}
           {acepta_mascota && (
             <span className="bg-mcv-verde text-white px-2 py-1 rounded-full">
               Mascotas

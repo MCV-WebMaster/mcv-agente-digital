@@ -6,6 +6,9 @@ import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 registerLocale('es', es);
 
+// Fechas de la Temporada 2026
+const SEASON_START_DATE = '2025-12-19';
+
 export default function SearchPage() {
   
   // --- ESTADO PRINCIPAL ---
@@ -15,7 +18,7 @@ export default function SearchPage() {
     tipo: null,
     barrio: null,
     pax: '',
-    pax_or_more: false,
+    pax_or_more: false, // ¡NUEVO!
     pets: false,
     pool: false,
     bedrooms: '',
@@ -229,6 +232,7 @@ export default function SearchPage() {
       return (
         <div className="text-center">
           <h2 className="text-xl font-bold mb-4">¿En qué zona?</h2>
+          {/* ¡NUEVO! Botones de Zona Ordenados Z-A */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {listas.zonas.map(zona => (
               <button key={zona} onClick={() => handleFilterChange('zona', zona)} className="p-4 bg-gray-100 border border-gray-300 text-mcv-gris rounded-lg shadow-lg hover:bg-gray-200 transition-all text-lg font-bold">
@@ -261,6 +265,7 @@ export default function SearchPage() {
             </select>
           </div>
 
+          {/* ¡CORREGIDO! Ahora 'listas.barrios[filters.zona]' existe */}
           {listas.barrios[filters.zona] && listas.barrios[filters.zona].length > 0 && (
             <div>
               <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio</label>
@@ -292,7 +297,7 @@ export default function SearchPage() {
           )}
 
           {/* --- ¡NUEVA LÓGICA DE PAX! --- */}
-          {filters.operacion !== 'venta' && (
+          {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
             <div className="col-span-2 md:col-span-1">
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
@@ -436,7 +441,6 @@ export default function SearchPage() {
           </div>
         </header>
 
-        {/* --- Resultados (Abajo) --- */}
         <main>
           {/* --- ¡NUEVO! BOTÓN DE ORDENAR --- */}
           {!isSearching && results.length > 1 && (
@@ -464,7 +468,7 @@ export default function SearchPage() {
             results.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {results.map(prop => (
-                  <PropertyCard key={prop.property_id} property={prop} />
+                  <PropertyCard key={prop.property_id} property={prop} filters={filters} />
                 ))}
               </div>
             ) : (
