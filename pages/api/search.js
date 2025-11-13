@@ -32,8 +32,8 @@ export default async function handler(req, res) {
       pax, pax_or_more,
       pets, pool, bedrooms,
       minPrice, maxPrice, minMts, maxMts,
-      startDate, endDate, // Para "Otras Fechas"
-      selectedPeriod, // ¡NUEVO!
+      startDate, endDate,
+      selectedPeriod, 
       sortBy = 'default',
       searchText
     } = req.body;
@@ -102,19 +102,31 @@ export default async function handler(req, res) {
       const userSelectedDates = startDate && endDate;
       const userSelectedPeriod = selectedPeriod;
 
-      if (userSelectedPeriod) {
-        // --- CASO 1: BÚSQUEDA POR PERÍODO 2026 ---
+      // --- ¡LÓGICA "NO DISPONIBLE" CORREGIDA! ---
+      // Si el usuario seleccionó un período O fechas en temporada...
+      if (userSelectedPeriod || (userSelectedDates && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE))) {
+        
         let filteredPeriodQuery = supabase
           .from('periods')
-          .select('property_id, price')
+          .select('property_id, price, duration_days')
           .in('property_id', propertyIds)
-          .eq('status', 'Disponible')
-          .eq('period_name', selectedPeriod); // ¡Filtrar por nombre!
+          .eq('status', 'Disponible');
+        
+        if (userSelectedPeriod) {
+          // CASO 1: BÚSQUEDA POR PERÍODO 2026
+          filteredPeriodQuery = filteredPeriodQuery.eq('period_name', selectedPeriod);
+        } else {
+          // CASO 2: BÚSQUEDA POR CALENDARIO "OTRAS FECHAS" (pero dentro de temporada)
+           filteredPeriodQuery = filteredPeriodQuery
+            .lte('start_date', startDate)
+            .gte('end_date', endDate);
+        }
           
         const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
         if (filteredPeriodsError) throw filteredPeriodsError;
         
-        availablePropertyIds = new Set();
+        // Creamos un Set SOLAMENTE con las propiedades que SÍ tienen disponibilidad
+        availablePropertyIds = new Set(); 
         for (const period of filteredPeriodsData) {
             availablePropertyIds.add(period.property_id);
             let periodPrice = null;
@@ -123,23 +135,23 @@ export default async function handler(req, res) {
                  periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || null;
               }
             }
-            // Guardamos el precio específico de ESE período
-            periodDetailsMap.set(period.property_id, { price: periodPrice });
+            periodDetailsMap.set(period.property_id, {
+                price: periodPrice,
+                duration: period.duration_days
+            });
         }
-      } else if (userSelectedDates) {
-         // --- CASO 2: BÚSQUEDA POR "OTRAS FECHAS" (OFF-SEASON) ---
-         // No filtramos por 'periods' (ya que no existen), solo por propiedades
-         availablePropertyIds = new Set(propertyIds);
       }
 
       // 4. Filtrar y Mapear Resultados Finales
       let finalResults = propertiesData
         .map(p => ({
           ...p,
-          min_rental_price: minPriceMap.get(p.property_id) || null, // "Alquiler desde"
-          found_period_price: periodDetailsMap.get(p.property_id)?.price || null, // Precio Específico
+          min_rental_price: minPriceMap.get(p.property_id) || null,
+          found_period_price: periodDetailsMap.get(p.property_id)?.price || null,
+          found_period_duration: periodDetailsMap.get(p.property_id)?.duration || null
         }))
         .filter(p => { // Filtro de Rango de Precio
+            // Usamos min_rental_price (el precio "desde") para filtrar
             const price = p.min_rental_price;
             if (!minPrice && !maxPrice) return true; 
             const passesMinPrice = !minPrice || (price && price >= minPrice);
@@ -148,9 +160,8 @@ export default async function handler(req, res) {
             return passesMinPrice && passesMaxPrice;
         });
 
-      // --- ¡LÓGICA "NO DISPONIBLE" CORREGIDA! ---
-      if (userSelectedPeriod) {
-         // Si se seleccionó un período, filtramos por las que SÍ están disponibles
+      // --- ¡FILTRO FINAL "NO DISPONIBLE"! ---
+      if (userSelectedPeriod || (userSelectedDates && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE))) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
       

@@ -17,6 +17,7 @@ function formatPrice(value, currency = 'USD') {
 
 // Helper para calcular días
 function getDaysBetween(startDate, endDate) {
+  if (!startDate || !endDate) return 0;
   const start = new Date(startDate);
   const end = new Date(endDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -31,7 +32,7 @@ export default function PropertyCard({ property, filters }) {
   const {
     slug, title, url, thumbnail_url,
     price, es_property_price_ars, min_rental_price,
-    found_period_price, found_period_duration, // ¡NUEVO!
+    found_period_price, found_period_duration, // Detalles del período encontrado
     pax, acepta_mascota, tiene_piscina, piscina_detalle,
     barrio, zona, bedrooms, mts_cubiertos
   } = property;
@@ -44,52 +45,69 @@ export default function PropertyCard({ property, filters }) {
   const ventaPrice = formatPrice(price, 'USD');
   const alquilerAnualPrice = formatPrice(es_property_price_ars, 'ARS');
   let alquilerTempDisplay;
-  let leyendaFecha = null; // ¡NUEVO! Para la leyenda
+  let leyendaFecha = null; // Para "Preguntar por disponibilidad"
 
   const isTemporal = property.category_ids.includes(197) || property.category_ids.includes(196);
   
   if (isTemporal) {
     const userSelectedDates = filters.startDate && filters.endDate;
+    const userSelectedPeriod = filters.selectedPeriod;
     const isOffSeason = userSelectedDates && (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE);
-    
-    if (userSelectedDates && !isOffSeason) {
-      // 1. Fechas DENTRO de temporada
+
+    if (userSelectedPeriod) {
+        // 1. Usuario seleccionó un PERÍODO 2026
+        alquilerTempDisplay = found_period_price ? (
+          <div>
+            <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(found_period_price, 'USD')}</h4>
+            <p className="text-xs text-gray-500">{filters.selectedPeriod}</p>
+          </div>
+        ) : (
+          // Tiene el período pero sin precio (ej. "disponible carnaval")
+          <div>
+            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
+            <p className="text-xs text-gray-500">{filters.selectedPeriod}</p>
+          </div>
+        );
+    } else if (userSelectedDates && isOffSeason) {
+      // 2. Usuario seleccionó "OTRAS FECHAS" (Fuera de temporada)
+      alquilerTempDisplay = (
+        <div>
+          <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
+          <p className="text-xs text-gray-500">Disponibilidad</p> 
+        </div>
+      );
+    } else if (userSelectedDates && !isOffSeason) {
+      // 3. Usuario seleccionó "OTRAS FECHAS" (DENTRO de temporada)
+      // La API (v11) ya filtró, así que esta propiedad SÍ está disponible.
       alquilerTempDisplay = found_period_price ? (
         <div>
           <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(found_period_price, 'USD')}</h4>
           <p className="text-xs text-gray-500">Valor Período</p>
         </div>
       ) : (
-        // La API (v8) ya filtra esto, por lo que este código
-        // no debería ejecutarse, pero es una protección.
-        null 
+         <div>
+            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
+            <p className="text-xs text-gray-500">Disponibilidad</p>
+        </div>
       );
       
-      // ¡NUEVO! Lógica de Leyenda
+      // Lógica de Leyenda
       if (found_period_price) {
         const userDuration = getDaysBetween(filters.startDate, filters.endDate);
         if (userDuration < found_period_duration) {
           leyendaFecha = "Preguntar por disponibilidad de fecha";
         }
       }
-
-    } else if (userSelectedDates && isOffSeason) {
-      // 2. Fechas FUERA de temporada
-      alquilerTempDisplay = (
-        <div>
-          <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-          <p className="text-xs text-gray-500">Disponibilidad</p> 
-        </div> // <-- ¡Typo corregido!
-      );
+      
     } else {
-      // 3. SIN FECHAS (Default View)
+      // 4. SIN FECHAS (Default View)
       alquilerTempDisplay = min_rental_price ? (
         <div>
           <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
           <p className="text-xs text-gray-500">Alquiler desde</p>
         </div>
       ) : (
-        // (ej. Arelauquen, o "disponible carnaval" sin precio)
+        // (ej. Arelauquen, que no tiene precios 2026)
         <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
             <p className="text-xs text-gray-500">Disponibilidad</p>
