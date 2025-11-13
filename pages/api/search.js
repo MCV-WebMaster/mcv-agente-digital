@@ -19,19 +19,6 @@ const STATUS_ID_ACTIVA = 158;
 const SEASON_START_DATE = '2025-12-19';
 const SEASON_END_DATE = '2026-03-01';
 
-// Helper para calcular días de un rango de fechas
-function getDaysBetween(startDate, endDate) {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 inclusive
-}
-
-// Helper para redondear
-function roundUpToNearestHundred(num) {
-  return Math.ceil(num / 100) * 100;
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -81,9 +68,9 @@ export default async function handler(req, res) {
       // 2. Buscar en la tabla 'periods'
       let periodQuery = supabase
         .from('periods')
-        .select('property_id, price, start_date, end_date, duration_days')
+        .select('property_id, price') // Solo necesitamos el precio
         .in('property_id', propertyIds)
-        .eq('status', 'Disponible');
+        .eq('status', 'Disponible'); 
 
       // 3. Lógica de Fechas (Core)
       const userSelectedDates = startDate && endDate;
@@ -101,7 +88,7 @@ export default async function handler(req, res) {
 
       // 4. Mapear precios y filtrar
       const availablePropertyIds = new Set();
-      const finalPriceMap = new Map(); // Mapa para guardar el precio final (calculado o fijo)
+      const minPriceMap = new Map(); // Mapa para guardar el precio más bajo
 
       for (const period of periodsData) {
         let periodPrice = 0;
@@ -109,33 +96,18 @@ export default async function handler(req, res) {
           periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
         }
 
-        let finalPrice = periodPrice; // Precio final a mostrar y filtrar
-
-        // --- ¡LÓGICA PRO-RATA! ---
-        if (userSelectedDates && !isOffSeason && periodPrice > 0 && period.duration_days) {
-          const userDuration = getDaysBetween(startDate, endDate);
-          
-          // Solo calcular pro-rata si el usuario pide *menos* que el período completo
-          if (userDuration < period.duration_days) {
-            const dailyRate = periodPrice / period.duration_days;
-            const proRataPrice = dailyRate * (userDuration + 1); // + 1 día extra
-            finalPrice = roundUpToNearestHundred(proRataPrice); // Redondear
-          }
-          // Si pide el período completo o más, se usa el 'finalPrice' original
-        }
-        // --- Fin Lógica Pro-Rata ---
-
-        const passesMinPrice = !minPrice || (finalPrice > 0 && finalPrice >= minPrice);
-        const passesMaxPrice = !maxPrice || (finalPrice > 0 && finalPrice <= maxPrice);
+        const passesMinPrice = !minPrice || (periodPrice > 0 && periodPrice >= minPrice);
+        const passesMaxPrice = !maxPrice || (periodPrice > 0 && periodPrice <= maxPrice);
         
-        if (minPrice && finalPrice === 0) continue;
-        if (maxPrice && finalPrice === 0) continue;
+        if (minPrice && periodPrice === 0) continue;
+        if (maxPrice && periodPrice === 0) continue;
 
         if (passesMinPrice && passesMaxPrice) {
           availablePropertyIds.add(period.property_id);
-          if (finalPrice > 0) {
-            if (!finalPriceMap.has(period.property_id) || finalPrice < finalPriceMap.get(period.property_id)) {
-              finalPriceMap.set(period.property_id, finalPrice);
+          if (periodPrice > 0) {
+            if (!minPriceMap.has(period.property_id) || periodPrice < minPriceMap.get(period.property_id)) {
+              // Guardamos el precio más bajo del período (ej. $1.400)
+              minPriceMap.set(period.property_id, periodPrice);
             }
           }
         }
@@ -145,8 +117,8 @@ export default async function handler(req, res) {
       let finalResults = propertiesData
         .map(p => ({
           ...p,
-          // Inyectar el precio mínimo del período encontrado
-          min_rental_price: finalPriceMap.get(p.property_id) || null
+          // Inyectar el precio mínimo (NO pro-rata)
+          min_rental_price: minPriceMap.get(p.property_id) || null
         }));
 
       // Si hay fechas DENTRO de temporada, filtramos la lista de propiedades
@@ -154,7 +126,7 @@ export default async function handler(req, res) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
       // Si no hay fechas (Default) o es Fuera de Temporada (isOffSeason),
-      // mostramos TODAS las propiedades (Arelauquen, etc.) y la tarjeta dirá "Consultar".
+      // mostramos TODAS las propiedades (Arelauquen, etc.).
 
       // 6. Ordenar por Precio
       if (sortBy === 'price_asc') {

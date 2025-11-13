@@ -45,33 +45,23 @@ export default function PropertyCard({ property, filters }) {
     const userSelectedDates = filters.startDate && filters.endDate;
     const isOffSeason = userSelectedDates && (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE);
 
-    if (userSelectedDates) {
-      if (isOffSeason) {
-        // 1. Fechas seleccionadas FUERA de temporada
-        alquilerTempDisplay = (
-          <div>
-            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-            <p className="text-xs text-gray-500">Disponibilidad</p>
-          </div>
-        );
-      } else {
-        // 2. Fechas seleccionadas DENTRO de temporada
-        alquilerTempDisplay = min_rental_price ? (
-          <div>
-            <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
-            <p className="text-xs text-gray-500">Valor de referencia</p>
-          </div>
-        ) : null; // Si no hay min_rental_price, la API ya lo filtró (no se muestra)
-      }
+    if (userSelectedDates && isOffSeason) {
+      // 1. Fechas seleccionadas FUERA de temporada
+      alquilerTempDisplay = (
+        <div>
+          <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
+          <p className="text-xs text-gray-500">Disponibilidad</p>
+        </div>
+      );
     } else {
-      // 3. No hay fechas seleccionadas (Default)
+      // 2. Fechas DENTRO de temporada o SIN FECHAS
       alquilerTempDisplay = min_rental_price ? (
         <div>
           <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
           <p className="text-xs text-gray-500">Alquiler desde</p>
         </div>
       ) : (
-        // (ej. Arelauquen, que no tiene precios 2026)
+        // (ej. Arelauquen, o si solo decía "disponible carnaval" sin precio)
         <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
             <p className="text-xs text-gray-500">Disponibilidad</p>
@@ -79,6 +69,7 @@ export default function PropertyCard({ property, filters }) {
       );
     }
   }
+
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden shadow-lg bg-white transition-transform duration-300 hover:shadow-xl flex flex-col justify-between">
