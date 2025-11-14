@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   // --- 2. Contenido del Email para el Administrador ---
   const adminMail = {
     from: `"Agente Digital MCV" <${process.env.SMTP_USER}>`,
-    to: "mcvpropiedades@gmail.com", // Email del Administrador (usted)
+    to: "ariel@baudry.com.ar", // Email del Administrador (usted)
     subject: `Nuevo Lead (Agente Digital): ${name}`,
     html: `
       <p>Un nuevo cliente ha solicitado más información.</p>
