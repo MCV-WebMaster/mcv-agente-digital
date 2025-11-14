@@ -102,7 +102,7 @@ export default async function handler(req, res) {
       const userSelectedDates = startDate && endDate;
       const userSelectedPeriod = selectedPeriod;
 
-      // --- ¡LÓGICA "NO DISPONIBLE" CORREGIDA! ---
+      // --- LÓGICA "NO DISPONIBLE" ---
       // Si el usuario seleccionó un período O fechas en temporada...
       if (userSelectedPeriod || (userSelectedDates && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE))) {
         
@@ -110,7 +110,7 @@ export default async function handler(req, res) {
           .from('periods')
           .select('property_id, price, duration_days')
           .in('property_id', propertyIds)
-          .eq('status', 'Disponible');
+          .eq('status', 'Disponible'); // ¡SOLO DISPONIBLES!
         
         if (userSelectedPeriod) {
           // CASO 1: BÚSQUEDA POR PERÍODO 2026
@@ -125,8 +125,9 @@ export default async function handler(req, res) {
         const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
         if (filteredPeriodsError) throw filteredPeriodsError;
         
-        // Creamos un Set SOLAMENTE con las propiedades que SÍ tienen disponibilidad
+        // Reiniciamos la lista de disponibles. Solo entran las que encontró la query.
         availablePropertyIds = new Set(); 
+        
         for (const period of filteredPeriodsData) {
             availablePropertyIds.add(period.property_id);
             let periodPrice = null;
@@ -135,6 +136,7 @@ export default async function handler(req, res) {
                  periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || null;
               }
             }
+            // Guardamos el precio específico de ESE período
             periodDetailsMap.set(period.property_id, {
                 price: periodPrice,
                 duration: period.duration_days
@@ -151,7 +153,6 @@ export default async function handler(req, res) {
           found_period_duration: periodDetailsMap.get(p.property_id)?.duration || null
         }))
         .filter(p => { // Filtro de Rango de Precio
-            // Usamos min_rental_price (el precio "desde") para filtrar
             const price = p.min_rental_price;
             if (!minPrice && !maxPrice) return true; 
             const passesMinPrice = !minPrice || (price && price >= minPrice);
@@ -160,7 +161,8 @@ export default async function handler(req, res) {
             return passesMinPrice && passesMaxPrice;
         });
 
-      // --- ¡FILTRO FINAL "NO DISPONIBLE"! ---
+      // --- ¡FILTRO FINAL! ---
+      // Si hay selección de temporada, eliminamos las que no están en la lista de disponibles
       if (userSelectedPeriod || (userSelectedDates && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE))) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }

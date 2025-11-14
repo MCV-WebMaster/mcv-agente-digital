@@ -17,7 +17,6 @@ function formatPrice(value, currency = 'USD') {
 
 // Helper para calcular días
 function getDaysBetween(startDate, endDate) {
-  if (!startDate || !endDate) return 0;
   const start = new Date(startDate);
   const end = new Date(endDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -32,7 +31,7 @@ export default function PropertyCard({ property, filters }) {
   const {
     slug, title, url, thumbnail_url,
     price, es_property_price_ars, min_rental_price,
-    found_period_price, found_period_duration, // Detalles del período encontrado
+    found_period_price, found_period_duration, 
     pax, acepta_mascota, tiene_piscina, piscina_detalle,
     barrio, zona, bedrooms, mts_cubiertos
   } = property;
@@ -45,7 +44,7 @@ export default function PropertyCard({ property, filters }) {
   const ventaPrice = formatPrice(price, 'USD');
   const alquilerAnualPrice = formatPrice(es_property_price_ars, 'ARS');
   let alquilerTempDisplay;
-  let leyendaFecha = null; // Para "Preguntar por disponibilidad"
+  let leyendaFecha = null;
 
   const isTemporal = property.category_ids.includes(197) || property.category_ids.includes(196);
   
@@ -62,7 +61,7 @@ export default function PropertyCard({ property, filters }) {
             <p className="text-xs text-gray-500">{filters.selectedPeriod}</p>
           </div>
         ) : (
-          // Tiene el período pero sin precio (ej. "disponible carnaval")
+          // Si la API lo devolvió pero no tiene precio (ej. solo disponible)
           <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
             <p className="text-xs text-gray-500">{filters.selectedPeriod}</p>
@@ -78,7 +77,6 @@ export default function PropertyCard({ property, filters }) {
       );
     } else if (userSelectedDates && !isOffSeason) {
       // 3. Usuario seleccionó "OTRAS FECHAS" (DENTRO de temporada)
-      // La API (v11) ya filtró, así que esta propiedad SÍ está disponible.
       alquilerTempDisplay = found_period_price ? (
         <div>
           <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(found_period_price, 'USD')}</h4>
@@ -91,7 +89,6 @@ export default function PropertyCard({ property, filters }) {
         </div>
       );
       
-      // Lógica de Leyenda
       if (found_period_price) {
         const userDuration = getDaysBetween(filters.startDate, filters.endDate);
         if (userDuration < found_period_duration) {
@@ -107,7 +104,6 @@ export default function PropertyCard({ property, filters }) {
           <p className="text-xs text-gray-500">Alquiler desde</p>
         </div>
       ) : (
-        // (ej. Arelauquen, que no tiene precios 2026)
         <div>
             <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
             <p className="text-xs text-gray-500">Disponibilidad</p>
@@ -130,9 +126,8 @@ export default function PropertyCard({ property, filters }) {
 
       <div className="p-4 flex-grow">
         
-        {/* --- NUEVO BLOQUE DE PRECIOS (2 Columnas) --- */}
+        {/* --- BLOQUE DE PRECIOS (2 Columnas) --- */}
         <div className="flex justify-between items-start mb-2 min-h-[50px]">
-          {/* Columna Izquierda: Venta o Alq. Anual */}
           <div className="flex-1 pr-2">
             {(ventaPrice || alquilerAnualPrice) ? (
               <>
@@ -154,7 +149,6 @@ export default function PropertyCard({ property, filters }) {
             )}
           </div>
           
-          {/* Columna Derecha: Alquiler Temporal */}
           {isTemporal && (
             <div className="flex-1 pl-2 border-l border-gray-200">
               {alquilerTempDisplay}
@@ -162,7 +156,7 @@ export default function PropertyCard({ property, filters }) {
           )}
         </div>
         
-        {/* --- ¡NUEVO! Leyenda de Disponibilidad --- */}
+        {/* --- Leyenda de Disponibilidad --- */}
         {leyendaFecha && (
             <p className="text-xs text-red-600 font-bold mb-2">
                 {leyendaFecha}

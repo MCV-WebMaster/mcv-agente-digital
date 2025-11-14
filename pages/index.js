@@ -4,10 +4,10 @@ import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
-import Select from 'react-select'; // Importar react-select
+import Select from 'react-select'; 
 registerLocale('es', es);
 
-// --- ¡NUEVO! Opciones de Período 2026 ---
+// Opciones de Período 2026
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -18,19 +18,17 @@ const PERIOD_OPTIONS_2026 = [
   { value: 'Febrero 2da Quincena', label: 'Febrero 2da Quincena (18/02 al 01/03)' },
 ];
 
-// --- ¡NUEVO! Fechas a excluir en "Otras Fechas" ---
 const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
 export default function SearchPage() {
   
-  // --- ESTADO PRINCIPAL ---
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
     tipo: null,
-    barrios: [], // Array para multi-select
+    barrios: [], 
     pax: '',
     pax_or_more: false,
     pets: false,
@@ -42,14 +40,13 @@ export default function SearchPage() {
     maxPrice: '',
     startDate: null,
     endDate: null,
-    selectedPeriod: '', // ¡NUEVO!
+    selectedPeriod: '', 
     sortBy: 'default',
     searchText: '',
   });
 
-  // --- ESTADO DE UI ---
   const [dateRange, setDateRange] = useState([null, null]);
-  const [showOtherDates, setShowOtherDates] = useState(false); // ¡NUEVO!
+  const [showOtherDates, setShowOtherDates] = useState(false); 
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
@@ -63,7 +60,6 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     async function loadFilters() {
       if (!filters.operacion) {
@@ -78,7 +74,7 @@ export default function SearchPage() {
         const data = await res.json();
         if (data.status === 'OK') {
           setListas({ 
-            zonas: Object.keys(data.filtros).sort().reverse(), // Z-A
+            zonas: Object.keys(data.filtros).sort().reverse(), 
             barrios: data.filtros
           });
         } else {
@@ -94,7 +90,6 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
-  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -141,7 +136,6 @@ export default function SearchPage() {
     return () => clearTimeout(handler);
   }, [filters, fetchProperties]);
 
-  // --- 3. MANEJADORES DE EVENTOS ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -157,14 +151,13 @@ export default function SearchPage() {
         setDateRange([null, null]);
         setShowOtherDates(false);
       }
-      if (name === 'zona') newState.barrios = [];
+      if (name === 'zona') newState.barrios = []; 
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
           minMts: '', maxMts: '',
         };
       }
-      // ¡NUEVO! Lógica de Período vs Calendario
       if (name === 'selectedPeriod') {
         newState.startDate = null;
         newState.endDate = null;
@@ -187,7 +180,7 @@ export default function SearchPage() {
         ...prev,
         startDate: start.toISOString().split('T')[0],
         endDate: end.toISOString().split('T')[0],
-        selectedPeriod: '', // Limpiar período
+        selectedPeriod: '', 
       }));
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
@@ -201,10 +194,8 @@ export default function SearchPage() {
     }));
   };
   
-  // ¡NUEVO! Manejador de "Otras Fechas"
   const handleShowOtherDates = () => {
     setShowOtherDates(!showOtherDates);
-    // Limpiar los filtros de fecha/período al cambiar de modo
     setFilters(prev => ({
       ...prev,
       startDate: null,
@@ -213,7 +204,6 @@ export default function SearchPage() {
     }));
     setDateRange([null, null]);
   };
-
 
   const removeFilter = (name, value = null) => {
     const defaultFilters = {
@@ -235,7 +225,6 @@ export default function SearchPage() {
     }
   };
 
-  // --- 4. RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -286,6 +275,7 @@ export default function SearchPage() {
         'bg-mcv-verde text-white hover:bg-opacity-80',
         'bg-mcv-gris text-white hover:bg-opacity-80',
       ];
+      
       return (
         <div className="text-center">
           <h2 className="text-xl font-bold mb-4">¿En qué zona?</h2>
@@ -308,16 +298,13 @@ export default function SearchPage() {
       );
     }
 
-    // Formatear opciones de barrio para react-select
     const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
 
-    // Paso 3: Filtros Específicos
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
-          {/* --- ¡NUEVO! CAMPO DE TEXTO LIBRE (50% ANCHO) --- */}
           <div className="w-full md:w-1/2 mt-2 md:mt-0">
             <input
               type="text"
@@ -330,7 +317,6 @@ export default function SearchPage() {
           </div>
         </div>
         
-        {/* --- ¡NUEVO! LAYOUT DE BARRIO --- */}
         {barrioOptions.length > 0 && (
           <div className="mb-4">
             <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -439,7 +425,6 @@ export default function SearchPage() {
             </>
           )}
 
-          {/* --- ¡NUEVO! LÓGICA DE PERÍODOS 2026 --- */}
           {filters.operacion === 'alquiler_temporal' && (
             <>
               <div className="col-span-2">
@@ -485,7 +470,7 @@ export default function SearchPage() {
                     className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                     isClearable={true}
                     minDate={new Date()}
-                    excludeDateIntervals={EXCLUDE_DATES} // ¡NUEVO!
+                    excludeDateIntervals={EXCLUDE_DATES}
                   />
                 </div>
               )}
@@ -523,7 +508,6 @@ export default function SearchPage() {
     );
   };
   
-  // --- 5. RENDERIZADO PRINCIPAL ---
   return (
     <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
