@@ -4,23 +4,7 @@ import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
-import Select from 'react-select'; 
 registerLocale('es', es);
-
-// Opciones de Período 2026
-const PERIOD_OPTIONS_2026 = [
-  { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
-  { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
-  { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
-  { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
-  { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
-  { value: 'Febrero 2da Quincena', label: 'Febrero 2da Quincena (18/02 al 01/03)' },
-];
-
-const EXCLUDE_DATES = [
-  { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
-];
 
 export default function SearchPage() {
   
@@ -28,7 +12,7 @@ export default function SearchPage() {
     operacion: null,
     zona: null,
     tipo: null,
-    barrios: [], 
+    barrio: null,
     pax: '',
     pax_or_more: false,
     pets: false,
@@ -40,17 +24,14 @@ export default function SearchPage() {
     maxPrice: '',
     startDate: null,
     endDate: null,
-    selectedPeriod: '', 
     sortBy: 'default',
-    searchText: '',
   });
 
   const [dateRange, setDateRange] = useState([null, null]);
-  const [showOtherDates, setShowOtherDates] = useState(false); 
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
-  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false); // ¡CORREGIDO!
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
 
@@ -60,6 +41,7 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
+  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     async function loadFilters() {
       if (!filters.operacion) {
@@ -74,10 +56,11 @@ export default function SearchPage() {
         const data = await res.json();
         if (data.status === 'OK') {
           setListas({ 
-            zonas: Object.keys(data.filtros).sort().reverse(), 
+            zonas: Object.keys(data.filtros).sort().reverse(), // Z-A
             barrios: data.filtros
           });
         } else {
+          // Si no hay zonas, no es un error, solo no hay datos.
           setListas({ zonas: [], barrios: {} });
         }
       } catch (err) {
@@ -90,6 +73,7 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
+  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -136,12 +120,13 @@ export default function SearchPage() {
     return () => clearTimeout(handler);
   }, [filters, fetchProperties]);
 
+  // --- 3. MANEJADORES DE EVENTOS ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
-      operacion: null, zona: null, tipo: null, barrios: [],
+      operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
-      startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
+      startDate: null, endDate: null, sortBy: 'default'
     };
     
     setFilters(prev => {
@@ -149,27 +134,16 @@ export default function SearchPage() {
       if (name === 'operacion') {
         newState = { ...defaultState, operacion: value };
         setDateRange([null, null]);
-        setShowOtherDates(false);
       }
-      if (name === 'zona') newState.barrios = []; 
+      if (name === 'zona') newState.barrio = null;
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
           minMts: '', maxMts: '',
         };
       }
-      if (name === 'selectedPeriod') {
-        newState.startDate = null;
-        newState.endDate = null;
-        setDateRange([null, null]);
-      }
       return newState;
     });
-  };
-
-  const handleMultiBarrioChange = (selectedOptions) => {
-    const barrioValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
-    setFilters(prev => ({ ...prev, barrios: barrioValues }));
   };
 
   const handleDateChange = (dates) => {
@@ -180,7 +154,6 @@ export default function SearchPage() {
         ...prev,
         startDate: start.toISOString().split('T')[0],
         endDate: end.toISOString().split('T')[0],
-        selectedPeriod: '', 
       }));
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
@@ -193,47 +166,31 @@ export default function SearchPage() {
       [name]: !prev[name],
     }));
   };
-  
-  const handleShowOtherDates = () => {
-    setShowOtherDates(!showOtherDates);
-    setFilters(prev => ({
-      ...prev,
-      startDate: null,
-      endDate: null,
-      selectedPeriod: '',
-    }));
-    setDateRange([null, null]);
-  };
 
-  const removeFilter = (name, value = null) => {
+  const removeFilter = (name) => {
     const defaultFilters = {
-      operacion: null, zona: null, tipo: null, barrios: [],
+      operacion: null, zona: null, tipo: null, barrio: null,
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
-      startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
+      startDate: null, endDate: null, sortBy: 'default'
     };
     if (name === 'operacion') {
       setFilters(defaultFilters);
       setDateRange([null, null]);
-      setShowOtherDates(false);
     } else if (name === 'zona') {
-      setFilters(prev => ({ ...prev, zona: null, barrios: [] }));
-    } else if (name === 'barrios') {
-      setFilters(prev => ({ ...prev, barrios: prev.barrios.filter(b => b !== value) }));
+      setFilters(prev => ({ ...prev, zona: null, barrio: null }));
     } else {
       setFilters(prev => ({ ...prev, [name]: defaultFilters[name] }));
     }
   };
 
+  // --- 4. RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
       {filters.zona && <ActiveFilterTag label={`Zona: ${filters.zona}`} onRemove={() => removeFilter('zona')} />}
       {filters.tipo && <ActiveFilterTag label={`Tipo: ${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
-      {filters.barrios.map(b => (
-          <ActiveFilterTag key={b} label={`Barrio: ${b}`} onRemove={() => removeFilter('barrios', b)} />
-      ))}
-      {filters.searchText && <ActiveFilterTag label={`"${filters.searchText}"`} onRemove={() => removeFilter('searchText')} />}
+      {filters.barrio && <ActiveFilterTag label={`Barrio: ${filters.barrio}`} onRemove={() => removeFilter('barrio')} />}
     </div>
   );
 
@@ -270,6 +227,7 @@ export default function SearchPage() {
     }
 
     if (!filters.zona) {
+      // --- ¡NUEVO! COLORES DE BOTONES ---
       const buttonColors = [
         'bg-mcv-azul text-white hover:bg-opacity-80',
         'bg-mcv-verde text-white hover:bg-opacity-80',
@@ -292,47 +250,16 @@ export default function SearchPage() {
               ))}
             </div>
           ) : (
-             <p className="text-gray-500">No hay zonas disponibles para "{filters.operacion.replace('_', ' ')}".</p>
+             <p className="text-gray-500">No hay zonas compatibles con "{filters.operacion.replace('_', ' ')}".</p>
           )}
         </div>
       );
     }
 
-    const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
-    const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
-
+    // Paso 3: Filtros Específicos
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
-          <div className="w-full md:w-1/2 mt-2 md:mt-0">
-            <input
-              type="text"
-              name="searchText"
-              value={filters.searchText}
-              onChange={(e) => handleFilterChange('searchText', e.target.value)}
-              placeholder="Buscar por palabra clave (ej. quincho, polo)"
-              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            />
-          </div>
-        </div>
-        
-        {barrioOptions.length > 0 && (
-          <div className="mb-4">
-            <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
-            <Select
-              id="barrio"
-              instanceId="barrio-select"
-              isMulti
-              options={barrioOptions}
-              value={selectedBarrios}
-              onChange={handleMultiBarrioChange}
-              placeholder="Seleccione uno o varios barrios..."
-              className="text-sm"
-            />
-          </div>
-        )}
-
+        <h2 className="text-lg font-bold mb-4 text-mcv-gris">Afiná tu búsqueda:</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           
           <div>
@@ -349,6 +276,23 @@ export default function SearchPage() {
               {filters.operacion === 'venta' && <option value="lote">Lote</option>}
             </select>
           </div>
+
+          {listas.barrios[filters.zona] && listas.barrios[filters.zona].length > 0 && (
+            <div>
+              <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio</label>
+              <select
+                id="barrio" name="barrio"
+                value={filters.barrio || ''}
+                onChange={(e) => handleFilterChange('barrio', e.target.value)}
+                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+              >
+                <option value="">Todos</option>
+                {listas.barrios[filters.zona].map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {filters.tipo !== 'lote' && (
             <div>
@@ -426,57 +370,25 @@ export default function SearchPage() {
           )}
 
           {filters.operacion === 'alquiler_temporal' && (
-            <>
-              <div className="col-span-2">
-                <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Período 2026</label>
-                <select
-                  id="selectedPeriod" name="selectedPeriod"
-                  value={filters.selectedPeriod}
-                  onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates}
-                  className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                >
-                  <option value="">Todos (Temporada 2026)</option>
-                  {PERIOD_OPTIONS_2026.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-span-2 flex items-end pb-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox" name="showOtherDates"
-                    checked={showOtherDates}
-                    onChange={handleShowOtherDates}
-                    className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                  />
-                  <span className="text-sm text-gray-700">Otras fechas (Fuera de temporada)</span>
-                </label>
-              </div>
-
-              {showOtherDates && (
-                <div className="col-span-2">
-                  <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas</label>
-                  <DatePicker
-                    id="dateRange"
-                    selectsRange={true}
-                    startDate={dateRange[0]}
-                    endDate={dateRange[1]}
-                    onChange={handleDateChange}
-                    locale="es"
-                    dateFormat="dd/MM/yyyy"
-                    placeholderText="Seleccione un rango"
-                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                    isClearable={true}
-                    minDate={new Date()}
-                    excludeDateIntervals={EXCLUDE_DATES}
-                  />
-                </div>
-              )}
-            </>
+            <div className="col-span-2">
+              <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas</label>
+              <DatePicker
+                id="dateRange"
+                selectsRange={true}
+                startDate={dateRange[0]}
+                endDate={dateRange[1]}
+                onChange={handleDateChange}
+                locale="es"
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Seleccione un rango"
+                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                isClearable={true}
+                minDate={new Date()}
+              />
+            </div>
           )}
 
+          {/* --- ¡NUEVO! LAYOUT DE CHECKBOX --- */}
           {filters.tipo !== 'lote' && (
             <div className="col-span-2 flex flex-row gap-4 pt-6">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -508,6 +420,7 @@ export default function SearchPage() {
     );
   };
   
+  // --- 5. RENDERIZADO PRINCIPAL ---
   return (
     <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -530,6 +443,7 @@ export default function SearchPage() {
           <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
             <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Agente Digital</h1>
             <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
+            {/* --- ¡NUEVO! CONTADOR --- */}
             {!isSearching && filters.operacion && (
               <h2 className="text-lg font-bold text-mcv-verde mt-2">
                 {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
@@ -539,6 +453,7 @@ export default function SearchPage() {
         </header>
 
         <main>
+          {/* --- ¡NUEVO! BOTÓN DE ORDENAR --- */}
           {!isSearching && results.length > 1 && (
             <div className="flex justify-end mb-4">
               <select
@@ -568,7 +483,7 @@ export default function SearchPage() {
                 ))}
               </div>
             ) : (
-              (filters.zona || isSearching || filters.searchText) && (
+              (filters.zona || isSearching) && (
                 <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
                   <p className="text-xl font-bold">No se encontraron propiedades</p>
                   <p>Intente ajustar sus filtros de búsqueda.</p>
@@ -576,7 +491,7 @@ export default function SearchPage() {
               )
             )
           ) : (
-             !isLoadingFilters && !isSearching && (
+             !isLoadingFilters && !isSearching && ( // ¡CORREGIDO!
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>
