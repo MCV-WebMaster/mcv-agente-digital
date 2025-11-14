@@ -4,10 +4,15 @@ import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
-import Select from 'react-select'; // Importar react-select
+import Select from 'react-select';
+import Modal from 'react-modal'; // ¡NUEVO!
+import ContactModal from '@/components/ContactModal'; // ¡NUEVO!
 registerLocale('es', es);
 
-// --- ¡NUEVO! Opciones de Período 2026 ---
+// --- Configuración del Modal ---
+Modal.setAppElement('#__next');
+
+// --- Opciones de Período 2026 ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -18,7 +23,6 @@ const PERIOD_OPTIONS_2026 = [
   { value: 'Febrero 2da Quincena', label: 'Febrero 2da Quincena (18/02 al 01/03)' },
 ];
 
-// --- ¡NUEVO! Fechas a excluir en "Otras Fechas" ---
 const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
@@ -30,7 +34,7 @@ export default function SearchPage() {
     operacion: null,
     zona: null,
     tipo: null,
-    barrios: [], // ¡NUEVO! (Array)
+    barrios: [], 
     pax: '',
     pax_or_more: false,
     pets: false,
@@ -42,14 +46,15 @@ export default function SearchPage() {
     maxPrice: '',
     startDate: null,
     endDate: null,
-    selectedPeriod: '', // ¡NUEVO!
+    selectedPeriod: '', 
     sortBy: 'default',
-    searchText: '', // ¡NUEVO!
+    searchText: '',
   });
 
   // --- ESTADO DE UI ---
   const [dateRange, setDateRange] = useState([null, null]);
-  const [showOtherDates, setShowOtherDates] = useState(false); // ¡NUEVO!
+  const [showOtherDates, setShowOtherDates] = useState(false); 
+  const [isModalOpen, setIsModalOpen] = useState(false); // ¡NUEVO!
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
@@ -137,7 +142,7 @@ export default function SearchPage() {
   useEffect(() => {
     const handler = setTimeout(() => {
       fetchProperties(filters);
-    }, 500); // 500ms debounce
+    }, 500); 
     return () => clearTimeout(handler);
   }, [filters, fetchProperties]);
 
@@ -157,14 +162,13 @@ export default function SearchPage() {
         setDateRange([null, null]);
         setShowOtherDates(false);
       }
-      if (name === 'zona') newState.barrios = []; // Resetear barrios
+      if (name === 'zona') newState.barrios = []; 
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
           minMts: '', maxMts: '',
         };
       }
-      // ¡NUEVO! Lógica de Período vs Calendario
       if (name === 'selectedPeriod') {
         newState.startDate = null;
         newState.endDate = null;
@@ -174,7 +178,6 @@ export default function SearchPage() {
     });
   };
 
-  // ¡NUEVO! Manejador para Multi-Select
   const handleMultiBarrioChange = (selectedOptions) => {
     const barrioValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
     setFilters(prev => ({ ...prev, barrios: barrioValues }));
@@ -188,7 +191,7 @@ export default function SearchPage() {
         ...prev,
         startDate: start.toISOString().split('T')[0],
         endDate: end.toISOString().split('T')[0],
-        selectedPeriod: '', // Limpiar período
+        selectedPeriod: '', 
       }));
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
@@ -202,10 +205,8 @@ export default function SearchPage() {
     }));
   };
   
-  // ¡NUEVO! Manejador de "Otras Fechas"
   const handleShowOtherDates = () => {
     setShowOtherDates(!showOtherDates);
-    // Limpiar los filtros de fecha/período al cambiar de modo
     setFilters(prev => ({
       ...prev,
       startDate: null,
@@ -230,7 +231,6 @@ export default function SearchPage() {
     } else if (name === 'zona') {
       setFilters(prev => ({ ...prev, zona: null, barrios: [] }));
     } else if (name === 'barrios') {
-      // Remover solo un barrio del array
       setFilters(prev => ({ ...prev, barrios: prev.barrios.filter(b => b !== value) }));
     } else {
       setFilters(prev => ({ ...prev, [name]: defaultFilters[name] }));
@@ -310,16 +310,13 @@ export default function SearchPage() {
       );
     }
 
-    // Formatear opciones de barrio para react-select
     const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
 
-    // Paso 3: Filtros Específicos
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
-          {/* --- ¡NUEVO! CAMPO DE TEXTO LIBRE (50% ANCHO) --- */}
           <div className="w-full md:w-1/2 mt-2 md:mt-0">
             <input
               type="text"
@@ -332,7 +329,6 @@ export default function SearchPage() {
           </div>
         </div>
         
-        {/* --- ¡NUEVO! LAYOUT DE BARRIO --- */}
         {barrioOptions.length > 0 && (
           <div className="mb-4">
             <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -441,7 +437,6 @@ export default function SearchPage() {
             </>
           )}
 
-          {/* --- ¡NUEVO! LÓGICA DE PERÍODOS 2026 --- */}
           {filters.operacion === 'alquiler_temporal' && (
             <>
               <div className="col-span-2">
@@ -527,6 +522,14 @@ export default function SearchPage() {
   
   return (
     <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
+      
+      {/* --- ¡NUEVO! MODAL DE CONTACTO --- */}
+      <ContactModal
+        isOpen={isModalOpen}
+        onRequestClose={() => setIsModalOpen(false)}
+        properties={results}
+      />
+      
       <div className="max-w-7xl mx-auto">
         
         <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
@@ -551,6 +554,15 @@ export default function SearchPage() {
               <h2 className="text-lg font-bold text-mcv-verde mt-2">
                 {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
               </h2>
+            )}
+            {/* --- ¡NUEVO! BOTÓN DE CONTACTO --- */}
+            {!isSearching && results.length > 0 && (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="mt-4 px-4 py-2 bg-mcv-verde text-white font-bold rounded-lg shadow-lg hover:bg-opacity-80 transition-all"
+              >
+                Contactar con un Agente
+              </button>
             )}
           </div>
         </header>

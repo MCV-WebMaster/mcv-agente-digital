@@ -8,21 +8,21 @@ export default async function handler(req, res) {
   const { name, phone, email, message, propertyLinks } = req.body;
 
   // --- 1. Configuración del Transportador de Email ---
-  // (Usar las variables de entorno de Vercel)
+  // (Usa las variables de Vercel que usted ya configuró)
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST, // ej. "va000847.ferozo.com"
-    port: process.env.SMTP_PORT, // ej. 465
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
     secure: process.env.SMTP_PORT == 465, // true para puerto 465
     auth: {
-      user: process.env.SMTP_USER, // ej. "info@mcvpropiedades.com.ar"
-      pass: process.env.SMTP_PASS, // La contraseña de ese email
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   });
 
   // --- 2. Contenido del Email para el Administrador ---
   const adminMail = {
     from: `"Agente Digital MCV" <${process.env.SMTP_USER}>`,
-    to: "ariel@baudry.com.ar", // Email del Administrador (usted)
+    to: process.env.CONTACT_ADMIN_EMAIL, // ¡Usa la nueva variable!
     subject: `Nuevo Lead (Agente Digital): ${name}`,
     html: `
       <p>Un nuevo cliente ha solicitado más información.</p>
