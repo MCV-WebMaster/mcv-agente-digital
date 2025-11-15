@@ -150,7 +150,6 @@ export default function SearchPage() {
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
-      // Caso 1: 1-10 propiedades
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
       
@@ -158,11 +157,9 @@ export default function SearchPage() {
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
-      // Caso 2: Más de 10 propiedades
       whatsappMessage = `Quiero más información sobre mi búsqueda (${propertyCount} propiedades encontradas).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      // Caso 3: 0 propiedades o sin filtros
       whatsappMessage = `Quisiera hacer una consulta general.`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
@@ -243,7 +240,6 @@ export default function SearchPage() {
     }));
     setDateRange([null, null]);
   };
-
 
   const removeFilter = (name, value = null) => {
     const defaultFilters = {
@@ -583,7 +579,8 @@ export default function SearchPage() {
           </div>
           
           <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
-            <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Agente Digital</h1>
+            {/* --- ¡CORREGIDO! "Asistente Digital" --- */}
+            <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Asistente Digital</h1>
             <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
             {!isSearching && filters.operacion && (
               <h2 className="text-lg font-bold text-mcv-verde mt-2">
@@ -643,7 +640,6 @@ export default function SearchPage() {
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p className="mb-8">Use el asistente de arriba para encontrar su propiedad ideal.</p>
-                {/* --- ¡NUEVO! CARRUSEL --- */}
                 <WelcomeCarousel />
               </div>
              )
@@ -652,7 +648,6 @@ export default function SearchPage() {
 
       </div>
       
-      {/* --- ¡NUEVO! FOOTER --- */}
       <Footer />
     </div>
   );
