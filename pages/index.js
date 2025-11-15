@@ -8,13 +8,12 @@ import Select from 'react-select';
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 import FloatingButton from '@/components/FloatingButton';
-import WelcomeCarousel from '@/components/WelcomeCarousel'; // ¡NUEVO!
-import Footer from '@/components/Footer'; // ¡NUEVO!
+import WelcomeCarousel from '@/components/WelcomeCarousel';
+import Footer from '@/components/Footer';
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// Opciones de Período 2026
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -146,21 +145,26 @@ export default function SearchPage() {
 
   // --- 3. MANEJADORES DE EVENTOS ---
   
+  // ¡NUEVO! Helper para generar los mensajes de contacto (Req 1, 2, 3, 5)
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
-    
+    const greeting = "Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar";
+
     if (results.length > 0 && results.length <= 10) {
+      // Caso 1: 1-10 propiedades
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
       
-      whatsappMessage = `Quiero más información sobre estas ${results.length} propiedades:\n\n${propsListWsp}`;
+      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
-      whatsappMessage = `Quiero más información sobre mi búsqueda (${propertyCount} propiedades encontradas).`;
+      // Caso 2: Más de 10 propiedades
+      whatsappMessage = `${greeting}, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Quisiera hacer una consulta general.`;
+      // Caso 3: 0 propiedades o sin filtros (Req 2)
+      whatsappMessage = `${greeting}, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
@@ -640,6 +644,7 @@ export default function SearchPage() {
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
                 <p className="mb-8">Use el asistente de arriba para encontrar su propiedad ideal.</p>
+                {/* --- ¡NUEVO! CARRUSEL --- */}
                 <WelcomeCarousel />
               </div>
              )
@@ -648,6 +653,7 @@ export default function SearchPage() {
 
       </div>
       
+      {/* --- ¡NUEVO! FOOTER --- */}
       <Footer />
     </div>
   );

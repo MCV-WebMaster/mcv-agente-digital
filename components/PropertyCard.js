@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FaWhatsapp } from 'react-icons/fa'; // ¡NUEVO!
+import { FaWhatsapp } from 'react-icons/fa';
 
 // Helper para formatear precio (USD o ARS)
 function formatPrice(value, currency = 'USD') {
@@ -90,7 +90,6 @@ export default function PropertyCard({ property, filters }) {
       }
       
     } else {
-      // 4. SIN FECHAS (Default View)
       alquilerTempDisplay = min_rental_price ? (
         <div>
           <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
@@ -105,10 +104,10 @@ export default function PropertyCard({ property, filters }) {
     }
   }
 
-  // --- ¡NUEVO! Lógica de WhatsApp en la Tarjeta ---
+  // --- ¡NUEVO! Lógica de WhatsApp en la Tarjeta (Req 3) ---
   const whatsappNumber = process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER;
   const whatsappMessage = encodeURIComponent(
-    `Hola, te consulto por esta propiedad: \n${title}\n${url}`
+    `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar: \n\n${title}\n${url}`
   );
   const singlePropertyWhatsappLink = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
   
@@ -198,7 +197,6 @@ export default function PropertyCard({ property, filters }) {
         </div>
       </div>
       
-      {/* --- ¡NUEVO! Pie de tarjeta con Icono de WhatsApp --- */}
       <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
          <a
             href={url}
