@@ -6,12 +6,15 @@ import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
-import ContactModal from '@/components/ContactModal'; // ¡NUEVO!
-import FloatingButton from '@/components/FloatingButton'; // ¡NUEVO!
+import ContactModal from '@/components/ContactModal';
+import FloatingButton from '@/components/FloatingButton';
+import WelcomeCarousel from '@/components/WelcomeCarousel'; // ¡NUEVO!
+import Footer from '@/components/Footer'; // ¡NUEVO!
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// Opciones de Período 2026
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -51,8 +54,8 @@ export default function SearchPage() {
 
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
-  const [isModalOpen, setIsModalOpen] = useState(false); // ¡NUEVO!
-  const [contactPayload, setContactPayload] = useState({ // ¡NUEVO!
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0
@@ -143,7 +146,6 @@ export default function SearchPage() {
 
   // --- 3. MANEJADORES DE EVENTOS ---
   
-  // ¡NUEVO! Helper para generar los mensajes de contacto
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     
@@ -241,6 +243,7 @@ export default function SearchPage() {
     }));
     setDateRange([null, null]);
   };
+
 
   const removeFilter = (name, value = null) => {
     const defaultFilters = {
@@ -465,7 +468,8 @@ export default function SearchPage() {
           {filters.operacion === 'alquiler_temporal' && (
             <>
               <div className="col-span-2">
-                <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Período 2026</label>
+                {/* --- ¡CORREGIDO! "Temporada 2026" --- */}
+                <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                 <select
                   id="selectedPeriod" name="selectedPeriod"
                   value={filters.selectedPeriod}
@@ -473,7 +477,7 @@ export default function SearchPage() {
                   disabled={showOtherDates}
                   className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 >
-                  <option value="">Todos (Temporada 2026)</option>
+                  <option value="">Todas (Temporada 2026)</option>
                   {PERIOD_OPTIONS_2026.map(p => (
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
@@ -546,7 +550,7 @@ export default function SearchPage() {
   };
   
   return (
-    <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
+    <div className="min-h-screen bg-white text-gray-800">
       
       <ContactModal
         isOpen={isModalOpen}
@@ -558,19 +562,22 @@ export default function SearchPage() {
       
       <FloatingButton onClick={generateContactMessages} />
       
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto p-4 md:p-8">
         
         <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
           
           <div className="w-full md:w-1/4">
-            <img 
-              src="/logo_mcv_rectangular.png" 
-              alt="Logo MCV Propiedades" 
-              className="w-48 md:w-56"
-            />
+            {/* --- ¡NUEVO! LOGO CLICKABLE --- */}
+            <a href="/" aria-label="Ir al inicio">
+              <img 
+                src="/logo_mcv_rectangular.png" 
+                alt="Logo MCV Propiedades" 
+                className="w-48 md:w-56"
+              />
+            </a>
           </div>
           
-          <div className="w-full md:w-12/2 px-0 md:px-4 mt-4 md:mt-0">
+          <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
             <div className="mb-4">{renderFiltrosActivos()}</div>
             {renderAsistente()} 
           </div>
@@ -635,13 +642,18 @@ export default function SearchPage() {
              !isLoadingFilters && !isSearching && (
               <div className="text-center text-gray-500 p-10">
                 <p className="text-xl font-bold">Bienvenido</p>
-                <p>Use el asistente de arriba para encontrar su propiedad ideal.</p>
+                <p className="mb-8">Use el asistente de arriba para encontrar su propiedad ideal.</p>
+                {/* --- ¡NUEVO! CARRUSEL --- */}
+                <WelcomeCarousel />
               </div>
              )
           )}
         </main>
 
       </div>
+      
+      {/* --- ¡NUEVO! FOOTER --- */}
+      <Footer />
     </div>
   );
 }
