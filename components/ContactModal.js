@@ -2,7 +2,6 @@ import { useState } from 'react';
 import Modal from 'react-modal';
 import Spinner from './Spinner';
 
-// Estilos para el Modal (Pop-up)
 const customStyles = {
   content: {
     top: '50%',
@@ -21,7 +20,8 @@ const customStyles = {
   },
 };
 
-export default function ContactModal({ isOpen, onRequestClose, properties }) {
+// ¡NUEVO! Props 'whatsappMessage' y 'adminEmailHtml'
+export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, adminEmailHtml, propertyCount }) {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -38,10 +38,10 @@ export default function ContactModal({ isOpen, onRequestClose, properties }) {
     e.preventDefault();
     setStatus('sending');
 
-    const propertyLinks = properties.map(p => p.url);
-    const message = `Quiero más información sobre estas ${propertyLinks.length} propiedades: \n\n${propertyLinks.join('\n')}`;
-
-    const contactData = { ...formData, message, propertyLinks };
+    const contactData = { 
+      ...formData, 
+      adminMessageHtml: adminEmailHtml // ¡NUEVO!
+    };
 
     // 1. Enviar Email al Administrador (sin esperar)
     fetch('/api/send-contact', {
@@ -50,14 +50,13 @@ export default function ContactModal({ isOpen, onRequestClose, properties }) {
       body: JSON.stringify(contactData),
     }).catch(err => {
       console.error("Error al enviar email al admin:", err);
-      // No frenamos al usuario por esto
     });
 
     // 2. Crear Link de WhatsApp para el Usuario
-    const whatsappMessage = encodeURIComponent(
-      `Hola, soy ${formData.name}. Te contacto desde el Agente Digital. \n\n${message}`
+    const finalWhatsappMessage = encodeURIComponent(
+      `Hola, soy ${formData.name}. Te contacto desde el Agente Digital. \n\n${whatsappMessage}`
     );
-    const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER}?text=${whatsappMessage}`;
+    const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER}?text=${finalWhatsappMessage}`;
 
     // 3. Redirigir y cerrar
     setStatus('sent');
@@ -111,7 +110,10 @@ export default function ContactModal({ isOpen, onRequestClose, properties }) {
             />
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            Se enviará una consulta por las <strong>{properties.length} propiedades</strong> que has filtrado.
+            {propertyCount > 0 ?
+              `Se enviará una consulta por las ${propertyCount} propiedades que has filtrado.` :
+              "Se enviará una consulta general."
+            }
           </p>
           
           <div className="flex justify-end gap-4">

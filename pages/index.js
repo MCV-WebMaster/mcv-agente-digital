@@ -4,15 +4,14 @@ import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
-import Select from 'react-select';
-import Modal from 'react-modal'; // ¡NUEVO!
+import Select from 'react-select'; 
+import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal'; // ¡NUEVO!
+import FloatingButton from '@/components/FloatingButton'; // ¡NUEVO!
 registerLocale('es', es);
 
-// --- Configuración del Modal ---
 Modal.setAppElement('#__next');
 
-// --- Opciones de Período 2026 ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -29,7 +28,6 @@ const EXCLUDE_DATES = [
 
 export default function SearchPage() {
   
-  // --- ESTADO PRINCIPAL ---
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -51,10 +49,14 @@ export default function SearchPage() {
     searchText: '',
   });
 
-  // --- ESTADO DE UI ---
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false); // ¡NUEVO!
+  const [contactPayload, setContactPayload] = useState({ // ¡NUEVO!
+    whatsappMessage: '',
+    adminEmailHtml: '',
+    propertyCount: 0
+  });
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
@@ -68,14 +70,12 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     async function loadFilters() {
       if (!filters.operacion) {
         setListas({ zonas: [], barrios: {} });
         return;
       }
-      
       setIsLoadingFilters(true);
       setError(null);
       try {
@@ -83,7 +83,7 @@ export default function SearchPage() {
         const data = await res.json();
         if (data.status === 'OK') {
           setListas({ 
-            zonas: Object.keys(data.filtros).sort().reverse(), // Z-A
+            zonas: Object.keys(data.filtros).sort().reverse(), 
             barrios: data.filtros
           });
         } else {
@@ -99,7 +99,6 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
-  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -107,23 +106,19 @@ export default function SearchPage() {
       setIsSearching(false);
       return;
     }
-    
     setIsSearching(true);
     setError(null);
     setResults([]);
-
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentFilters),
       });
-
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.error || 'La respuesta de la red no fue OK');
       }
-      
       const data = await response.json();
       if (data.status === 'OK') {
         setResults(data.results);
@@ -147,6 +142,37 @@ export default function SearchPage() {
   }, [filters, fetchProperties]);
 
   // --- 3. MANEJADORES DE EVENTOS ---
+  
+  // ¡NUEVO! Helper para generar los mensajes de contacto
+  const generateContactMessages = () => {
+    let whatsappMessage, adminEmailHtml;
+    
+    if (results.length > 0 && results.length <= 10) {
+      // Caso 1: 1-10 propiedades
+      const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
+      const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
+      
+      whatsappMessage = `Quiero más información sobre estas ${results.length} propiedades:\n\n${propsListWsp}`;
+      adminEmailHtml = `<ul>${propsListHtml}</ul>`;
+      
+    } else if (results.length > 10) {
+      // Caso 2: Más de 10 propiedades
+      whatsappMessage = `Quiero más información sobre mi búsqueda (${propertyCount} propiedades encontradas).`;
+      adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
+    } else {
+      // Caso 3: 0 propiedades o sin filtros
+      whatsappMessage = `Quisiera hacer una consulta general.`;
+      adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
+    }
+    
+    setContactPayload({
+      whatsappMessage,
+      adminEmailHtml,
+      propertyCount: results.length
+    });
+    setIsModalOpen(true);
+  };
+  
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -215,7 +241,6 @@ export default function SearchPage() {
     }));
     setDateRange([null, null]);
   };
-
 
   const removeFilter = (name, value = null) => {
     const defaultFilters = {
@@ -523,12 +548,15 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen bg-white text-gray-800 p-4 md:p-8">
       
-      {/* --- ¡NUEVO! MODAL DE CONTACTO --- */}
       <ContactModal
         isOpen={isModalOpen}
         onRequestClose={() => setIsModalOpen(false)}
-        properties={results}
+        whatsappMessage={contactPayload.whatsappMessage}
+        adminEmailHtml={contactPayload.adminEmailHtml}
+        propertyCount={contactPayload.propertyCount}
       />
+      
+      <FloatingButton onClick={generateContactMessages} />
       
       <div className="max-w-7xl mx-auto">
         
@@ -542,7 +570,7 @@ export default function SearchPage() {
             />
           </div>
           
-          <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
+          <div className="w-full md:w-12/2 px-0 md:px-4 mt-4 md:mt-0">
             <div className="mb-4">{renderFiltrosActivos()}</div>
             {renderAsistente()} 
           </div>
@@ -555,10 +583,9 @@ export default function SearchPage() {
                 {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
               </h2>
             )}
-            {/* --- ¡NUEVO! BOTÓN DE CONTACTO --- */}
             {!isSearching && results.length > 0 && (
               <button
-                onClick={() => setIsModalOpen(true)}
+                onClick={generateContactMessages}
                 className="mt-4 px-4 py-2 bg-mcv-verde text-white font-bold rounded-lg shadow-lg hover:bg-opacity-80 transition-all"
               >
                 Contactar con un Agente
