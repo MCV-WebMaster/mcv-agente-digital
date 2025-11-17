@@ -34,8 +34,8 @@ export default function ChatWidget() {
     }
 
     // 1. Definir cuánto esperar antes de mostrar el mensaje
-    // Si es el primer mensaje (índice 0), esperamos 5s. Si no, 30s.
-    const delayBeforeShow = currentMessageIndex === 0 ? 5000 : 30000;
+    // Si es el primer mensaje (índice 0), esperamos 5s. Si no, 15s.
+    const delayBeforeShow = currentMessageIndex === 0 ? 5000 : 150000;
 
     const timerShow = setTimeout(() => {
       setShowBubble(true);
