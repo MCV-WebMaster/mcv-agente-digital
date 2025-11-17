@@ -10,6 +10,7 @@ import ContactModal from '@/components/ContactModal';
 import FloatingButton from '@/components/FloatingButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
+import ChatWidget from '@/components/ChatWidget'; // <--- NUEVO
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
@@ -572,7 +573,7 @@ export default function SearchPage() {
           propertyCount={contactPayload.propertyCount}
         />
         
-        <FloatingButton onClick={generateContactMessages} />
+        <ChatWidget /> 
         
         <div className="max-w-7xl mx-auto p-4 md:p-8">
           
