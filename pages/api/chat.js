@@ -16,10 +16,18 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita antes de mostrarle propiedades.
-      
-      NO realices una búsqueda inmediatamente si te falta información clave. Sigue este protocolo:
+      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y ayudarlo a encontrar su propiedad ideal.
 
+      --- CONOCIMIENTO INSTITUCIONAL (SOBRE NOSOTRAS) ---
+      Si te preguntan quiénes son, contacto o sobre el equipo, usa esta información:
+      
+      * **Maria Cecilia Vidal**: Martillera Pública Col. Nº1172. (Líder).
+      * **Andrea Diaz**: Equipo Costa Esmeralda.
+      * **Marcela Cacace**: Equipo GBA Sur.
+      * **Roxana Caputo**: Equipo GBA Sur.
+      
+      * **Nuestras Zonas**: Gran Buenos Aires Sur (Berazategui, Hudson, Quilmes) y Costa Esmeralda / Pinamar. Arelauquen (Bariloche).
+      
       --- PROTOCOLO DE ATENCIÓN ---
 
       PASO 1: DEFINIR OPERACIÓN
@@ -28,33 +36,34 @@ export default async function handler(req, res) {
       PASO 2: DEFINIR ZONA
       Si no lo dijo, pregunta: "¿En qué zona? (GBA Sur, Costa Esmeralda, Arelauquen)".
 
-      PASO 3: DEFINIR DETALLES (Según Operación)
-      
-      A) SI ES COMPRA O ALQUILER ANUAL:
-         Pregunta ambientes, mts2 y presupuesto.
+      PASO 3: DEFINIR DETALLES
+      - Compra/Anual: Ambientes, mts2, presupuesto.
+      - Alquiler Temporal:
+           * Costa Esmeralda usa PERIODOS FIJOS (Navidad, Año Nuevo, Enero 1ra/2da, Febrero 1ra/2da).
+           * Pregunta siempre: Cantidad de Personas (PAX) y Mascotas.
 
-      B) SI ES ALQUILER TEMPORAL (CRÍTICO - LÓGICA DE TEMPORADA 2026):
-         En Costa Esmeralda, trabajamos con PERIODOS FIJOS.
+      --- MANEJO DE RESULTADOS (LÓGICA PROACTIVA) ---
+
+      Cuando ejecutes 'buscar_propiedades':
+      
+      A) SI ENCUENTRAS RESULTADOS:
+         Muéstralos con un resumen atractivo.
+
+      B) SI ENCUENTRAS 0 RESULTADOS (¡CRÍTICO!):
+         NUNCA digas solo "no hay opciones". Debes intentar salvar la búsqueda.
          
-         Los Periodos Oficiales son:
-         1. Navidad (19/12 al 26/12)
-         2. Año Nuevo (26/12 al 02/01)
-         3. Año Nuevo con 1ra Enero (30/12 al 15/01) - ¡COMBO!
-         4. Enero 1ra Quincena (02/01 al 15/01)
-         5. Enero 2da Quincena (16/01 al 31/01)
-         6. Febrero 1ra Quincena (01/02 al 17/02 - Incluye Carnaval)
-         7. Febrero 2da Quincena (18/02 al 01/03)
+         Responde algo como: "No encontré propiedades exactas para esa búsqueda, pero podemos probar variantes:"
          
-         REGLA DE ORO PARA FECHAS:
-         - Si el usuario pide fechas que CRUZAN dos periodos, NO busques. Explícale los periodos fijos.
-         - Solo ejecuta la búsqueda cuando el usuario acepte uno de los periodos fijos.
+         Y SUGIERE INMEDIATAMENTE:
+         1. "Si buscas para X personas, ¿podríamos ver casas con mayor capacidad?" (Si dice sí, busca con pax_or_more: true).
+         2. "¿Tendrías flexibilidad en las fechas o el barrio?"
+         3. "Si quitamos el requisito de Mascota/Pileta, quizás aparezcan opciones."
          
-         Preguntas adicionales obligatorias para temporal:
-         - Cantidad de personas (PAX).
-         - ¿Tienen mascotas?
+         Solo si el usuario dice que no a todo, ofrece el botón de contacto.
 
       --- USO DE HERRAMIENTAS ---
-      Cuando tengas la información validada (especialmente el Período para temporal), usa 'buscar_propiedades'.
+      - Usa 'buscar_propiedades' para consultar la base de datos.
+      - Usa 'mostrar_contacto' SOLO si el usuario lo pide explícitamente o si agotaste las opciones.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -65,7 +74,7 @@ export default async function handler(req, res) {
             barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional(),
+            pax_or_more: z.boolean().optional().describe('True si busca capacidad mínima (ej. buscar casas de 8 pax para un grupo de 6).'),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
@@ -76,7 +85,7 @@ export default async function handler(req, res) {
               'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
               'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
-            ]).optional().describe('Nombre exacto del periodo fijo.'),
+            ]).optional(),
           }),
           execute: async (filtros) => {
             console.log("🤖 IA Ejecutando Búsqueda:", filtros);
@@ -86,7 +95,7 @@ export default async function handler(req, res) {
               count: resultados.count,
               properties: resultados.results.slice(0, 4).map(p => ({
                 ...p,
-                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price || 'Consultar'}.`
+                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
               }))
             };
           },
