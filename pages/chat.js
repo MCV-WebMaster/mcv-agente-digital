@@ -26,7 +26,7 @@ export default function ChatPage() {
     window.scrollTo(0, document.body.scrollHeight);
   }, [messages]);
 
-  // Manejador de Contacto (Idéntico al del Buscador)
+  // Manejador de Contacto para Propiedad Individual
   const handleContactSingleProperty = (property) => {
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Chat del Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
@@ -39,8 +39,20 @@ export default function ChatPage() {
     setIsModalOpen(true);
   };
 
+  // Manejador de Contacto General (Botón IA)
+  const handleGeneralContact = () => {
+    const whatsappMessage = `Hola...! Te escribo desde el Chat del Asistente Digital. Quisiera recibir asesoramiento personalizado.`;
+    const adminEmailHtml = `<p>El cliente solicitó contacto directo desde el Chatbot.</p>`;
+
+    setContactPayload({
+      whatsappMessage,
+      adminEmailHtml,
+      propertyCount: 0
+    });
+    setIsModalOpen(true);
+  };
+
   return (
-    // ID __next necesario para el Modal
     <div id="__next" className="min-h-screen bg-gray-50 flex flex-col">
       
       {/* Modal de Contacto */}
@@ -86,13 +98,14 @@ export default function ChatPage() {
               >
                 <p className="whitespace-pre-wrap">{m.content}</p>
 
-                {/* --- RENDERIZADO DE HERRAMIENTAS (Propiedades) --- */}
+                {/* --- RENDERIZADO DE HERRAMIENTAS (Propiedades y Botones) --- */}
                 {m.toolInvocations?.map((toolInvocation) => {
-                  const { toolName, toolCallId, state } = toolInvocation;
+                  const { toolName, toolCallId, state, args } = toolInvocation; // ¡Capturamos 'args'!
 
                   if (state === 'result') {
                     const { result } = toolInvocation;
                     
+                    // CASO A: MOSTRAR PROPIEDADES
                     if (toolName === 'buscar_propiedades') {
                       return (
                         <div key={toolCallId} className="mt-4">
@@ -104,11 +117,25 @@ export default function ChatPage() {
                               <PropertyCard 
                                 key={prop.property_id} 
                                 property={prop} 
-                                filters={{}} // Sin filtros de fecha específicos en el chat por ahora
-                                onContact={handleContactSingleProperty} // ¡Conectado!
+                                filters={args} // ¡CLAVE! Pasamos los filtros de la IA (ej. selectedPeriod) a la tarjeta
+                                onContact={handleContactSingleProperty}
                               />
                             ))}
                           </div>
+                        </div>
+                      );
+                    }
+
+                    // CASO B: MOSTRAR BOTÓN DE CONTACTO
+                    if (toolName === 'mostrar_contacto') {
+                      return (
+                        <div key={toolCallId} className="mt-4">
+                          <button
+                            onClick={handleGeneralContact}
+                            className="w-full px-4 py-3 bg-mcv-verde text-white font-bold rounded-lg shadow hover:bg-opacity-90 transition-all flex items-center justify-center gap-2"
+                          >
+                            <span>💬</span> Contactar con un Agente
+                          </button>
                         </div>
                       );
                     }
@@ -116,7 +143,7 @@ export default function ChatPage() {
                   
                   return (
                     <div key={toolCallId} className="mt-2 flex items-center gap-2 text-gray-500 italic text-sm">
-                      <Spinner /> Buscando propiedades...
+                      <Spinner /> Procesando...
                     </div>
                   );
                 })}

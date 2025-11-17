@@ -57,9 +57,8 @@ export default async function handler(req, res) {
          - ¿Tienen mascotas?
 
       --- USO DE HERRAMIENTAS ---
-      Cuando tengas la información validada (especialmente el Período para temporal), usa 'buscar_propiedades'.
-      
-      Si el usuario insiste en fechas raras o cruzadas, sugiérele usar el botón "Contactar con un Agente" para atención personalizada.
+      - Cuando tengas la información validada (especialmente el Período para temporal), usa 'buscar_propiedades'.
+      - Si el usuario dice explícitamente "quiero contactar a un agente", "hablar con alguien", "reservar" o similar, USA la herramienta 'mostrar_contacto'.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -77,7 +76,6 @@ export default async function handler(req, res) {
             minPrice: z.string().optional(),
             maxPrice: z.string().optional(),
             searchText: z.string().optional(),
-            // La IA debe enviar el nombre EXACTO del período si el usuario eligió uno
             selectedPeriod: z.enum([
               'Navidad', 'Año Nuevo', 'Enero 1ra Quincena', 'Enero 2da Quincena', 
               'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
@@ -89,11 +87,19 @@ export default async function handler(req, res) {
             
             return {
               count: resultados.count,
-              properties: resultados.results.slice(0, 4).map(p => ({
-                ...p,
-                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price || 'Consultar'}.`
-              }))
+              // Devolvemos properties completas para que el frontend tenga datos
+              properties: resultados.results.slice(0, 4) 
             };
+          },
+        }),
+        // ¡NUEVA HERRAMIENTA!
+        mostrar_contacto: tool({
+          description: 'Muestra un botón especial para que el usuario abra el formulario de contacto o WhatsApp.',
+          parameters: z.object({ 
+            motivo: z.string().optional().describe('Razón del contacto (opcional)') 
+          }),
+          execute: async ({ motivo }) => {
+            return { showButton: true, motivo };
           },
         }),
       },
