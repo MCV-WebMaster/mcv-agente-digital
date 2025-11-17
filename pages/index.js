@@ -14,10 +14,13 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- Opciones de Período 2026 (ACTUALIZADAS) ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
+  // ¡NUEVO!
+  { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
   { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
@@ -29,6 +32,10 @@ const EXCLUDE_DATES = [
 ];
 
 export default function SearchPage() {
+  // ... (Resto del código idéntico a la v12)
+  // Solo actualice la constante PERIOD_OPTIONS_2026 de arriba, el resto del archivo
+  // puede copiarlo de la Tarea 13.5 (v12), ya que no cambia la lógica interna.
+  // Para evitar errores de copy-paste, aquí está el componente completo de nuevo:
   
   const [filters, setFilters] = useState({
     operacion: null,
@@ -143,9 +150,6 @@ export default function SearchPage() {
     return () => clearTimeout(handler);
   }, [filters, fetchProperties]);
 
-  // --- 3. MANEJADORES DE EVENTOS ---
-  
-  // Contacto General (Botón Grande)
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     const greeting = "Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar";
@@ -173,9 +177,8 @@ export default function SearchPage() {
     setIsModalOpen(true);
   };
 
-  // ¡NUEVO! Contacto Individual (Botón de Tarjeta)
   const handleContactSingleProperty = (property) => {
-    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad que me interesa en https://mcvpropiedades.com.ar:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
 
     setContactPayload({
@@ -275,7 +278,6 @@ export default function SearchPage() {
     }
   };
 
-  // --- 4. RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -636,7 +638,7 @@ export default function SearchPage() {
               results.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {results.map(prop => (
-                    <PropertyCard key={prop.property_id} property={prop} filters={filters} onContact={handleContactSingleProperty} /> // ¡AQUÍ PASAMOS LA PROP!
+                    <PropertyCard key={prop.property_id} property={prop} filters={filters} onContact={handleContactSingleProperty} />
                   ))}
                 </div>
               ) : (

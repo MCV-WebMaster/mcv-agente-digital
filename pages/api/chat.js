@@ -16,8 +16,10 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita.
+      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita antes de mostrarle propiedades.
       
+      NO realices una búsqueda inmediatamente si te falta información clave. Sigue este protocolo:
+
       --- PROTOCOLO DE ATENCIÓN ---
 
       PASO 1: DEFINIR OPERACIÓN
@@ -33,22 +35,26 @@ export default async function handler(req, res) {
 
       B) SI ES ALQUILER TEMPORAL (CRÍTICO - LÓGICA DE TEMPORADA 2026):
          En Costa Esmeralda, trabajamos con PERIODOS FIJOS.
-         Periodos: Navidad, Año Nuevo, Enero 1ra/2da, Febrero 1ra/2da.
+         
+         Los Periodos Oficiales son:
+         1. Navidad (19/12 al 26/12)
+         2. Año Nuevo (26/12 al 02/01)
+         3. Año Nuevo con 1ra Enero (30/12 al 15/01) - ¡COMBO!
+         4. Enero 1ra Quincena (02/01 al 15/01)
+         5. Enero 2da Quincena (16/01 al 31/01)
+         6. Febrero 1ra Quincena (01/02 al 17/02 - Incluye Carnaval)
+         7. Febrero 2da Quincena (18/02 al 01/03)
          
          REGLA DE ORO PARA FECHAS:
          - Si el usuario pide fechas que CRUZAN dos periodos, NO busques. Explícale los periodos fijos.
-         - Si pide una fecha vaga ("enero"), pregunta qué quincena.
-         - Solo busca cuando tengas el periodo claro.
+         - Solo ejecuta la búsqueda cuando el usuario acepte uno de los periodos fijos.
+         
+         Preguntas adicionales obligatorias para temporal:
+         - Cantidad de personas (PAX).
+         - ¿Tienen mascotas?
 
       --- USO DE HERRAMIENTAS ---
-      1. Cuando tengas la información validada, usa 'buscar_propiedades'.
-      
-      2. REGLA DE CERO RESULTADOS (¡IMPORTANTE!):
-         Si 'buscar_propiedades' devuelve 0 resultados (count: 0), DEBES decir:
-         "No encontré propiedades con esos criterios exactos, pero un agente puede buscar opciones personalizadas para vos."
-         Y acto seguido, EJECUTA LA HERRAMIENTA 'mostrar_contacto'. No dejes al usuario sin opciones.
-
-      3. Si el usuario pide explícitamente contactar, usa 'mostrar_contacto'.
+      Cuando tengas la información validada (especialmente el Período para temporal), usa 'buscar_propiedades'.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -67,9 +73,10 @@ export default async function handler(req, res) {
             maxPrice: z.string().optional(),
             searchText: z.string().optional(),
             selectedPeriod: z.enum([
-              'Navidad', 'Año Nuevo', 'Enero 1ra Quincena', 'Enero 2da Quincena', 
+              'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
+              'Enero 1ra Quincena', 'Enero 2da Quincena', 
               'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
-            ]).optional(),
+            ]).optional().describe('Nombre exacto del periodo fijo.'),
           }),
           execute: async (filtros) => {
             console.log("🤖 IA Ejecutando Búsqueda:", filtros);
@@ -85,7 +92,7 @@ export default async function handler(req, res) {
           },
         }),
         mostrar_contacto: tool({
-          description: 'Muestra un botón para contactar a un agente.',
+          description: 'Muestra el botón para contactar a un agente humano.',
           parameters: z.object({ 
             motivo: z.string().optional() 
           }),
