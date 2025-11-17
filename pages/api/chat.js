@@ -16,78 +16,82 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      // --- AQUÍ ESTÁ LA MAGIA: EL PROTOCOLO DE ATENCIÓN ---
       system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita antes de mostrarle propiedades.
       
-      NO realices una búsqueda inmediatamente si te falta información clave. Sigue este protocolo de preguntas paso a paso:
+      NO realices una búsqueda inmediatamente si te falta información clave. Sigue este protocolo:
+
+      --- PROTOCOLO DE ATENCIÓN ---
 
       PASO 1: DEFINIR OPERACIÓN
-      Si el usuario no lo dijo, pregunta: "¿Qué estás buscando? ¿Comprar, Alquiler Temporal o Alquiler Anual?".
+      Si no lo dijo, pregunta: "¿Qué estás buscando? ¿Comprar, Alquiler Temporal o Alquiler Anual?".
 
       PASO 2: DEFINIR ZONA
-      Si el usuario no lo dijo, pregunta: "¿En qué zona te gustaría buscar? (Trabajamos en GBA Sur, Costa Esmeralda y Arelauquen)".
+      Si no lo dijo, pregunta: "¿En qué zona? (GBA Sur, Costa Esmeralda, Arelauquen)".
 
-      PASO 3: DEFINIR DETALLES (Según el Paso 1)
+      PASO 3: DEFINIR DETALLES (Según Operación)
       
-      A) SI ES COMPRA (VENTA):
-         Pregunta por:
-         - Cantidad de ambientes o dormitorios.
-         - Metros cuadrados aproximados.
-         - Presupuesto máximo estimado.
+      A) SI ES COMPRA O ALQUILER ANUAL:
+         Pregunta ambientes, mts2 y presupuesto.
 
-      B) SI ES ALQUILER TEMPORAL:
-         Pregunta OBLIGATORIAMENTE por:
-         - **Fechas exactas o período** (Ej: "Enero 2da quincena", "Carnaval"). Esto es crítico para ver disponibilidad.
-         - **Cantidad de personas (PAX)**.
+      B) SI ES ALQUILER TEMPORAL (CRÍTICO - LÓGICA DE TEMPORADA 2026):
+         En Costa Esmeralda, trabajamos con PERIODOS FIJOS.
+         
+         Los Periodos Oficiales son:
+         1. Navidad (19/12 al 26/12)
+         2. Año Nuevo (26/12 al 02/01)
+         3. Enero 1ra Quincena (02/01 al 15/01)
+         4. Enero 2da Quincena (16/01 al 31/01)
+         5. Febrero 1ra Quincena (01/02 al 17/02 - Incluye Carnaval)
+         6. Febrero 2da Quincena (18/02 al 01/03)
+         
+         REGLA DE ORO PARA FECHAS:
+         - Si el usuario pide fechas que CRUZAN dos periodos (ej. "del 10 al 20 de enero"), NO busques.
+           Explícale: "Nuestros alquileres son por quincena fija. ¿Te interesa la 1ra (2-15) o la 2da (16-31)? Si necesitas esas fechas específicas, por favor contacta a un agente."
+         
+         - Si el usuario pide una fecha vaga ("enero"), pregunta: "¿Buscas la 1ra quincena, la 2da, o el mes completo?"
+         
+         - Solo ejecuta la búsqueda cuando el usuario acepte uno de los periodos fijos.
+         
+         Preguntas adicionales obligatorias para temporal:
+         - Cantidad de personas (PAX).
          - ¿Tienen mascotas?
-         - ¿Buscan con pileta?
 
-      C) SI ES ALQUILER ANUAL:
-         Pregunta por requisitos básicos (dormitorios, zona).
-
-      REGLAS DE COMPORTAMIENTO:
-      - Sé amable, profesional y conciso.
-      - Ve paso a paso. No hagas todas las preguntas juntas. Haz una o dos preguntas a la vez para mantener la conversación fluida.
-      - SOLO cuando tengas la Operación, la Zona y al menos un detalle clave (como Fechas para alquiler o Ambientes para venta), ejecuta la herramienta 'buscar_propiedades'.
-      - Si el usuario pregunta algo vago como "quiero una casa", responde con las opciones del Paso 1 y 2.
-      - Habla siempre en español rioplatense (Argentina).
+      --- USO DE HERRAMIENTAS ---
+      Cuando tengas la información validada (especialmente el Período para temporal), usa 'buscar_propiedades'.
+      
+      Si el usuario insiste en fechas raras o cruzadas, sugiérele usar el botón "Contactar con un Agente" para atención personalizada.
       `,
       tools: {
         buscar_propiedades: tool({
-          description: 'Ejecuta la búsqueda en la base de datos de MCV cuando ya se tienen los criterios claros.',
+          description: 'Ejecuta la búsqueda en la base de datos.',
           parameters: z.object({
-            operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).describe('Tipo de operación.'),
-            zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional().describe('Zona estandarizada.'),
+            operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
+            zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
             barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional().describe('True si el usuario dice "o más" o busca capacidad mínima.'),
+            pax_or_more: z.boolean().optional().describe('True si busca capacidad mínima.'),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
             minPrice: z.string().optional(),
             maxPrice: z.string().optional(),
-            minMts: z.string().optional(),
-            maxMts: z.string().optional(),
-            searchText: z.string().optional().describe('Palabras clave como "quincho", "polo", "golf".'),
-            // La IA intentará inferir fechas si el usuario dice "Enero 2da quincena" pasando 'selectedPeriod'
-            // O fechas exactas en startDate/endDate si el usuario dice "del 10 al 20".
-            selectedPeriod: z.string().optional().describe('Nombre exacto del período (Ej: "Enero 2da Quincena", "Navidad").'),
-            startDate: z.string().optional().describe('Formato YYYY-MM-DD'),
-            endDate: z.string().optional().describe('Formato YYYY-MM-DD'),
+            searchText: z.string().optional(),
+            // La IA debe enviar el nombre EXACTO del período si el usuario eligió uno
+            selectedPeriod: z.enum([
+              'Navidad', 'Año Nuevo', 'Enero 1ra Quincena', 'Enero 2da Quincena', 
+              'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
+            ]).optional().describe('Nombre exacto del periodo fijo.'),
           }),
           execute: async (filtros) => {
             console.log("🤖 IA Ejecutando Búsqueda:", filtros);
             const resultados = await searchProperties(filtros);
             
-            // Devolvemos un resumen para que la IA sepa qué decir
             return {
               count: resultados.count,
-              // Limitamos a 4 para no saturar el chat visualmente, aunque la IA sabrá el total
               properties: resultados.results.slice(0, 4).map(p => ({
                 ...p,
-                // Le damos a la IA datos clave para que los comente si quiere
-                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price || p.price || 'Consultar'}.`
+                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price || 'Consultar'}.`
               }))
             };
           },
