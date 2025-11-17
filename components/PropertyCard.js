@@ -1,13 +1,11 @@
 import Link from 'next/link';
 import { FaWhatsapp } from 'react-icons/fa';
 
-// Helper para formatear precio (USD o ARS)
 function formatPrice(value, currency = 'USD') {
   if (!value || isNaN(Number(value))) {
     return null;
   }
   const priceNum = Number(value);
-
   return new Intl.NumberFormat(currency === 'ARS' ? 'es-AR' : 'en-US', {
     style: 'currency',
     currency: currency,
@@ -16,20 +14,19 @@ function formatPrice(value, currency = 'USD') {
   }).format(priceNum);
 }
 
-// Helper para calcular días
 function getDaysBetween(startDate, endDate) {
   if (!startDate || !endDate) return 0;
   const start = new Date(startDate);
   const end = new Date(endDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 inclusive
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 }
 
-// Fechas de la Temporada 2026
 const SEASON_START_DATE = '2025-12-19';
 const SEASON_END_DATE = '2026-03-01';
 
-export default function PropertyCard({ property, filters }) {
+// ¡NUEVO! Recibimos 'onContact'
+export default function PropertyCard({ property, filters, onContact }) {
   const {
     slug, title, url, thumbnail_url,
     price, es_property_price_ars, min_rental_price,
@@ -42,7 +39,6 @@ export default function PropertyCard({ property, filters }) {
     ? "/logo_mcv_rectangular.png"
     : thumbnail_url;
 
-  // --- Lógica de Precios ---
   const ventaPrice = formatPrice(price, 'USD');
   const alquilerAnualPrice = formatPrice(es_property_price_ars, 'ARS');
   let alquilerTempDisplay;
@@ -103,13 +99,6 @@ export default function PropertyCard({ property, filters }) {
       );
     }
   }
-
-  // --- ¡NUEVO! Lógica de WhatsApp en la Tarjeta (Req 3) ---
-  const whatsappNumber = process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER;
-  const whatsappMessage = encodeURIComponent(
-    `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar: \n\n${title}\n${url}`
-  );
-  const singlePropertyWhatsappLink = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
   
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden shadow-lg bg-white transition-transform duration-300 hover:shadow-xl flex flex-col justify-between">
@@ -206,15 +195,14 @@ export default function PropertyCard({ property, filters }) {
           >
             Ver más detalles &rarr;
           </a>
-          <a
-            href={singlePropertyWhatsappLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-500 hover:text-green-600"
-            aria-label="Consultar por esta propiedad en WhatsApp"
+          {/* --- ¡NUEVO! Botón que llama al Modal --- */}
+          <button
+            onClick={() => onContact(property)} // Llama al handler del padre
+            className="text-green-500 hover:text-green-600 transition-colors"
+            aria-label="Consultar por esta propiedad"
           >
             <FaWhatsapp size={28} />
-          </a>
+          </button>
       </div>
     </div>
   );

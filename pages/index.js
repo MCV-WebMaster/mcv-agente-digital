@@ -145,13 +145,12 @@ export default function SearchPage() {
 
   // --- 3. MANEJADORES DE EVENTOS ---
   
-  // ¡NUEVO! Helper para generar los mensajes de contacto (Req 1, 2, 3, 5)
+  // Contacto General (Botón Grande)
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     const greeting = "Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar";
 
     if (results.length > 0 && results.length <= 10) {
-      // Caso 1: 1-10 propiedades
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
       
@@ -159,11 +158,9 @@ export default function SearchPage() {
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
-      // Caso 2: Más de 10 propiedades
       whatsappMessage = `${greeting}, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      // Caso 3: 0 propiedades o sin filtros (Req 2)
       whatsappMessage = `${greeting}, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
@@ -172,6 +169,19 @@ export default function SearchPage() {
       whatsappMessage,
       adminEmailHtml,
       propertyCount: results.length
+    });
+    setIsModalOpen(true);
+  };
+
+  // ¡NUEVO! Contacto Individual (Botón de Tarjeta)
+  const handleContactSingleProperty = (property) => {
+    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad que me interesa en https://mcvpropiedades.com.ar:\n\n${property.title}\n${property.url}`;
+    const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
+
+    setContactPayload({
+      whatsappMessage,
+      adminEmailHtml,
+      propertyCount: 1
     });
     setIsModalOpen(true);
   };
@@ -468,7 +478,6 @@ export default function SearchPage() {
           {filters.operacion === 'alquiler_temporal' && (
             <>
               <div className="col-span-2">
-                {/* --- ¡CORREGIDO! "Temporada 2026" --- */}
                 <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                 <select
                   id="selectedPeriod" name="selectedPeriod"
@@ -550,111 +559,109 @@ export default function SearchPage() {
   };
   
   return (
-    <div className="min-h-screen bg-white text-gray-800">
-      
-      <ContactModal
-        isOpen={isModalOpen}
-        onRequestClose={() => setIsModalOpen(false)}
-        whatsappMessage={contactPayload.whatsappMessage}
-        adminEmailHtml={contactPayload.adminEmailHtml}
-        propertyCount={contactPayload.propertyCount}
-      />
-      
-      <FloatingButton onClick={generateContactMessages} />
-      
-      <div className="max-w-7xl mx-auto p-4 md:p-8">
+    <div id="__next">
+      <div className="min-h-screen bg-white text-gray-800">
         
-        <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
+        <ContactModal
+          isOpen={isModalOpen}
+          onRequestClose={() => setIsModalOpen(false)}
+          whatsappMessage={contactPayload.whatsappMessage}
+          adminEmailHtml={contactPayload.adminEmailHtml}
+          propertyCount={contactPayload.propertyCount}
+        />
+        
+        <FloatingButton onClick={generateContactMessages} />
+        
+        <div className="max-w-7xl mx-auto p-4 md:p-8">
           
-          <div className="w-full md:w-1/4">
-            {/* --- ¡NUEVO! LOGO CLICKABLE --- */}
-            <a href="/" aria-label="Ir al inicio">
-              <img 
-                src="/logo_mcv_rectangular.png" 
-                alt="Logo MCV Propiedades" 
-                className="w-48 md:w-56"
-              />
-            </a>
-          </div>
-          
-          <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
-            <div className="mb-4">{renderFiltrosActivos()}</div>
-            {renderAsistente()} 
-          </div>
-          
-          <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
-            {/* --- ¡CORREGIDO! "Asistente Digital" --- */}
-            <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Asistente Digital</h1>
-            <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
-            {!isSearching && filters.operacion && (
-              <h2 className="text-lg font-bold text-mcv-verde mt-2">
-                {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
-              </h2>
-            )}
-            {!isSearching && results.length > 0 && (
-              <button
-                onClick={generateContactMessages}
-                className="mt-4 px-4 py-2 bg-mcv-verde text-white font-bold rounded-lg shadow-lg hover:bg-opacity-80 transition-all"
-              >
-                Contactar con un Agente
-              </button>
-            )}
-          </div>
-        </header>
-
-        <main>
-          {!isSearching && results.length > 1 && (
-            <div className="flex justify-end mb-4">
-              <select
-                name="sortBy"
-                value={filters.sortBy}
-                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                className="p-2 rounded-md bg-white border border-gray-300 text-sm"
-              >
-                <option value="default">Ordenar por...</option>
-                <option value="price_asc">Precio: más bajo primero</option>
-                <option value="price_desc">Precio: más alto primero</option>
-              </select>
+          <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
+            
+            <div className="w-full md:w-1/4">
+              <a href="/" aria-label="Ir al inicio">
+                <img 
+                  src="/logo_mcv_rectangular.png" 
+                  alt="Logo MCV Propiedades" 
+                  className="w-48 md:w-56"
+                />
+              </a>
             </div>
-          )}
-
-          {isSearching ? (
-            <Spinner />
-          ) : error ? (
-            <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
-              <p className="font-bold">Error al cargar: {error}</p>
+            
+            <div className="w-full md:w-1/2 px-0 md:px-4 mt-4 md:mt-0">
+              <div className="mb-4">{renderFiltrosActivos()}</div>
+              {renderAsistente()} 
             </div>
-          ) : (filters.operacion) ? (
-            results.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {results.map(prop => (
-                  <PropertyCard key={prop.property_id} property={prop} filters={filters} />
-                ))}
+            
+            <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
+              <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Asistente Digital</h1>
+              <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
+              {!isSearching && filters.operacion && (
+                <h2 className="text-lg font-bold text-mcv-verde mt-2">
+                  {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
+                </h2>
+              )}
+              {!isSearching && results.length > 0 && (
+                <button
+                  onClick={generateContactMessages}
+                  className="mt-4 px-4 py-2 bg-mcv-verde text-white font-bold rounded-lg shadow-lg hover:bg-opacity-80 transition-all"
+                >
+                  Contactar con un Agente
+                </button>
+              )}
+            </div>
+          </header>
+
+          <main>
+            {!isSearching && results.length > 1 && (
+              <div className="flex justify-end mb-4">
+                <select
+                  name="sortBy"
+                  value={filters.sortBy}
+                  onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                  className="p-2 rounded-md bg-white border border-gray-300 text-sm"
+                >
+                  <option value="default">Ordenar por...</option>
+                  <option value="price_asc">Precio: más bajo primero</option>
+                  <option value="price_desc">Precio: más alto primero</option>
+                </select>
               </div>
-            ) : (
-              (filters.zona || isSearching || filters.searchText) && (
-                <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
-                  <p className="text-xl font-bold">No se encontraron propiedades</p>
-                  <p>Intente ajustar sus filtros de búsqueda.</p>
+            )}
+
+            {isSearching ? (
+              <Spinner />
+            ) : error ? (
+              <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
+                <p className="font-bold">Error al cargar: {error}</p>
+              </div>
+            ) : (filters.operacion) ? (
+              results.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {results.map(prop => (
+                    <PropertyCard key={prop.property_id} property={prop} filters={filters} onContact={handleContactSingleProperty} /> // ¡AQUÍ PASAMOS LA PROP!
+                  ))}
                 </div>
+              ) : (
+                (filters.zona || isSearching || filters.searchText) && (
+                  <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
+                    <p className="text-xl font-bold">No se encontraron propiedades</p>
+                    <p>Intente ajustar sus filtros de búsqueda.</p>
+                  </div>
+                )
               )
-            )
-          ) : (
-             !isLoadingFilters && !isSearching && (
-              <div className="text-center text-gray-500 p-10">
-                <p className="text-xl font-bold">Bienvenido</p>
-                <p className="mb-8">Use el asistente de arriba para encontrar su propiedad ideal.</p>
-                {/* --- ¡NUEVO! CARRUSEL --- */}
-                <WelcomeCarousel />
-              </div>
-             )
-          )}
-        </main>
+            ) : (
+               !isLoadingFilters && !isSearching && (
+                <div className="text-center text-gray-500 p-10">
+                  <p className="text-xl font-bold">Bienvenido</p>
+                  <p className="mb-8">Use el asistente de arriba para encontrar su propiedad ideal.</p>
+                  <WelcomeCarousel />
+                </div>
+               )
+            )}
+          </main>
 
+        </div>
+        
+        <Footer />
       </div>
-      
-      {/* --- ¡NUEVO! FOOTER --- */}
-      <Footer />
     </div>
   );
 }
