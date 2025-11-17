@@ -1,47 +1,75 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+
+// Inicializamos Resend (solo para guardar contactos)
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // ¡NUEVO! Recibe 'adminMessageHtml'
   const { name, phone, email, adminMessageHtml } = req.body;
 
-  // 1. Configuración del Transportador de Email
+  // --- PASO 1: Enviar Email de Aviso con Nodemailer (SMTP) ---
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: process.env.SMTP_PORT,
-    secure: process.env.SMTP_PORT == 465, 
+    secure: process.env.SMTP_PORT == 465,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
   });
 
-  // 2. Contenido del Email para el Administrador
   const adminMail = {
-    from: `"Agente Digital MCV" <${process.env.SMTP_USER}>`,
+    from: `"Asistente Digital" <${process.env.SMTP_USER}>`,
     to: process.env.CONTACT_ADMIN_EMAIL,
-    subject: `Nuevo Lead (Agente Digital): ${name}`,
+    reply_to: email,
+    subject: `Nuevo Lead: ${name}`,
     html: `
-      <p>Un nuevo cliente ha solicitado más información.</p>
-      <ul>
-        <li><strong>Nombre:</strong> ${name}</li>
-        <li><strong>Email:</strong> ${email}</li>
-        <li><strong>Celular:</strong> ${phone}</li>
-      </ul>
-      <p><strong>Propiedades de Interés:</strong></p>
-      ${adminMessageHtml} 
-    `, // ¡NUEVO! Se usa el HTML pre-formateado
+      <div style="font-family: sans-serif; color: #333;">
+        <h2>Nuevo contacto desde el Asistente Digital</h2>
+        <p>Un cliente ha dejado sus datos y consultado por WhatsApp.</p>
+        <hr />
+        <h3>Datos del Cliente:</h3>
+        <ul>
+          <li><strong>Nombre:</strong> ${name}</li>
+          <li><strong>Email:</strong> ${email}</li>
+          <li><strong>Celular:</strong> <a href="https://wa.me/${phone.replace(/\D/g,'')}">${phone}</a></li>
+        </ul>
+        <hr />
+        <h3>Intereses / Propiedades:</h3>
+        ${adminMessageHtml}
+      </div>
+    `,
   };
 
-  // 3. Enviar el Email
   try {
+    // 1. Enviamos el correo
     await transporter.sendMail(adminMail);
-    res.status(200).json({ status: 'OK', message: 'Email enviado' });
+
+    // --- PASO 2: Guardar Contacto en Resend (Silencioso) ---
+    // Lo hacemos después de enviar el correo para no bloquear si falla
+    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
+      try {
+        await resend.contacts.create({
+          email: email,
+          firstName: name,
+          unsubscribed: false,
+          audienceId: process.env.RESEND_AUDIENCE_ID
+        });
+        console.log(`Contacto ${email} guardado en Resend.`);
+      } catch (resendError) {
+        // Si falla Resend (ej. contacto ya existe), solo lo logueamos, no fallamos el request
+        console.warn('Aviso: No se pudo guardar en Resend (puede que ya exista):', resendError.message);
+      }
+    }
+
+    res.status(200).json({ status: 'OK', message: 'Email enviado y contacto procesado' });
+
   } catch (error) {
-    console.error('Error al enviar email:', error);
+    console.error('Error al enviar email con Nodemailer:', error);
     res.status(500).json({ status: 'Error', error: 'No se pudo enviar el email.' });
   }
 }
