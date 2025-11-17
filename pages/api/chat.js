@@ -16,10 +16,8 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita antes de mostrarle propiedades.
+      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita.
       
-      NO realices una búsqueda inmediatamente si te falta información clave. Sigue este protocolo:
-
       --- PROTOCOLO DE ATENCIÓN ---
 
       PASO 1: DEFINIR OPERACIÓN
@@ -35,30 +33,22 @@ export default async function handler(req, res) {
 
       B) SI ES ALQUILER TEMPORAL (CRÍTICO - LÓGICA DE TEMPORADA 2026):
          En Costa Esmeralda, trabajamos con PERIODOS FIJOS.
-         
-         Los Periodos Oficiales son:
-         1. Navidad (19/12 al 26/12)
-         2. Año Nuevo (26/12 al 02/01)
-         3. Enero 1ra Quincena (02/01 al 15/01)
-         4. Enero 2da Quincena (16/01 al 31/01)
-         5. Febrero 1ra Quincena (01/02 al 17/02 - Incluye Carnaval)
-         6. Febrero 2da Quincena (18/02 al 01/03)
+         Periodos: Navidad, Año Nuevo, Enero 1ra/2da, Febrero 1ra/2da.
          
          REGLA DE ORO PARA FECHAS:
-         - Si el usuario pide fechas que CRUZAN dos periodos (ej. "del 10 al 20 de enero"), NO busques.
-           Explícale: "Nuestros alquileres son por quincena fija. ¿Te interesa la 1ra (2-15) o la 2da (16-31)? Si necesitas esas fechas específicas, por favor contacta a un agente."
-         
-         - Si el usuario pide una fecha vaga ("enero"), pregunta: "¿Buscas la 1ra quincena, la 2da, o el mes completo?"
-         
-         - Solo ejecuta la búsqueda cuando el usuario acepte uno de los periodos fijos.
-         
-         Preguntas adicionales obligatorias para temporal:
-         - Cantidad de personas (PAX).
-         - ¿Tienen mascotas?
+         - Si el usuario pide fechas que CRUZAN dos periodos, NO busques. Explícale los periodos fijos.
+         - Si pide una fecha vaga ("enero"), pregunta qué quincena.
+         - Solo busca cuando tengas el periodo claro.
 
       --- USO DE HERRAMIENTAS ---
-      - Cuando tengas la información validada (especialmente el Período para temporal), usa 'buscar_propiedades'.
-      - Si el usuario dice explícitamente "quiero contactar a un agente", "hablar con alguien", "reservar" o similar, USA la herramienta 'mostrar_contacto'.
+      1. Cuando tengas la información validada, usa 'buscar_propiedades'.
+      
+      2. REGLA DE CERO RESULTADOS (¡IMPORTANTE!):
+         Si 'buscar_propiedades' devuelve 0 resultados (count: 0), DEBES decir:
+         "No encontré propiedades con esos criterios exactos, pero un agente puede buscar opciones personalizadas para vos."
+         Y acto seguido, EJECUTA LA HERRAMIENTA 'mostrar_contacto'. No dejes al usuario sin opciones.
+
+      3. Si el usuario pide explícitamente contactar, usa 'mostrar_contacto'.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -69,7 +59,7 @@ export default async function handler(req, res) {
             barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional().describe('True si busca capacidad mínima.'),
+            pax_or_more: z.boolean().optional(),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
@@ -79,7 +69,7 @@ export default async function handler(req, res) {
             selectedPeriod: z.enum([
               'Navidad', 'Año Nuevo', 'Enero 1ra Quincena', 'Enero 2da Quincena', 
               'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
-            ]).optional().describe('Nombre exacto del periodo fijo.'),
+            ]).optional(),
           }),
           execute: async (filtros) => {
             console.log("🤖 IA Ejecutando Búsqueda:", filtros);
@@ -87,16 +77,17 @@ export default async function handler(req, res) {
             
             return {
               count: resultados.count,
-              // Devolvemos properties completas para que el frontend tenga datos
-              properties: resultados.results.slice(0, 4) 
+              properties: resultados.results.slice(0, 4).map(p => ({
+                ...p,
+                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price || 'Consultar'}.`
+              }))
             };
           },
         }),
-        // ¡NUEVA HERRAMIENTA!
         mostrar_contacto: tool({
-          description: 'Muestra un botón especial para que el usuario abra el formulario de contacto o WhatsApp.',
+          description: 'Muestra un botón para contactar a un agente.',
           parameters: z.object({ 
-            motivo: z.string().optional().describe('Razón del contacto (opcional)') 
+            motivo: z.string().optional() 
           }),
           execute: async ({ motivo }) => {
             return { showButton: true, motivo };

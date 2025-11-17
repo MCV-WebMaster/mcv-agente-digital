@@ -1,5 +1,5 @@
 import { useChat } from 'ai/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // ¡Importamos useRef!
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import Modal from 'react-modal';
@@ -13,7 +13,6 @@ export default function ChatPage() {
     api: '/api/chat',
   });
 
-  // Estado para el Modal de Contacto
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
@@ -21,10 +20,25 @@ export default function ChatPage() {
     propertyCount: 0
   });
 
+  // Referencia al Input
+  const inputRef = useRef(null);
+
   // Auto-scroll al fondo
   useEffect(() => {
     window.scrollTo(0, document.body.scrollHeight);
   }, [messages]);
+
+  // --- ¡SOLUCIÓN DE FOCO! ---
+  // Cuando termina de cargar (isLoading pasa a false), devolvemos el foco al input.
+  useEffect(() => {
+    if (!isLoading) {
+      // Pequeño timeout para asegurar que el DOM se actualizó
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 10);
+    }
+  }, [isLoading]);
+
 
   // Manejador de Contacto para Propiedad Individual
   const handleContactSingleProperty = (property) => {
@@ -42,7 +56,7 @@ export default function ChatPage() {
   // Manejador de Contacto General (Botón IA)
   const handleGeneralContact = () => {
     const whatsappMessage = `Hola...! Te escribo desde el Chat del Asistente Digital. Quisiera recibir asesoramiento personalizado.`;
-    const adminEmailHtml = `<p>El cliente solicitó contacto directo desde el Chatbot.</p>`;
+    const adminEmailHtml = `<p>El cliente solicitó contacto directo desde el Chatbot (sin resultados específicos o consulta general).</p>`;
 
     setContactPayload({
       whatsappMessage,
@@ -55,7 +69,6 @@ export default function ChatPage() {
   return (
     <div id="__next" className="min-h-screen bg-gray-50 flex flex-col">
       
-      {/* Modal de Contacto */}
       <ContactModal
         isOpen={isModalOpen}
         onRequestClose={() => setIsModalOpen(false)}
@@ -76,7 +89,6 @@ export default function ChatPage() {
       <div className="flex-grow p-4 pb-24">
         <div className="max-w-3xl mx-auto space-y-6">
           
-          {/* Mensaje de Bienvenida */}
           {messages.length === 0 && (
             <div className="bg-white p-6 rounded-lg shadow text-center">
               <h2 className="text-2xl font-bold text-mcv-azul mb-2">¡Hola! Soy tu Asistente Virtual.</h2>
@@ -98,14 +110,12 @@ export default function ChatPage() {
               >
                 <p className="whitespace-pre-wrap">{m.content}</p>
 
-                {/* --- RENDERIZADO DE HERRAMIENTAS (Propiedades y Botones) --- */}
                 {m.toolInvocations?.map((toolInvocation) => {
-                  const { toolName, toolCallId, state, args } = toolInvocation; // ¡Capturamos 'args'!
+                  const { toolName, toolCallId, state, args } = toolInvocation;
 
                   if (state === 'result') {
                     const { result } = toolInvocation;
                     
-                    // CASO A: MOSTRAR PROPIEDADES
                     if (toolName === 'buscar_propiedades') {
                       return (
                         <div key={toolCallId} className="mt-4">
@@ -117,7 +127,7 @@ export default function ChatPage() {
                               <PropertyCard 
                                 key={prop.property_id} 
                                 property={prop} 
-                                filters={args} // ¡CLAVE! Pasamos los filtros de la IA (ej. selectedPeriod) a la tarjeta
+                                filters={args}
                                 onContact={handleContactSingleProperty}
                               />
                             ))}
@@ -126,7 +136,6 @@ export default function ChatPage() {
                       );
                     }
 
-                    // CASO B: MOSTRAR BOTÓN DE CONTACTO
                     if (toolName === 'mostrar_contacto') {
                       return (
                         <div key={toolCallId} className="mt-4">
@@ -159,7 +168,8 @@ export default function ChatPage() {
       <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2">
           <input
-            className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-mcv-azul"
+            ref={inputRef} // ¡Vinculamos la referencia!
+            className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-mcv-azul disabled:opacity-50"
             value={input}
             onChange={handleInputChange}
             placeholder="Escribí tu consulta aquí..."
