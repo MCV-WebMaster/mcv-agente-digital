@@ -20,14 +20,13 @@ const customStyles = {
   },
 };
 
-// ¡NUEVO! Props 'whatsappMessage' y 'adminEmailHtml'
 export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, adminEmailHtml, propertyCount }) {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
   });
-  const [status, setStatus] = useState('idle'); // idle | sending | sent | error
+  const [status, setStatus] = useState('idle'); 
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -40,10 +39,9 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
 
     const contactData = { 
       ...formData, 
-      adminMessageHtml: adminEmailHtml // ¡NUEVO!
+      adminMessageHtml: adminEmailHtml 
     };
 
-    // 1. Enviar Email al Administrador (sin esperar)
     fetch('/api/send-contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,13 +50,11 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
       console.error("Error al enviar email al admin:", err);
     });
 
-    // 2. Crear Link de WhatsApp para el Usuario
     const finalWhatsappMessage = encodeURIComponent(
-      `Hola, soy ${formData.name}. Te contacto desde el Agente Digital. \n\n${whatsappMessage}`
+      `Hola, soy ${formData.name}. Te contacto desde el Asistente Digital. \n\n${whatsappMessage}`
     );
     const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER}?text=${finalWhatsappMessage}`;
 
-    // 3. Redirigir y cerrar
     setStatus('sent');
     window.open(whatsappLink, '_blank');
     
@@ -89,6 +85,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="text" name="name" id="name" required
               value={formData.name} onChange={handleInputChange}
+              placeholder="Ej: Maria Cecilia Vidal" // ¡NUEVO!
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
             />
           </div>
@@ -97,7 +94,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="tel" name="phone" id="phone" required
               value={formData.phone} onChange={handleInputChange}
-              placeholder="Ej: 1165517385"
+              placeholder="Ej: 1165517385" // ¡NUEVO!
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
             />
           </div>
@@ -106,6 +103,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="email" name="email" id="email" required
               value={formData.email} onChange={handleInputChange}
+              placeholder="Ej: cecilia@mcvpropiedades.com.ar" // ¡NUEVO!
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
             />
           </div>

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FaRobot, FaCommentDots, FaTimes } from 'react-icons/fa';
+import { FaCommentDots, FaTimes } from 'react-icons/fa'; // Usamos FaTimes de react-icons
 import ChatInterface from './ChatInterface';
 
-// Lista de mensajes rotativos
+// Nueva lista de mensajes rotativos
 const MESSAGES = [
   "👋 ¡Hola! Soy tu asistente virtual. 👋",
   "🆘 ¿En qué te puedo ayudar? 🆘",
@@ -33,19 +33,20 @@ export default function ChatWidget() {
       return;
     }
 
-    // 1. Definir cuánto esperar antes de mostrar el mensaje
-    // Si es el primer mensaje (índice 0), esperamos 5s. Si no, 15s.
-    const delayBeforeShow = currentMessageIndex === 0 ? 5000 : 150000;
+    // 1. Definir tiempo de ESPERA antes de mostrar
+    // Si es el primer mensaje (índice 0), esperamos 5s. 
+    // Para los siguientes, esperamos 10s entre mensajes.
+    const delayBeforeShow = currentMessageIndex === 0 ? 5000 : 10000;
 
     const timerShow = setTimeout(() => {
       setShowBubble(true);
 
-      // 2. Una vez mostrado, esperar 10s y ocultarlo
+      // 2. Una vez mostrado, esperar 10s VISIBLE y ocultarlo
       const timerHide = setTimeout(() => {
         setShowBubble(false);
         
-        // 3. Cambiar al siguiente mensaje (esto reinicia el efecto)
-        // Usamos un pequeño timeout extra para asegurar que la animación de salida termine
+        // 3. Cambiar al siguiente mensaje (esto reinicia el efecto con el nuevo índice)
+        // Usamos un pequeño timeout extra (500ms) para permitir la animación de salida
         setTimeout(() => {
           setCurrentMessageIndex((prev) => (prev + 1) % MESSAGES.length);
         }, 500);
@@ -77,7 +78,7 @@ export default function ChatWidget() {
         }`}
       >
         <div className="bg-white text-gray-800 px-4 py-3 rounded-lg shadow-lg border border-gray-200 relative max-w-[250px]">
-          <p className="text-sm font-medium leading-tight">
+          <p className="text-sm font-medium leading-tight text-center">
             {MESSAGES[currentMessageIndex]}
           </p>
           {/* Triangulito del tooltip */}
@@ -86,7 +87,7 @@ export default function ChatWidget() {
           {/* Botón X pequeño para cerrar burbuja manualmente */}
           <button 
             onClick={() => setShowBubble(false)}
-            className="absolute -top-2 -right-2 bg-gray-200 rounded-full p-1 hover:bg-gray-300"
+            className="absolute -top-2 -right-2 bg-gray-200 rounded-full p-1 hover:bg-gray-300 text-gray-600"
           >
             <FaTimes size={10} />
           </button>
@@ -100,7 +101,7 @@ export default function ChatWidget() {
           isOpen ? 'bg-gray-600' : 'bg-mcv-azul'
         } fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-lg flex items-center justify-center z-50 hover:brightness-110 transition-all text-white text-3xl animate-bounce-slow`}
         aria-label="Abrir Asistente Virtual"
-        style={{ animationDuration: '3s' }} // Un rebote suave
+        style={{ animationDuration: '3s' }} 
       >
         {isOpen ? <FaTimes size={24} /> : <FaCommentDots />}
       </button>
