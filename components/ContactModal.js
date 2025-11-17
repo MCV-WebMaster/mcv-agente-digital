@@ -97,7 +97,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="tel" name="phone" id="phone" required
               value={formData.phone} onChange={handleInputChange}
-              placeholder="Ej: 1139009550"
+              placeholder="Ej: 1165517385"
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
             />
           </div>
