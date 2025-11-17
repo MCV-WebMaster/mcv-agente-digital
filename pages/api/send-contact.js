@@ -46,23 +46,24 @@ export default async function handler(req, res) {
   };
 
   try {
-    // 1. Enviamos el correo
+    // 1. Enviamos el correo de aviso
     await transporter.sendMail(adminMail);
 
-    // --- PASO 2: Guardar Contacto en Resend (Silencioso) ---
-    // Lo hacemos después de enviar el correo para no bloquear si falla
+    // --- PASO 2: Guardar Contacto en Resend (Con Teléfono) ---
     if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
       try {
+        // TRUCO: Guardamos el teléfono en el nombre para verlo en la lista
+        const nameWithPhone = `${name} (${phone})`;
+        
         await resend.contacts.create({
           email: email,
-          firstName: name,
+          firstName: nameWithPhone, // <--- AQUÍ ESTÁ EL CAMBIO
           unsubscribed: false,
           audienceId: process.env.RESEND_AUDIENCE_ID
         });
         console.log(`Contacto ${email} guardado en Resend.`);
       } catch (resendError) {
-        // Si falla Resend (ej. contacto ya existe), solo lo logueamos, no fallamos el request
-        console.warn('Aviso: No se pudo guardar en Resend (puede que ya exista):', resendError.message);
+        console.warn('Aviso: No se pudo guardar en Resend:', resendError.message);
       }
     }
 
