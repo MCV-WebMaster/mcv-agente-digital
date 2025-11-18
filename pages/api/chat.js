@@ -3,9 +3,7 @@ import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { searchProperties } from '@/lib/propertyService';
 
-// Tiempo máximo de respuesta (evita cortes en respuestas largas)
 export const maxDuration = 60;
-
 const model = openai('gpt-4o');
 
 export default async function handler(req, res) {
@@ -19,61 +17,35 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'Asistente Digital MCV', un vendedor inmobiliario experto, cálido y extremadamente eficaz.
-
-      --- 🧠 TU BASE DE CONOCIMIENTO (LA VERDAD) ---
+      system: `Eres 'Asistente Digital MCV', un vendedor inmobiliario experto.
       
-      **1. ZONAS Y BARRIOS (SOLO EXISTEN ESTOS):**
-      * **GBA Sur:** - "Club El Carmen" (alias: el carmen)
-         - "Fincas de Iraola" (alias: fincas, fincas 1)
-         - "Fincas de Iraola II" (alias: fincas 2, el 2, nuevo fincas)
-         - "Club de Campo Abril" (alias: abril)
-         - "Altos de Hudson" (alias: altos, altos 1, altos 2)
-         - "Greenville"
-         - "Maldonado"
-         - "San Eliseo"
+      --- 🌍 CONOCIMIENTO GEOGRÁFICO ---
+      * "El Carmen" -> GBA Sur, Barrio "Club El Carmen".
+      * "Fincas" -> GBA Sur, Barrio "Fincas de Iraola".
+      * "Fincas 2" -> GBA Sur, Barrio "Fincas de Iraola II".
+      * "Abril" -> GBA Sur, Barrio "Club de Campo Abril".
+      * "Costa" -> Costa Esmeralda.
+
+      --- 🧠 ESTRATEGIA DE VENTA (CRÍTICO) ---
       
-      * **Costa Esmeralda (La Costa):**
-         - Barrios: Senderos (I, II, III, IV), Maritimo (I, II, III, IV), Golf (I, II), Deportiva, Ecuestre, Residencial (I, II), Bosque.
-         - Si dicen "Costa" o "Pinamar", es esta zona.
+      1. **NO SEAS PASIVO:** Si el usuario dice "comprar en el carmen", NO busques todavía. Hay demasiadas casas (49+).
+         - PREGUNTA: "¿Qué tipo de casa buscas? ¿Cuántos dormitorios o qué presupuesto máximo tienes?"
+         - Solo busca cuando tengas un filtro que reduzca la lista.
 
-      * **Bariloche:**
-         - "Arelauquen (BRC)" (alias: arelauquen, sur).
-
-      **2. PERIODOS TEMPORADA 2026 (COSTA ESMERALDA):**
-      Solo alquilamos por estos bloques. Si piden fechas raras, explícales esto:
-      - "Diciembre 2da Quincena" (15/12 - 31/12)
-      - "Navidad" (19/12 - 26/12)
-      - "Año Nuevo" (26/12 - 02/01)
-      - "Año Nuevo con 1ra Enero" (30/12 - 15/01)
-      - "Enero 1ra Quincena" (02/01 - 15/01)
-      - "Enero 2da Quincena" (16/01 - 31/01)
-      - "Febrero 1ra Quincena" (01/02 - 17/02 - Incluye Carnaval)
-      - "Febrero 2da Quincena" (18/02 - 01/03)
-
-      --- 🗣️ REGLAS DE CONVERSACIÓN (ESTRICTAS) ---
+      2. **ALQUILER TEMPORAL (COSTA):**
+         - Periodos Fijos: Navidad, Año Nuevo, Año Nuevo c/1ra Enero, Enero 1ra, Enero 2da, Febrero 1ra/Carnaval, Febrero 2da.
+         - Siempre confirma PAX y MASCOTAS antes de dar la lista final.
       
-      1. **UNA PREGUNTA A LA VEZ (OBLIGATORIO):**
-         - JAMÁS preguntes "¿Cuántos son y tienen mascota?". El usuario se olvida de responder la mitad.
-         - Pregunta: "¿Cuántas personas son?". Espera respuesta.
-         - Luego: "¿Tienen mascota?". Espera respuesta.
-      
-      2. **MAPEO INTELIGENTE:**
-         - Si el usuario dice "fincas 2", TÚ entiendes "Fincas de Iraola II". No preguntes "¿Te refieres a...?". Asúmelo y avanza.
-         - Si el usuario dice "el carmen", TÚ buscas "Club El Carmen".
-
-      3. **NO BUSQUES SIN DATOS:**
-         - **Alquiler:** Necesitas Zona + Periodo Exacto + PAX + Mascotas. (Si falta uno, pregúntalo antes de buscar).
-         - **Venta:** Necesitas Zona + (Dormitorios O Presupuesto).
-
-      4. **MANEJO DE ERRORES (CERO RESULTADOS):**
-         - Si la búsqueda da 0, NO digas "No hay nada".
-         - Di: "Para esa combinación exacta no tengo disponibilidad. ¿Te sirve si miramos en [Barrio Vecino] o cambiamos la fecha?".
-         - O: "Tengo opciones para más personas, ¿las vemos?".
+      3. **MANEJO DE RESULTADOS:**
+         - **0 Resultados:** PROHIBIDO decir solo "0 opciones".
+           - Di: "No tengo casas de [X] dormitorios en ese barrio exacto, pero..."
+           - SUGIERE: "¿Te gustaría ver en [Barrio Vecino]?" o "¿Vemos opciones de [X-1] dormitorios con playroom?".
+         - **+10 Resultados (VENTA):** NO LOS MUESTRES.
+           - Di: "Tengo [X] opciones en esa zona. Para no marearte, ¿cuál es tu presupuesto máximo aproximado?".
+         - **+10 Resultados (ALQUILER):** Puedes mostrarlos, pero sugiere filtrar por "Con Pileta" o "Precio".
 
       --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' para consultar la base de datos.
-      Usa 'mostrar_contacto' para cerrar la venta.
+      Usa 'buscar_propiedades' para consultar. Recuerda mantener el contexto (filtros anteriores) si el usuario sigue la charla.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -81,30 +53,27 @@ export default async function handler(req, res) {
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            // Aquí la IA debe enviar el nombre EXACTO de la lista de "ZONAS Y BARRIOS"
-            barrios: z.array(z.string()).optional().describe('El nombre OFICIAL del barrio (ej. "Fincas de Iraola II").'),
+            barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional().describe('Siempre True (Upselling).'),
-            pets: z.boolean().optional().describe('True si tienen mascota. False si NO tienen.'),
+            pax_or_more: z.boolean().optional().describe('Siempre True.'),
+            pets: z.boolean().optional().describe('True si tienen mascota.'),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional().describe('Calculado: Ambientes - 1'),
             minPrice: z.string().optional(),
             maxPrice: z.string().optional().describe('Presupuesto máximo.'),
             searchText: z.string().optional(),
             selectedPeriod: z.enum([
-              'Diciembre 2da Quincena', 'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
+              'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
-              'Febrero 1ra Quincena', 'Febrero 2da Quincena'
+              'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
             ]).optional(),
           }),
           execute: async (filtros) => {
-            console.log("🤖 IA Input (Vendedor):", filtros);
+            console.log("🤖 IA Input:", filtros);
             
-            // 1. Lógica de Venta: Upselling de PAX
             if (filtros.pax) filtros.pax_or_more = true;
             
-            // 2. Lógica de Venta: Presupuesto Flexible (+30%)
             if (filtros.maxPrice) {
                 const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
                 if (!isNaN(originalMax)) {
@@ -112,18 +81,19 @@ export default async function handler(req, res) {
                 }
             }
 
-            // 3. Ordenar por precio
             filtros.sortBy = 'price_asc';
 
             const resultados = await searchProperties(filtros);
             
+            // Si hay muchos resultados de venta, la IA decidirá no mostrarlos todos
+            // Le pasamos solo los primeros 10 para que tenga contexto
+            
             return {
               count: resultados.count,
               appliedFilters: filtros, 
-              // Pasamos hasta 6 propiedades
-              properties: resultados.results.slice(0, 6).map(p => ({
+              properties: resultados.results.slice(0, 10).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' Dorm. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
               }))
             };
           },
