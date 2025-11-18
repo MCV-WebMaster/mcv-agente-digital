@@ -14,14 +14,12 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Opciones de Período 2026 (ACTUALIZADAS) ---
+// --- Opciones de Período 2026 (Coinciden con PERIOD_MAP) ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  // ¡NUEVO!
   { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
-  
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
   { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
@@ -275,6 +273,7 @@ export default function SearchPage() {
     }
   };
 
+  // --- 4. RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -477,7 +476,6 @@ export default function SearchPage() {
           {filters.operacion === 'alquiler_temporal' && (
             <>
               <div className="col-span-2">
-                {/* --- ¡CORREGIDO! "Temporada 2026" --- */}
                 <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                 <select
                   id="selectedPeriod" name="selectedPeriod"
@@ -577,7 +575,6 @@ export default function SearchPage() {
           <header className="flex flex-col md:flex-row items-start justify-between mb-8 pb-4 border-b border-gray-200">
             
             <div className="w-full md:w-1/4">
-              {/* --- ¡NUEVO! LOGO CLICKABLE --- */}
               <a href="/" aria-label="Ir al inicio">
                 <img 
                   src="/logo_mcv_rectangular.png" 
@@ -593,7 +590,6 @@ export default function SearchPage() {
             </div>
             
             <div className="w-full md:w-1/4 text-left md:text-right mt-4 md:mt-0">
-              {/* --- ¡CORREGIDO! "Asistente Digital" --- */}
               <h1 className="text-2xl md:text-3xl font-bold text-mcv-azul">Asistente Digital</h1>
               <p className="text-base text-gray-500">Encuentre su propiedad ideal</p>
               {!isSearching && filters.operacion && (
