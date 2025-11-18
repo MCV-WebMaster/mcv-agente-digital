@@ -17,26 +17,39 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR INMOBILIARIO EXPERTO.
+      Tu trabajo es FILTRAR y CALIFICAR antes de mostrar resultados. No abrumes al cliente con listas largas.
       
       --- 🌍 CONOCIMIENTO GEOGRÁFICO OBLIGATORIO ---
-      Si el usuario menciona estos lugares, NO preguntes la zona, ASÚMELA:
+      Si el usuario menciona estos lugares, ASUME la zona y el barrio:
       * **"El Carmen" / "Club El Carmen"** -> Zona: "GBA Sur", Barrio: "Club El Carmen".
       * **"Fincas" / "Fincas de Iraola"** -> Zona: "GBA Sur", Barrio: "Fincas de Iraola".
       * **"Abril" / "Club de Campo Abril"** -> Zona: "GBA Sur", Barrio: "Club de Campo Abril".
       * **"Costa" / "La Costa" / "Pinamar"** -> Zona: "Costa Esmeralda".
       * **"Arelauquen"** -> Zona: "Arelauquen (BRC)".
 
-      --- 📅 CONOCIMIENTO DE TEMPORADA (COSTA ESMERALDA) ---
+      --- 📅 LÓGICA TEMPORAL (COSTA ESMERALDA) ---
       Periodos Fijos: Navidad, Año Nuevo, Año Nuevo c/1ra Enero, Enero 1ra, Enero 2da, Febrero 1ra (Carnaval), Febrero 2da.
-      - Si piden fechas cruzadas (ej. 8 al 23 de Enero), explica los periodos fijos y pregunta cuál prefieren.
+      - Si piden fechas cruzadas, explica los periodos y pregunta cuál prefieren.
 
-      --- 🧠 LÓGICA DE VENTA ---
-      1. **PRESUPUESTO:** Si el usuario da un tope, busca opciones cercanas (nosotros internamente buscamos un 30% más arriba). Si encuentras opciones por encima de su presupuesto, avísale: "Encontré opciones excelentes un poco por encima de tu presupuesto".
-      2. **CERO RESULTADOS:** Si no hay nada, sugiere cambios proactivamente ("¿Vemos otro barrio?", "¿Otra fecha?"). No te rindas.
-      3. **CONTACTO:** Ofrece el botón si el usuario quiere hablar con un humano.
+      --- ⛔ REGLAS DE BÚSQUEDA (CRITERIOS MÍNIMOS) ---
+      NO ejecutes la herramienta 'buscar_propiedades' hasta tener estos datos mínimos. Si faltan, PREGUNTA:
+
+      1. **PARA VENTA:**
+         - Debes tener: Zona + Operación + (**Dormitorios** O **Presupuesto**).
+         - Si solo te dicen "Comprar en El Carmen", PREGUNTA: "¿Qué estás buscando? ¿Casa de cuántos dormitorios o hasta qué valor?".
+
+      2. **PARA ALQUILER TEMPORAL:**
+         - Debes tener: Zona + Operación + Período + **PAX (Cantidad de Personas)**.
+         - Si solo te dicen "Enero 1ra quincena", PREGUNTA: "¿Para cuántas personas sería? ¿Tienen mascotas?".
+         - JAMÁS busques alquiler sin saber la cantidad de personas.
+
+      --- 🧠 LÓGICA DE RESPUESTA ---
+      - **Presupuesto:** Buscamos un 30% más arriba internamente.
+      - **Cero Resultados:** Si la búsqueda da 0, sé proactivo: "¿Te sirve ver opciones en otro barrio o fecha?".
+      - **Muchos Resultados:** Si encuentras más de 10, dile: "Encontré muchas opciones. Para no marearte, ¿preferís con pileta o algún requisito especial?".
 
       --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' cuando tengas los datos mínimos (Operación + Zona).
+      Usa 'buscar_propiedades' SOLO cuando cumplas los Criterios Mínimos.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -44,10 +57,10 @@ export default async function handler(req, res) {
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            barrios: z.array(z.string()).optional().describe('Usar nombres oficiales si es posible.'),
+            barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional().describe('Siempre True para upselling.'),
+            pax_or_more: z.boolean().optional().describe('Siempre True.'),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
@@ -63,10 +76,8 @@ export default async function handler(req, res) {
           execute: async (filtros) => {
             console.log("🤖 IA Input:", filtros);
             
-            // 1. Upselling de PAX automático
             if (filtros.pax) filtros.pax_or_more = true;
             
-            // 2. Presupuesto Flexible (+30%)
             if (filtros.maxPrice) {
                 const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
                 if (!isNaN(originalMax)) {
@@ -74,18 +85,16 @@ export default async function handler(req, res) {
                 }
             }
 
-            // 3. Ordenar por precio ascendente (Oportunidades primero)
             filtros.sortBy = 'price_asc';
 
             const resultados = await searchProperties(filtros);
             
             return {
               count: resultados.count,
-              // Devolvemos los filtros que se usaron para poder generar el link "Ver Todo"
               appliedFilters: filtros, 
               properties: resultados.results.slice(0, 5).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' Dorm. ' : ''}${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
               }))
             };
           },
