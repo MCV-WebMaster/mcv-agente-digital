@@ -16,38 +16,29 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y entender EXACTAMENTE qué necesita antes de mostrarle propiedades.
-      
-      --- CONOCIMIENTO INSTITUCIONAL (SOBRE NOSOTRAS) ---
-      Si te preguntan quiénes son, contacto o sobre el equipo, usa esta información:
-      
-      * **Maria Cecilia Vidal**: Martillera Pública Col. Nº1172. (Líder).
-      * **Andrea Diaz**: Equipo Costa Esmeralda.
-      * **Marcela Cacace**: Equipo GBA Sur.
-      * **Roxana Caputo**: Equipo GBA Sur.
-      
-      * **Nuestras Zonas**: Gran Buenos Aires Sur (Berazategui, Hudson, Quilmes) y Costa Esmeralda / Pinamar. Arelauquen (Bariloche).
-      
+      system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR experto. 
+      Tu objetivo es CONSEGUIR EL CLIENTE. No solo respondas, ofrece soluciones.
+
       --- PROTOCOLO DE ATENCIÓN ---
-
-      PASO 1: DEFINIR OPERACIÓN
-      Si no lo dijo, pregunta: "¿Qué estás buscando? ¿Comprar, Alquiler Temporal o Alquiler Anual?".
-
-      PASO 2: DEFINIR ZONA
-      Si no lo dijo, pregunta: "¿En qué zona? (GBA Sur, Costa Esmeralda, Arelauquen)".
-
-      PASO 3: DEFINIR DETALLES
-      - Compra/Anual: Ambientes, mts2, presupuesto.
-      - Alquiler Temporal:
-           * Costa Esmeralda usa PERIODOS FIJOS.
-           * Pregunta siempre: Cantidad de Personas (PAX) y Mascotas.
+      1. Califica rápido (Operación, Zona, Detalles).
+      2. Alquiler Temporal: Recuerda que Costa Esmeralda son QUINCENAS FIJAS.
+      3. Cantidad de Personas (PAX): Si piden para 6, busca también para 7, 8 o más.
+         *TIP DE VENTA:* "Tengo estas opciones. Algunas tienen más capacidad pero están a muy buen precio, te pueden servir para estar más cómodos."
 
       --- MANEJO DE RESULTADOS ---
-      - Si encuentras 0 resultados, sé proactivo y ofrece buscar variantes (más pax, otro barrio, etc.) antes de rendirte.
-      - Si el usuario pide contacto, usa 'mostrar_contacto'.
+      A) RESULTADOS ENCONTRADOS:
+         Presenta las opciones. Resalta el precio si es bueno.
+         Si mostramos casas más grandes de lo pedido, aclaralo como un beneficio ("Mayor comodidad").
 
-      --- USO DE HERRAMIENTAS ---
-      Usa 'buscar_propiedades' para consultar la base de datos.
+      B) CERO RESULTADOS:
+         ACTITUD PROACTIVA. "No tengo exacto eso, pero..."
+         - Sugiere cambiar fechas.
+         - Sugiere cambiar barrio.
+         - Ofrece contactar a un agente humano INMEDIATAMENTE para búsqueda off-market.
+
+      --- HERRAMIENTAS ---
+      - 'buscar_propiedades': Busca en la base de datos. (El motor ya busca automáticamente PAX superiores).
+      - 'mostrar_contacto': Úsala para cerrar la venta o derivar si no hay opciones.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -58,7 +49,7 @@ export default async function handler(req, res) {
             barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional(),
+            pax_or_more: z.boolean().optional().describe('Siempre True para ofrecer más opciones.'),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
@@ -66,21 +57,26 @@ export default async function handler(req, res) {
             maxPrice: z.string().optional(),
             searchText: z.string().optional(),
             selectedPeriod: z.enum([
-              'Navidad', 'Año Nuevo', 
-              'Año Nuevo con 1ra Enero', // ¡NUEVO!
+              'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
               'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
             ]).optional(),
           }),
           execute: async (filtros) => {
             console.log("🤖 IA Ejecutando Búsqueda:", filtros);
+            
+            // Forzamos "pax_or_more" para mentalidad de venta (Upselling)
+            if (filtros.pax) {
+                filtros.pax_or_more = true;
+            }
+
             const resultados = await searchProperties(filtros);
             
             return {
               count: resultados.count,
-              properties: resultados.results.slice(0, 4).map(p => ({
+              properties: resultados.results.slice(0, 5).map(p => ({
                 ...p,
-                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${p.min_rental_price || 'Consultar'}.`
+                summary: `${p.title} (${p.pax} Pax) en ${p.barrio || p.zona}. Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
               }))
             };
           },
