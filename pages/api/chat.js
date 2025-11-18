@@ -3,7 +3,9 @@ import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { searchProperties } from '@/lib/propertyService';
 
+// Tiempo máximo de respuesta (evita cortes en respuestas largas)
 export const maxDuration = 60;
+
 const model = openai('gpt-4o');
 
 export default async function handler(req, res) {
@@ -17,70 +19,92 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR INMOBILIARIO EXPERTO.
+      system: `Eres 'Asistente Digital MCV', un vendedor inmobiliario experto, cálido y extremadamente eficaz.
+
+      --- 🧠 TU BASE DE CONOCIMIENTO (LA VERDAD) ---
       
-      --- 🧠 MEMORIA Y CONTEXTO (CRÍTICO) ---
-      * **MANTÉN EL CONTEXTO:** Si el usuario ya definió una fecha (ej. Enero 2da), una zona o una cantidad de personas, **NO LOS OLVIDES** en la siguiente búsqueda.
-      * Si el usuario dice "con lavavajillas", debes buscar: Fecha Anterior + Zona Anterior + Pax Anterior + "lavavajillas".
-      * Solo cambia un filtro si el usuario lo pide explícitamente.
-
-      --- 🌍 MAPEO GEOGRÁFICO ---
-      * "El Carmen" -> GBA Sur, Barrio: "Club El Carmen".
-      * "Fincas", "Fincas 1" -> GBA Sur, Barrio: "Fincas de Iraola".
-      * **"Fincas 2", "El 2" (si hablan de Fincas)** -> GBA Sur, Barrio: "Fincas de Iraola II".
-      * "Abril" -> GBA Sur, Barrio: "Club de Campo Abril".
-      * "Costa" -> Costa Esmeralda.
-
-      --- 📅 LÓGICA TEMPORAL ---
-      * Costa Esmeralda: Solo periodos fijos (Navidad, Año Nuevo, Enero 1ra/2da, Febrero 1ra/2da).
-      * **Fechas Cruzadas:** Si piden fechas que rompen quincenas, explica y ofrece las quincenas completas.
-
-      --- 🗣️ ESTRATEGIA DE VENTA (CÓMO RESPONDER) ---
+      **1. ZONAS Y BARRIOS (SOLO EXISTEN ESTOS):**
+      * **GBA Sur:** - "Club El Carmen" (alias: el carmen)
+         - "Fincas de Iraola" (alias: fincas, fincas 1)
+         - "Fincas de Iraola II" (alias: fincas 2, el 2, nuevo fincas)
+         - "Club de Campo Abril" (alias: abril)
+         - "Altos de Hudson" (alias: altos, altos 1, altos 2)
+         - "Greenville"
+         - "Maldonado"
+         - "San Eliseo"
       
-      **ESCENARIO A: 0 RESULTADOS**
-      * Nunca digas "no hay". Di: "Para esos requisitos exactos está todo reservado/vendido, PERO..."
-      * **Propón alternativas:** "¿Te sirve ver en el barrio de al lado?", "¿Si buscamos para más personas?", "¿Y si miramos la quincena siguiente?".
-      * Si el filtro fue precio, di: "Por ese valor no quedó nada, lo más económico arranca en [Precio Mínimo Real]. ¿Te lo muestro?".
+      * **Costa Esmeralda (La Costa):**
+         - Barrios: Senderos (I, II, III, IV), Maritimo (I, II, III, IV), Golf (I, II), Deportiva, Ecuestre, Residencial (I, II), Bosque.
+         - Si dicen "Costa" o "Pinamar", es esta zona.
 
-      **ESCENARIO B: MUCHOS RESULTADOS (+10)**
-      * Di: "Tengo muchas opciones. Para ayudarte a elegir la mejor: ¿Buscas con pileta climatizada? ¿O tenés un presupuesto máximo?" (Si no lo dio).
+      * **Bariloche:**
+         - "Arelauquen (BRC)" (alias: arelauquen, sur).
 
-      **ESCENARIO C: RESULTADOS ENCONTRADOS**
-      * Muestra las tarjetas.
-      * Vende el valor: "Mirá estas opciones. La primera tiene muy buen precio para la zona".
+      **2. PERIODOS TEMPORADA 2026 (COSTA ESMERALDA):**
+      Solo alquilamos por estos bloques. Si piden fechas raras, explícales esto:
+      - "Diciembre 2da Quincena" (15/12 - 31/12)
+      - "Navidad" (19/12 - 26/12)
+      - "Año Nuevo" (26/12 - 02/01)
+      - "Año Nuevo con 1ra Enero" (30/12 - 15/01)
+      - "Enero 1ra Quincena" (02/01 - 15/01)
+      - "Enero 2da Quincena" (16/01 - 31/01)
+      - "Febrero 1ra Quincena" (01/02 - 17/02 - Incluye Carnaval)
+      - "Febrero 2da Quincena" (18/02 - 01/03)
+
+      --- 🗣️ REGLAS DE CONVERSACIÓN (ESTRICTAS) ---
+      
+      1. **UNA PREGUNTA A LA VEZ (OBLIGATORIO):**
+         - JAMÁS preguntes "¿Cuántos son y tienen mascota?". El usuario se olvida de responder la mitad.
+         - Pregunta: "¿Cuántas personas son?". Espera respuesta.
+         - Luego: "¿Tienen mascota?". Espera respuesta.
+      
+      2. **MAPEO INTELIGENTE:**
+         - Si el usuario dice "fincas 2", TÚ entiendes "Fincas de Iraola II". No preguntes "¿Te refieres a...?". Asúmelo y avanza.
+         - Si el usuario dice "el carmen", TÚ buscas "Club El Carmen".
+
+      3. **NO BUSQUES SIN DATOS:**
+         - **Alquiler:** Necesitas Zona + Periodo Exacto + PAX + Mascotas. (Si falta uno, pregúntalo antes de buscar).
+         - **Venta:** Necesitas Zona + (Dormitorios O Presupuesto).
+
+      4. **MANEJO DE ERRORES (CERO RESULTADOS):**
+         - Si la búsqueda da 0, NO digas "No hay nada".
+         - Di: "Para esa combinación exacta no tengo disponibilidad. ¿Te sirve si miramos en [Barrio Vecino] o cambiamos la fecha?".
+         - O: "Tengo opciones para más personas, ¿las vemos?".
 
       --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' acumulando los filtros de la conversación.
-      Usa 'mostrar_contacto' si el usuario quiere reservar o atención humana.
+      Usa 'buscar_propiedades' para consultar la base de datos.
+      Usa 'mostrar_contacto' para cerrar la venta.
       `,
       tools: {
         buscar_propiedades: tool({
-          description: 'Busca propiedades. ACUMULA los filtros anteriores si el usuario no los cambia.',
+          description: 'Ejecuta la búsqueda en la base de datos.',
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            barrios: z.array(z.string()).optional(),
+            // Aquí la IA debe enviar el nombre EXACTO de la lista de "ZONAS Y BARRIOS"
+            barrios: z.array(z.string()).optional().describe('El nombre OFICIAL del barrio (ej. "Fincas de Iraola II").'),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional().describe('Siempre True.'),
-            pets: z.boolean().optional(),
+            pax_or_more: z.boolean().optional().describe('Siempre True (Upselling).'),
+            pets: z.boolean().optional().describe('True si tienen mascota. False si NO tienen.'),
             pool: z.boolean().optional(),
-            bedrooms: z.string().optional(),
+            bedrooms: z.string().optional().describe('Calculado: Ambientes - 1'),
             minPrice: z.string().optional(),
-            maxPrice: z.string().optional().describe('El presupuesto dicho por el usuario.'),
-            searchText: z.string().optional().describe('Para características como "lavavajillas", "losa radiante", etc.'),
+            maxPrice: z.string().optional().describe('Presupuesto máximo.'),
+            searchText: z.string().optional(),
             selectedPeriod: z.enum([
-              'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
+              'Diciembre 2da Quincena', 'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
-              'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
+              'Febrero 1ra Quincena', 'Febrero 2da Quincena'
             ]).optional(),
           }),
           execute: async (filtros) => {
-            console.log("🤖 IA Input:", filtros);
+            console.log("🤖 IA Input (Vendedor):", filtros);
             
+            // 1. Lógica de Venta: Upselling de PAX
             if (filtros.pax) filtros.pax_or_more = true;
             
-            // Presupuesto Flexible (+30%)
+            // 2. Lógica de Venta: Presupuesto Flexible (+30%)
             if (filtros.maxPrice) {
                 const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
                 if (!isNaN(originalMax)) {
@@ -88,6 +112,7 @@ export default async function handler(req, res) {
                 }
             }
 
+            // 3. Ordenar por precio
             filtros.sortBy = 'price_asc';
 
             const resultados = await searchProperties(filtros);
@@ -95,9 +120,10 @@ export default async function handler(req, res) {
             return {
               count: resultados.count,
               appliedFilters: filtros, 
+              // Pasamos hasta 6 propiedades
               properties: resultados.results.slice(0, 6).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
               }))
             };
           },
