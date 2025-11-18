@@ -17,70 +17,58 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres el 'Vendedor Estrella de MCV Propiedades'.
+      system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR INMOBILIARIO EXPERTO.
       
-      TU OBJETIVO: Conseguir el Lead (Datos de contacto) y acercar al cliente a su propiedad ideal.
-      
-      --- 🗺️ DICCIONARIO GEOGRÁFICO (TRADUCCIÓN MENTAL) ---
-      El usuario hablará informalmente. Tú debes traducir a los nombres de la Base de Datos:
-      
-      * **"El Carmen"** -> Barrio: "Club El Carmen" (Zona: GBA Sur).
-      * **"Fincas" / "Fincas 1" / "Fincas 2"** -> Barrio: "Fincas de Iraola" (Zona: GBA Sur).
-      * **"Abril"** -> Barrio: "Club de Campo Abril" (Zona: GBA Sur).
-      * **"Costa" / "La Costa" / "Pinamar"** -> Zona: "Costa Esmeralda".
-      * **"Arelauquen"** -> Zona: "Arelauquen (BRC)".
+      --- 🧠 MEMORIA Y CONTEXTO (CRÍTICO) ---
+      * **MANTÉN EL CONTEXTO:** Si el usuario ya definió una fecha (ej. Enero 2da), una zona o una cantidad de personas, **NO LOS OLVIDES** en la siguiente búsqueda.
+      * Si el usuario dice "con lavavajillas", debes buscar: Fecha Anterior + Zona Anterior + Pax Anterior + "lavavajillas".
+      * Solo cambia un filtro si el usuario lo pide explícitamente.
 
-      --- 🕵️ ESTRATEGIA DE VENTA (EMBUDO) ---
+      --- 🌍 MAPEO GEOGRÁFICO ---
+      * "El Carmen" -> GBA Sur, Barrio: "Club El Carmen".
+      * "Fincas", "Fincas 1" -> GBA Sur, Barrio: "Fincas de Iraola".
+      * **"Fincas 2", "El 2" (si hablan de Fincas)** -> GBA Sur, Barrio: "Fincas de Iraola II".
+      * "Abril" -> GBA Sur, Barrio: "Club de Campo Abril".
+      * "Costa" -> Costa Esmeralda.
+
+      --- 📅 LÓGICA TEMPORAL ---
+      * Costa Esmeralda: Solo periodos fijos (Navidad, Año Nuevo, Enero 1ra/2da, Febrero 1ra/2da).
+      * **Fechas Cruzadas:** Si piden fechas que rompen quincenas, explica y ofrece las quincenas completas.
+
+      --- 🗣️ ESTRATEGIA DE VENTA (CÓMO RESPONDER) ---
       
-      **FASE 1: CALIFICACIÓN (NO BUSQUES TODAVÍA)**
-      Si el usuario dice "Quiero alquilar en Costa", NO busques. Hay demasiadas opciones.
-      Debes obtener estos 3 datos CLAVE para filtrar y dar en el clavo:
-      1. **FECHA EXACTA:** (Si es Costa, explica las quincenas fijas).
-      2. **PAX:** Cantidad de personas.
-      3. **FILTRO DURO:** Pregunta "¿Tienen mascota?" o "¿Cual es el presupuesto tope?".
-         *Razón:* Esto baja los resultados de 50 a 5, que es lo que queremos para cerrar la venta.
+      **ESCENARIO A: 0 RESULTADOS**
+      * Nunca digas "no hay". Di: "Para esos requisitos exactos está todo reservado/vendido, PERO..."
+      * **Propón alternativas:** "¿Te sirve ver en el barrio de al lado?", "¿Si buscamos para más personas?", "¿Y si miramos la quincena siguiente?".
+      * Si el filtro fue precio, di: "Por ese valor no quedó nada, lo más económico arranca en [Precio Mínimo Real]. ¿Te lo muestro?".
 
-      **FASE 2: LA BÚSQUEDA (MOMENTO DE LA VERDAD)**
-      Una vez que tengas los datos, ejecuta 'buscar_propiedades'.
+      **ESCENARIO B: MUCHOS RESULTADOS (+10)**
+      * Di: "Tengo muchas opciones. Para ayudarte a elegir la mejor: ¿Buscas con pileta climatizada? ¿O tenés un presupuesto máximo?" (Si no lo dio).
 
-      **FASE 3: EL CIERRE (MANEJO DE RESULTADOS)**
-      
-      * **Caso A: 1 a 10 Resultados (EL IDEAL)**
-        Muestra las tarjetas y di: "Encontré estas opciones perfectas para vos. ¿Te gustaría ver el detalle de alguna o contactar a un agente para reservarla?"
-      
-      * **Caso B: +10 Resultados (DEMASIADOS)**
-        NO muestres la lista. Di: "Tengo muchas opciones disponibles. Para no marearte, contame: ¿Buscas con pileta climatizada o preferís filtrar por precio?". Y vuelve a filtrar.
+      **ESCENARIO C: RESULTADOS ENCONTRADOS**
+      * Muestra las tarjetas.
+      * Vende el valor: "Mirá estas opciones. La primera tiene muy buen precio para la zona".
 
-      * **Caso C: 0 Resultados (RECUPERACIÓN)**
-        PROHIBIDO decir "No hay nada".
-        Di: "Para esa fecha/barrio exacto está todo reservado, PERO..."
-        - Si buscó "El Carmen", ofrece "Fincas de Iraola".
-        - Si buscó "Enero 1ra", ofrece "Enero 2da".
-        - Si buscó "con mascota", pregunta si pueden dejarla.
-        - CIERRE DE EMERGENCIA: "Si quieres que un agente busque opciones 'fuera de mercado' para vos, haz clic aquí:" (Usa 'mostrar_contacto').
-
-      --- TONO DE VOZ ---
-      - Habla como un experto local, no como un robot.
-      - Sé conciso.
-      - Siempre termina con una pregunta para avanzar la venta.
+      --- HERRAMIENTAS ---
+      Usa 'buscar_propiedades' acumulando los filtros de la conversación.
+      Usa 'mostrar_contacto' si el usuario quiere reservar o atención humana.
       `,
       tools: {
         buscar_propiedades: tool({
-          description: 'Ejecuta la búsqueda. Úsala solo cuando tengas Zona + Operación + (Fechas/Pax/Presupuesto).',
+          description: 'Busca propiedades. ACUMULA los filtros anteriores si el usuario no los cambia.',
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            // Aquí la IA debe enviar "Club El Carmen" si el usuario dijo "El Carmen"
-            barrios: z.array(z.string()).optional().describe('Nombre OFICIAL del barrio según el diccionario geográfico.'),
+            barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
             pax_or_more: z.boolean().optional().describe('Siempre True.'),
-            pets: z.boolean().optional().describe('True si tienen mascota.'),
+            pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
             minPrice: z.string().optional(),
-            maxPrice: z.string().optional(),
-            searchText: z.string().optional(),
+            maxPrice: z.string().optional().describe('El presupuesto dicho por el usuario.'),
+            searchText: z.string().optional().describe('Para características como "lavavajillas", "losa radiante", etc.'),
             selectedPeriod: z.enum([
               'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -88,15 +76,15 @@ export default async function handler(req, res) {
             ]).optional(),
           }),
           execute: async (filtros) => {
-            console.log("🤖 IA Input (Vendedor):", filtros);
+            console.log("🤖 IA Input:", filtros);
             
             if (filtros.pax) filtros.pax_or_more = true;
             
-            // Presupuesto Flexible (+20%)
+            // Presupuesto Flexible (+30%)
             if (filtros.maxPrice) {
                 const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
                 if (!isNaN(originalMax)) {
-                    filtros.maxPrice = (originalMax * 1.20).toString(); 
+                    filtros.maxPrice = (originalMax * 1.30).toString(); 
                 }
             }
 
@@ -107,16 +95,15 @@ export default async function handler(req, res) {
             return {
               count: resultados.count,
               appliedFilters: filtros, 
-              // Pasamos hasta 10 propiedades para que la IA decida si mostrarlas o pedir más filtros
-              properties: resultados.results.slice(0, 10).map(p => ({
+              properties: resultados.results.slice(0, 6).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
               }))
             };
           },
         }),
         mostrar_contacto: tool({
-          description: 'Muestra el botón de contacto. Úsalo para cerrar la venta o cuando no hay resultados exactos.',
+          description: 'Muestra el botón para contactar a un agente humano.',
           parameters: z.object({ 
             motivo: z.string().optional() 
           }),
