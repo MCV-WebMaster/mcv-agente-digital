@@ -6,7 +6,6 @@ import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 import Link from 'next/link';
 
-// Configuración del Modal
 Modal.setAppElement('#__next');
 
 export default function ChatPage() {
@@ -21,13 +20,23 @@ export default function ChatPage() {
     propertyCount: 0
   });
   const inputRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
-  // Auto-scroll al fondo
+  // Scroll inteligente: Solo al final si es un mensaje corto o del usuario
+  // Si es una respuesta larga de la IA con propiedades, el usuario querrá ver el principio.
   useEffect(() => {
-    window.scrollTo(0, document.body.scrollHeight);
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      // Si el último mensaje es del usuario, scrolleamos al fondo para que vea su input
+      if (lastMessage.role === 'user') {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } 
+      // Si es de la IA, NO forzamos scroll al fondo si hay contenido largo,
+      // dejamos que el usuario lea desde donde estaba o scrollee si quiere.
+    }
   }, [messages]);
 
-  // Foco automático al terminar de responder
+  // Foco automático al terminar
   useEffect(() => {
     if (!isLoading) {
       setTimeout(() => inputRef.current?.focus(), 10);
@@ -37,12 +46,7 @@ export default function ChatPage() {
   const handleContactSingleProperty = (property) => {
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Chat del Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
-
-    setContactPayload({
-      whatsappMessage,
-      adminEmailHtml,
-      propertyCount: 1
-    });
+    setContactPayload({ whatsappMessage, adminEmailHtml, propertyCount: 1 });
     setIsModalOpen(true);
   };
 
@@ -53,7 +57,6 @@ export default function ChatPage() {
     setIsModalOpen(true);
   };
 
-  // Helper para construir la URL de "Ver Todo" en el buscador principal
   const buildSearchUrl = (filters) => {
     const params = new URLSearchParams();
     if (filters.operacion) params.set('operacion', filters.operacion);
@@ -65,7 +68,6 @@ export default function ChatPage() {
     if (filters.searchText) params.set('searchText', filters.searchText);
     if (filters.minPrice) params.set('minPrice', filters.minPrice);
     if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
-    
     return `/?${params.toString()}`;
   };
 
@@ -80,7 +82,6 @@ export default function ChatPage() {
         propertyCount={contactPayload.propertyCount}
       />
 
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 p-4 shadow-sm sticky top-0 z-10">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
            <a href="/" className="text-mcv-azul font-bold text-lg hover:underline">&larr; Volver al Buscador</a>
@@ -88,20 +89,18 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* Área de Chat */}
       <div className="flex-grow p-4 pb-24">
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.length === 0 && (
             <div className="bg-white p-6 rounded-lg shadow text-center">
               <h2 className="text-2xl font-bold text-mcv-azul mb-2">¡Hola! Soy tu Asistente Virtual.</h2>
               <p className="text-gray-600">
-                Puedo ayudarte a encontrar propiedades en venta o alquiler. <br/>
-                Probá preguntarme: <em>"Busco una casa en Costa Esmeralda con pileta para enero"</em> o <em>"Qué hay en venta en El Carmen"</em>.
+                Puedo ayudarte a encontrar propiedades en venta o alquiler.
               </p>
             </div>
           )}
 
-          {messages.map(m => (
+          {messages.map((m, index) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div 
                 className={`max-w-[90%] md:max-w-[80%] rounded-lg p-4 shadow-sm ${
@@ -131,13 +130,12 @@ export default function ChatPage() {
                               <PropertyCard 
                                 key={prop.property_id} 
                                 property={prop} 
-                                filters={args} // Pasamos los filtros a la tarjeta para que muestre el precio correcto
+                                filters={args}
                                 onContact={handleContactSingleProperty}
                               />
                             ))}
                           </div>
                           
-                          {/* --- ¡NUEVO! BOTÓN VER TODO --- */}
                           {result.count > result.properties.length && (
                             <a 
                               href={seeAllUrl}
@@ -175,6 +173,7 @@ export default function ChatPage() {
             </div>
           ))}
           {isLoading && <div className="text-center text-gray-500"><Spinner /> Escribiendo...</div>}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
