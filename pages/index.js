@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import Head from 'next/head'; // ¡NUEVO!
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
@@ -8,18 +7,21 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import FloatingButton from '@/components/ChatWidget'; // Usamos ChatWidget como botón flotante principal
+import FloatingButton from '@/components/FloatingButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- Opciones de Período 2026 (ACTUALIZADAS) ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
+  // ¡NUEVO!
   { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
+  
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
   { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
@@ -475,6 +477,7 @@ export default function SearchPage() {
           {filters.operacion === 'alquiler_temporal' && (
             <>
               <div className="col-span-2">
+                {/* --- ¡CORREGIDO! "Temporada 2026" --- */}
                 <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                 <select
                   id="selectedPeriod" name="selectedPeriod"
@@ -559,20 +562,6 @@ export default function SearchPage() {
     <div id="__next">
       <div className="min-h-screen bg-white text-gray-800">
         
-        {/* --- ¡NUEVO! Metadata --- */}
-        <Head>
-          <title>MCV Vidal Propiedades, inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda</title>
-          <meta name="description" content="MCV Vidal Propiedades, inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda. Venta y alquiler de casas, departamentos y lotes." />
-          
-          {/* Open Graph / Facebook */}
-          <meta property="og:type" content="website" />
-          <meta property="og:title" content="MCV Vidal Propiedades" />
-          <meta property="og:description" content="Inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda" />
-          
-          {/* Favicon */}
-          <link rel="icon" href="/favico_blanco.png" />
-        </Head>
-
         <ContactModal
           isOpen={isModalOpen}
           onRequestClose={() => setIsModalOpen(false)}
@@ -612,8 +601,7 @@ export default function SearchPage() {
                   {propertyCount} {propertyCount === 1 ? 'Propiedad Encontrada' : 'Propiedades Encontradas'}
                 </h2>
               )}
-              {/* ¡NUEVO! Mostrar botón de contacto solo si hay filtros u resultados */}
-              {!isSearching && filters.operacion && (
+              {!isSearching && results.length > 0 && (
                 <button
                   onClick={generateContactMessages}
                   className="mt-4 px-4 py-2 bg-mcv-verde text-white font-bold rounded-lg shadow-lg hover:bg-opacity-80 transition-all"
