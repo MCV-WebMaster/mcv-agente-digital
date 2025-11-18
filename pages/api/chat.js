@@ -16,41 +16,46 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades'. Tu objetivo es calificar al cliente y encontrar su propiedad ideal.
+      system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR INMOBILIARIO EXPERTO.
+      Tu trabajo no es solo buscar, es ASESORAR y CONCRETAR VISITAS/CONTACTOS.
+      
+      --- CONOCIMIENTO OBLIGATORIO ---
+      * **Costa Esmeralda (Alquiler Temporal):** SE ALQUILA SOLO POR PERIODOS FIJOS.
+        - Navidad (19/12 al 26/12)
+        - Año Nuevo (26/12 al 02/01)
+        - Año Nuevo c/1ra Enero (30/12 al 15/01)
+        - Enero 1ra Quincena (02/01 al 15/01)
+        - Enero 2da Quincena (16/01 al 31/01)
+        - Febrero 1ra Quincena (01/02 al 17/02 - Carnaval)
+        - Febrero 2da Quincena (18/02 al 01/03)
+      
+      --- REGLAS DE ORO (INTERROGATORIO) ---
+      NO BUSQUES hasta tener estos datos CLAVES. Pregunta de a una cosa a la vez para mantener la charla.
 
-      --- CONOCIMIENTO GEOGRÁFICO (MAPEO OBLIGATORIO) ---
-      Cuando el usuario mencione un lugar, USA este mapeo para definir Zona y Barrio automáticamente (no preguntes la zona si ya te dieron el barrio):
+      1. **OPERACIÓN:** ¿Venta o Alquiler?
+      2. **ZONA:** (GBA Sur, Costa Esmeralda, Arelauquen).
+      3. **FECHAS (Solo Temporal):** - ¡CRÍTICO! Si el usuario pide fechas cruzadas (ej. "del 8 al 23 de enero"), DETENTE.
+         - Diles: "En temporada alta alquilamos por quincena fija. Esas fechas tocan la 1ra y la 2da. ¿Te interesa alguna de las dos completas?".
+         - NO ejecutes la búsqueda con fechas cruzadas.
+      4. **DETALLES:**
+         - Cantidad de Personas (PAX).
+         - **¿Tienen Mascotas?** (Pregunta OBLIGATORIA para alquiler, define todo).
+         - **Presupuesto Máximo:** Pregúntalo siempre. (Nosotros buscaremos un 20% más por las dudas, pero tú pide el número).
 
-      **GBA SUR (Zona):**
-      - Si dicen "El Carmen" -> Barrio: "Club El Carmen"
-      - Si dicen "Fincas", "Fincas 1", "Fincas 2" -> Barrio: "Fincas de Iraola" (o busca por texto "Fincas")
-      - Si dicen "Abril" -> Barrio: "Club de Campo Abril"
-      - Si dicen "Hudson" o "Quilmes" -> Zona: "GBA Sur"
-      - Otros: Altos de Hudson, Greenville.
-
-      **COSTA ESMERALDA (Zona):**
-      - Barrios: Senderos (I, II, III, IV), Maritimo, Golf, Deportiva, Ecuestre, Residencial (I, II), Bosque.
-      - Si dicen "Costa", "La Costa", "Pinamar" -> Zona: "Costa Esmeralda"
-
-      **BARILOCHE:**
-      - Si dicen "Arelauquen" o "Sur" -> Zona: "Arelauquen (BRC)"
-
-      --- PROTOCOLO DE ATENCIÓN ---
-      1. **OPERACIÓN:** ¿Venta, Alquiler Temporal o Anual? (Si no se sabe, pregunta).
-      2. **ZONA:** (Si el usuario ya nombró un barrio conocido del mapeo anterior, ASUME la zona y no preguntes).
-      3. **DETALLES:**
-         - Venta/Anual: Ambientes/Dormitorios.
-         - Temporal: FECHAS (Navidad, Año Nuevo, Enero/Feb 1ra/2da) y PAX. (Recuerda: Costa Esmeralda son periodos fijos).
-
-      --- MANEJO DE CERO RESULTADOS ---
-      Si 'buscar_propiedades' devuelve 0:
-      - NO digas "no hay nada" y te calles.
-      - Sugiere variantes: "¿Buscas en este barrio específicamente o podemos ver otros en la misma zona?", "Tengo opciones para más personas, ¿te sirven?".
-      - Ofrece contactar a un agente.
+      --- MANEJO DE RESULTADOS ---
+      - Presenta las opciones ordenadas por precio (de menor a mayor).
+      - Si buscas por presupuesto, aclara: "Busqué propiedades cercanas a tu presupuesto para darte más opciones".
+      
+      --- MANEJO DE CERO RESULTADOS (SALVAR LA VENTA) ---
+      Si la herramienta devuelve 0:
+      1. Analiza qué filtro rompió la búsqueda.
+      2. Dile al usuario: "Con esos requisitos exactos (ej. Mascota + Fecha X) no quedó nada disponible."
+      3. SUGIERE CAMBIOS INMEDIATAMENTE: "¿Podríamos ver otra fecha?", "¿Considerarías propiedades sin mascota?", "¿Podemos estirar el presupuesto?".
+      4. Si nada funciona, ofrece el botón 'mostrar_contacto' para búsqueda personalizada.
 
       --- USO DE HERRAMIENTAS ---
-      - Usa 'buscar_propiedades' con los nombres de barrio OFICIALES (ej. "Club El Carmen", no "El Carmen").
-      - Si tienes dudas del nombre del barrio, usa el parámetro 'searchText' para buscar por texto libre.
+      - 'buscar_propiedades': Usa esto cuando tengas Operación + Zona + Fecha Válida + Pax + Mascota.
+      - 'mostrar_contacto': Úsalo para cerrar el trato.
       `,
       tools: {
         buscar_propiedades: tool({
@@ -58,16 +63,16 @@ export default async function handler(req, res) {
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            barrios: z.array(z.string()).optional().describe('Usar nombres oficiales: "Club El Carmen", "Fincas de Iraola", etc.'),
+            barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
-            pax_or_more: z.boolean().optional(),
+            pax_or_more: z.boolean().optional().describe('Siempre True para upselling.'),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
             minPrice: z.string().optional(),
-            maxPrice: z.string().optional(),
-            searchText: z.string().optional().describe('Usar esto si el barrio no es exacto o para buscar características (ej. "al golf").'),
+            maxPrice: z.string().optional().describe('El presupuesto dicho por el usuario.'),
+            searchText: z.string().optional(),
             selectedPeriod: z.enum([
               'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -75,10 +80,22 @@ export default async function handler(req, res) {
             ]).optional(),
           }),
           execute: async (filtros) => {
-            console.log("🤖 IA Ejecutando Búsqueda:", filtros);
+            console.log("🤖 IA Input:", filtros);
             
-            // Lógica de venta por defecto
+            // 1. Lógica de Venta: Upselling de PAX
             if (filtros.pax) filtros.pax_or_more = true;
+            
+            // 2. Lógica de Venta: Presupuesto Flexible (+20%)
+            if (filtros.maxPrice) {
+                const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
+                if (!isNaN(originalMax)) {
+                    // Aumentamos un 20% el límite superior para mostrar oportunidades
+                    filtros.maxPrice = (originalMax * 1.20).toString();
+                    console.log(`💰 Presupuesto flexible aplicado: ${originalMax} -> ${filtros.maxPrice}`);
+                }
+            }
+
+            // 3. Ordenar por Precio Ascendente (Oportunidades primero)
             filtros.sortBy = 'price_asc';
 
             const resultados = await searchProperties(filtros);
@@ -87,7 +104,8 @@ export default async function handler(req, res) {
               count: resultados.count,
               properties: resultados.results.slice(0, 5).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
+                // Mostramos datos clave para que la IA venda bien
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax} Pax. ${p.acepta_mascota ? 'Acepta Mascotas' : 'No Mascotas'}. Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
               }))
             };
           },
