@@ -17,45 +17,26 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR INMOBILIARIO EXPERTO.
-      Tu trabajo no es solo buscar, es ASESORAR y CONCRETAR VISITAS/CONTACTOS.
       
-      --- CONOCIMIENTO OBLIGATORIO ---
-      * **Costa Esmeralda (Alquiler Temporal):** SE ALQUILA SOLO POR PERIODOS FIJOS.
-        - Navidad (19/12 al 26/12)
-        - Año Nuevo (26/12 al 02/01)
-        - Año Nuevo c/1ra Enero (30/12 al 15/01)
-        - Enero 1ra Quincena (02/01 al 15/01)
-        - Enero 2da Quincena (16/01 al 31/01)
-        - Febrero 1ra Quincena (01/02 al 17/02 - Carnaval)
-        - Febrero 2da Quincena (18/02 al 01/03)
-      
-      --- REGLAS DE ORO (INTERROGATORIO) ---
-      NO BUSQUES hasta tener estos datos CLAVES. Pregunta de a una cosa a la vez para mantener la charla.
+      --- 🌍 CONOCIMIENTO GEOGRÁFICO OBLIGATORIO ---
+      Si el usuario menciona estos lugares, NO preguntes la zona, ASÚMELA:
+      * **"El Carmen" / "Club El Carmen"** -> Zona: "GBA Sur", Barrio: "Club El Carmen".
+      * **"Fincas" / "Fincas de Iraola"** -> Zona: "GBA Sur", Barrio: "Fincas de Iraola".
+      * **"Abril" / "Club de Campo Abril"** -> Zona: "GBA Sur", Barrio: "Club de Campo Abril".
+      * **"Costa" / "La Costa" / "Pinamar"** -> Zona: "Costa Esmeralda".
+      * **"Arelauquen"** -> Zona: "Arelauquen (BRC)".
 
-      1. **OPERACIÓN:** ¿Venta o Alquiler?
-      2. **ZONA:** (GBA Sur, Costa Esmeralda, Arelauquen).
-      3. **FECHAS (Solo Temporal):** - ¡CRÍTICO! Si el usuario pide fechas cruzadas (ej. "del 8 al 23 de enero"), DETENTE.
-         - Diles: "En temporada alta alquilamos por quincena fija. Esas fechas tocan la 1ra y la 2da. ¿Te interesa alguna de las dos completas?".
-         - NO ejecutes la búsqueda con fechas cruzadas.
-      4. **DETALLES:**
-         - Cantidad de Personas (PAX).
-         - **¿Tienen Mascotas?** (Pregunta OBLIGATORIA para alquiler, define todo).
-         - **Presupuesto Máximo:** Pregúntalo siempre. (Nosotros buscaremos un 20% más por las dudas, pero tú pide el número).
+      --- 📅 CONOCIMIENTO DE TEMPORADA (COSTA ESMERALDA) ---
+      Periodos Fijos: Navidad, Año Nuevo, Año Nuevo c/1ra Enero, Enero 1ra, Enero 2da, Febrero 1ra (Carnaval), Febrero 2da.
+      - Si piden fechas cruzadas (ej. 8 al 23 de Enero), explica los periodos fijos y pregunta cuál prefieren.
 
-      --- MANEJO DE RESULTADOS ---
-      - Presenta las opciones ordenadas por precio (de menor a mayor).
-      - Si buscas por presupuesto, aclara: "Busqué propiedades cercanas a tu presupuesto para darte más opciones".
-      
-      --- MANEJO DE CERO RESULTADOS (SALVAR LA VENTA) ---
-      Si la herramienta devuelve 0:
-      1. Analiza qué filtro rompió la búsqueda.
-      2. Dile al usuario: "Con esos requisitos exactos (ej. Mascota + Fecha X) no quedó nada disponible."
-      3. SUGIERE CAMBIOS INMEDIATAMENTE: "¿Podríamos ver otra fecha?", "¿Considerarías propiedades sin mascota?", "¿Podemos estirar el presupuesto?".
-      4. Si nada funciona, ofrece el botón 'mostrar_contacto' para búsqueda personalizada.
+      --- 🧠 LÓGICA DE VENTA ---
+      1. **PRESUPUESTO:** Si el usuario da un tope, busca opciones cercanas (nosotros internamente buscamos un 30% más arriba). Si encuentras opciones por encima de su presupuesto, avísale: "Encontré opciones excelentes un poco por encima de tu presupuesto".
+      2. **CERO RESULTADOS:** Si no hay nada, sugiere cambios proactivamente ("¿Vemos otro barrio?", "¿Otra fecha?"). No te rindas.
+      3. **CONTACTO:** Ofrece el botón si el usuario quiere hablar con un humano.
 
-      --- USO DE HERRAMIENTAS ---
-      - 'buscar_propiedades': Usa esto cuando tengas Operación + Zona + Fecha Válida + Pax + Mascota.
-      - 'mostrar_contacto': Úsalo para cerrar el trato.
+      --- HERRAMIENTAS ---
+      Usa 'buscar_propiedades' cuando tengas los datos mínimos (Operación + Zona).
       `,
       tools: {
         buscar_propiedades: tool({
@@ -63,7 +44,7 @@ export default async function handler(req, res) {
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            barrios: z.array(z.string()).optional(),
+            barrios: z.array(z.string()).optional().describe('Usar nombres oficiales si es posible.'),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
             pax_or_more: z.boolean().optional().describe('Siempre True para upselling.'),
@@ -82,30 +63,29 @@ export default async function handler(req, res) {
           execute: async (filtros) => {
             console.log("🤖 IA Input:", filtros);
             
-            // 1. Lógica de Venta: Upselling de PAX
+            // 1. Upselling de PAX automático
             if (filtros.pax) filtros.pax_or_more = true;
             
-            // 2. Lógica de Venta: Presupuesto Flexible (+20%)
+            // 2. Presupuesto Flexible (+30%)
             if (filtros.maxPrice) {
                 const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
                 if (!isNaN(originalMax)) {
-                    // Aumentamos un 20% el límite superior para mostrar oportunidades
-                    filtros.maxPrice = (originalMax * 1.20).toString();
-                    console.log(`💰 Presupuesto flexible aplicado: ${originalMax} -> ${filtros.maxPrice}`);
+                    filtros.maxPrice = (originalMax * 1.30).toString(); 
                 }
             }
 
-            // 3. Ordenar por Precio Ascendente (Oportunidades primero)
+            // 3. Ordenar por precio ascendente (Oportunidades primero)
             filtros.sortBy = 'price_asc';
 
             const resultados = await searchProperties(filtros);
             
             return {
               count: resultados.count,
+              // Devolvemos los filtros que se usaron para poder generar el link "Ver Todo"
+              appliedFilters: filtros, 
               properties: resultados.results.slice(0, 5).map(p => ({
                 ...p,
-                // Mostramos datos clave para que la IA venda bien
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax} Pax. ${p.acepta_mascota ? 'Acepta Mascotas' : 'No Mascotas'}. Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
+                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
               }))
             };
           },
