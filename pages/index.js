@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import Head from 'next/head'; // Metadata SEO
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
@@ -7,19 +8,21 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import FloatingButton from '@/components/FloatingButton';
+import ChatWidget from '@/components/ChatWidget'; // Chat Flotante con Burbujas
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Opciones de Período 2026 (Coinciden con PERIOD_MAP) ---
+// --- Opciones de Período 2026 (INCLUYE LA NUEVA OPCIÓN) ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
+  // Opción Recuperada:
   { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
+  
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
   { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
@@ -560,6 +563,16 @@ export default function SearchPage() {
     <div id="__next">
       <div className="min-h-screen bg-white text-gray-800">
         
+        {/* --- Metadata SEO --- */}
+        <Head>
+          <title>MCV Vidal Propiedades, inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda</title>
+          <meta name="description" content="MCV Vidal Propiedades, inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda. Venta y alquiler de casas, departamentos y lotes." />
+          <meta property="og:type" content="website" />
+          <meta property="og:title" content="MCV Vidal Propiedades" />
+          <meta property="og:description" content="Inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda" />
+          <link rel="icon" href="/favico_blanco.png" />
+        </Head>
+
         <ContactModal
           isOpen={isModalOpen}
           onRequestClose={() => setIsModalOpen(false)}
@@ -568,7 +581,8 @@ export default function SearchPage() {
           propertyCount={contactPayload.propertyCount}
         />
         
-        <FloatingButton onClick={generateContactMessages} />
+        {/* --- ChatWidget con Burbujas --- */}
+        <ChatWidget />
         
         <div className="max-w-7xl mx-auto p-4 md:p-8">
           

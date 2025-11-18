@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FaCommentDots, FaTimes } from 'react-icons/fa'; // Usamos FaTimes de react-icons
+import { FaCommentDots, FaTimes } from 'react-icons/fa';
 import ChatInterface from './ChatInterface';
 
-// Nueva lista de mensajes rotativos
 const MESSAGES = [
   "👋 ¡Hola! Soy tu asistente virtual. 👋",
   "🆘 ¿En qué te puedo ayudar? 🆘",
@@ -25,33 +24,23 @@ export default function ChatWidget() {
   const [showBubble, setShowBubble] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
 
-  // --- Lógica del Ciclo de Mensajes ---
   useEffect(() => {
-    // Si el chat está abierto, no mostramos burbujas
     if (isOpen) {
       setShowBubble(false);
       return;
     }
 
-    // 1. Definir tiempo de ESPERA antes de mostrar
-    // Si es el primer mensaje (índice 0), esperamos 5s. 
-    // Para los siguientes, esperamos 10s entre mensajes.
-    const delayBeforeShow = currentMessageIndex === 0 ? 5000 : 10000;
+    const delayBeforeShow = currentMessageIndex === 0 ? 5000 : 30000;
 
     const timerShow = setTimeout(() => {
       setShowBubble(true);
 
-      // 2. Una vez mostrado, esperar 10s VISIBLE y ocultarlo
       const timerHide = setTimeout(() => {
         setShowBubble(false);
-        
-        // 3. Cambiar al siguiente mensaje (esto reinicia el efecto con el nuevo índice)
-        // Usamos un pequeño timeout extra (500ms) para permitir la animación de salida
         setTimeout(() => {
           setCurrentMessageIndex((prev) => (prev + 1) % MESSAGES.length);
         }, 500);
-
-      }, 10000); // 10 segundos visible
+      }, 10000); 
 
       return () => clearTimeout(timerHide);
     }, delayBeforeShow);
@@ -62,7 +51,6 @@ export default function ChatWidget() {
 
   return (
     <>
-      {/* --- VENTANA DEL CHAT --- */}
       <div 
         className={`fixed bottom-24 right-4 w-[90vw] md:w-[400px] h-[600px] max-h-[80vh] z-50 transition-all duration-300 transform origin-bottom-right shadow-2xl rounded-xl border border-gray-200 ${
           isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'
@@ -71,7 +59,6 @@ export default function ChatWidget() {
         {isOpen && <ChatInterface onClose={() => setIsOpen(false)} />}
       </div>
 
-      {/* --- BURBUJA DE MENSAJE (Tooltip) --- */}
       <div 
         className={`fixed bottom-24 right-6 z-40 transition-all duration-500 transform ${
           showBubble ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
@@ -81,10 +68,7 @@ export default function ChatWidget() {
           <p className="text-sm font-medium leading-tight text-center">
             {MESSAGES[currentMessageIndex]}
           </p>
-          {/* Triangulito del tooltip */}
           <div className="absolute -bottom-2 right-6 w-4 h-4 bg-white transform rotate-45 border-r border-b border-gray-200"></div>
-          
-          {/* Botón X pequeño para cerrar burbuja manualmente */}
           <button 
             onClick={() => setShowBubble(false)}
             className="absolute -top-2 -right-2 bg-gray-200 rounded-full p-1 hover:bg-gray-300 text-gray-600"
@@ -94,7 +78,6 @@ export default function ChatWidget() {
         </div>
       </div>
 
-      {/* --- BOTÓN FLOTANTE --- */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`${
