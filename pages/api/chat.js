@@ -1,120 +1,212 @@
-import { openai } from '@ai-sdk/openai';
-import { streamText, tool } from 'ai';
-import { z } from 'zod';
-import { searchProperties } from '@/lib/propertyService';
+import { supabase } from '@/lib/supabaseClient';
 
-const model = openai('gpt-4o');
+const CATEGORY_IDS = {
+  VENTA: 198,
+  ALQUILER_TEMPORAL: 197,
+  ALQUILER_ANUAL: 194,
+  ALQUILER_ANUAL_AMUEBLADO: 193,
+};
+const STATUS_ID_ACTIVA = 158;
+const TYPE_IDS = {
+  CASA: 162,
+  DEPARTAMENTO: 163,
+  LOTE: 167,
+};
+
+const SEASON_START_DATE = '2025-12-19';
+const SEASON_END_DATE = '2026-03-01';
+
+// --- LÓGICA DE PERÍODOS RELACIONADOS (CLAVE PARA AÑO NUEVO) ---
+const RELATED_PERIODS = {
+  'Navidad': ['Navidad'],
+  'Año Nuevo': ['Año Nuevo', 'Año Nuevo con 1ra Enero'], // Si busca Año Nuevo, trae también el combo
+  'Año Nuevo con 1ra Enero': ['Año Nuevo con 1ra Enero'],
+  'Enero 1ra Quincena': ['Enero 1ra Quincena', 'Año Nuevo con 1ra Enero'], // El combo cubre la 1ra
+  'Enero 2da Quincena': ['Enero 2da Quincena'],
+  'Febrero 1ra Quincena': ['Febrero 1ra Quincena'],
+  'Febrero 2da Quincena': ['Febrero 2da Quincena'],
+  'Diciembre 2da Quincena': ['Diciembre 2da Quincena']
+};
+
+function formatFTSQuery(text) {
+  if (!text) return null;
+  return text.trim().split(' ').filter(Boolean).join(' & ');
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { messages } = req.body;
-
   try {
-    const result = await streamText({
-      model: model,
-      messages: messages,
-      system: `Eres 'El Asistente Digital de MCV Propiedades', un VENDEDOR INMOBILIARIO EXPERTO.
-      Tu trabajo es FILTRAR y CALIFICAR antes de mostrar resultados. No abrumes al cliente con listas largas.
+    const { 
+      operacion, zona, tipo, 
+      barrios, pax, pax_or_more,
+      pets, pool, bedrooms,
+      minPrice, maxPrice, minMts, maxMts,
+      startDate, endDate,
+      selectedPeriod, 
+      sortBy = 'default',
+      searchText
+    } = req.body;
+
+    let query = supabase.from('properties').select('*');
+    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
+
+    if (searchText) {
+      const ftsQuery = formatFTSQuery(searchText);
+      if (ftsQuery) {
+        query = query.textSearch('fts', ftsQuery, { config: 'spanish' });
+      }
+    }
+
+    // --- ALQUILER TEMPORAL ---
+    if (operacion === 'alquiler_temporal') {
+      query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
+
+      if (zona) query = query.eq('zona', zona);
+      if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
+      if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
+      if (pool) query = query.eq('tiene_piscina', true);
+      if (pets) query = query.eq('acepta_mascota', true);
+      if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
+
+      if (pax) {
+        const paxNum = parseInt(pax, 10);
+        query = pax_or_more ? query.gte('pax', paxNum) : query.eq('pax', paxNum);
+      }
       
-      --- 🌍 CONOCIMIENTO GEOGRÁFICO OBLIGATORIO ---
-      Si el usuario menciona estos lugares, ASUME la zona y el barrio:
-      * **"El Carmen" / "Club El Carmen"** -> Zona: "GBA Sur", Barrio: "Club El Carmen".
-      * **"Fincas" / "Fincas de Iraola"** -> Zona: "GBA Sur", Barrio: "Fincas de Iraola".
-      * **"Abril" / "Club de Campo Abril"** -> Zona: "GBA Sur", Barrio: "Club de Campo Abril".
-      * **"Costa" / "La Costa" / "Pinamar"** -> Zona: "Costa Esmeralda".
-      * **"Arelauquen"** -> Zona: "Arelauquen (BRC)".
+      let { data: propertiesData, error: propertiesError } = await query;
+      if (propertiesError) throw propertiesError;
+      
+      const propertyIds = propertiesData.map(p => p.property_id);
+      if (propertyIds.length === 0) return res.status(200).json({ status: 'OK', count: 0, results: [] });
 
-      --- 📅 LÓGICA TEMPORAL (COSTA ESMERALDA) ---
-      Periodos Fijos: Navidad, Año Nuevo, Año Nuevo c/1ra Enero, Enero 1ra, Enero 2da, Febrero 1ra (Carnaval), Febrero 2da.
-      - Si piden fechas cruzadas, explica los periodos y pregunta cuál prefieren.
+      // Buscar TODOS los períodos para calcular "desde"
+      const { data: allPeriodsData, error: allPeriodsError } = await supabase
+        .from('periods')
+        .select('property_id, price')
+        .in('property_id', propertyIds)
+        .eq('status', 'Disponible');
+      if (allPeriodsError) throw allPeriodsError;
 
-      --- ⛔ REGLAS DE BÚSQUEDA (CRITERIOS MÍNIMOS) ---
-      NO ejecutes la herramienta 'buscar_propiedades' hasta tener estos datos mínimos. Si faltan, PREGUNTA:
-
-      1. **PARA VENTA:**
-         - Debes tener: Zona + Operación + (**Dormitorios** O **Presupuesto**).
-         - Si solo te dicen "Comprar en El Carmen", PREGUNTA: "¿Qué estás buscando? ¿Casa de cuántos dormitorios o hasta qué valor?".
-
-      2. **PARA ALQUILER TEMPORAL:**
-         - Debes tener: Zona + Operación + Período + **PAX (Cantidad de Personas)**.
-         - Si solo te dicen "Enero 1ra quincena", PREGUNTA: "¿Para cuántas personas sería? ¿Tienen mascotas?".
-         - JAMÁS busques alquiler sin saber la cantidad de personas.
-
-      --- 🧠 LÓGICA DE RESPUESTA ---
-      - **Presupuesto:** Buscamos un 30% más arriba internamente.
-      - **Cero Resultados:** Si la búsqueda da 0, sé proactivo: "¿Te sirve ver opciones en otro barrio o fecha?".
-      - **Muchos Resultados:** Si encuentras más de 10, dile: "Encontré muchas opciones. Para no marearte, ¿preferís con pileta o algún requisito especial?".
-
-      --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' SOLO cuando cumplas los Criterios Mínimos.
-      `,
-      tools: {
-        buscar_propiedades: tool({
-          description: 'Ejecuta la búsqueda en la base de datos.',
-          parameters: z.object({
-            operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
-            zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            barrios: z.array(z.string()).optional(),
-            tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
-            pax: z.string().optional(),
-            pax_or_more: z.boolean().optional().describe('Siempre True.'),
-            pets: z.boolean().optional(),
-            pool: z.boolean().optional(),
-            bedrooms: z.string().optional(),
-            minPrice: z.string().optional(),
-            maxPrice: z.string().optional().describe('El presupuesto dicho por el usuario.'),
-            searchText: z.string().optional(),
-            selectedPeriod: z.enum([
-              'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
-              'Enero 1ra Quincena', 'Enero 2da Quincena', 
-              'Febrero 1ra Quincena', 'Febrero 2da Quincena', 'Diciembre 2da Quincena'
-            ]).optional(),
-          }),
-          execute: async (filtros) => {
-            console.log("🤖 IA Input:", filtros);
-            
-            if (filtros.pax) filtros.pax_or_more = true;
-            
-            if (filtros.maxPrice) {
-                const originalMax = parseInt(filtros.maxPrice.replace(/\D/g, ''));
-                if (!isNaN(originalMax)) {
-                    filtros.maxPrice = (originalMax * 1.30).toString(); 
-                }
+      const minPriceMap = new Map();
+      for (const period of allPeriodsData) {
+        let periodPrice = 0;
+        if (period.price && (typeof period.price === 'string') && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
+           periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
+        }
+        if (periodPrice > 0) {
+            if (!minPriceMap.has(period.property_id) || periodPrice < minPriceMap.get(period.property_id)) {
+              minPriceMap.set(period.property_id, periodPrice);
             }
+        }
+      }
+      
+      // Lógica de Fechas/Períodos
+      let availablePropertyIds = new Set(propertyIds); 
+      const periodDetailsMap = new Map();
+      const userSelectedDates = startDate && endDate;
+      const userSelectedPeriod = selectedPeriod;
+      const isOffSeason = userSelectedDates && (endDate < SEASON_START_DATE || startDate > SEASON_END_DATE);
 
-            filtros.sortBy = 'price_asc';
+      if (userSelectedPeriod || (userSelectedDates && !isOffSeason)) {
+        let filteredPeriodQuery = supabase
+          .from('periods')
+          .select('property_id, price, duration_days, period_name')
+          .in('property_id', propertyIds)
+          .eq('status', 'Disponible');
+        
+        if (userSelectedPeriod) {
+          // ¡USAMOS LOS PERÍODOS RELACIONADOS!
+          const periodsToSearch = RELATED_PERIODS[selectedPeriod] || [selectedPeriod];
+          filteredPeriodQuery = filteredPeriodQuery
+            .in('period_name', periodsToSearch)
+            .not('price', 'is', null); 
+        } else {
+           filteredPeriodQuery = filteredPeriodQuery.lte('start_date', startDate).gte('end_date', endDate);
+        }
+          
+        const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
+        if (filteredPeriodsError) throw filteredPeriodsError;
+        
+        availablePropertyIds = new Set(); 
+        for (const period of filteredPeriodsData) {
+            let periodPrice = 0;
+            if (period.price && (typeof period.price === 'string') && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
+               periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
+            }
+            if (userSelectedPeriod && periodPrice === 0) continue; 
 
-            const resultados = await searchProperties(filtros);
+            availablePropertyIds.add(period.property_id);
             
-            return {
-              count: resultados.count,
-              appliedFilters: filtros, 
-              properties: resultados.results.slice(0, 5).map(p => ({
-                ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' Dorm. ' : ''}${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
-              }))
-            };
-          },
-        }),
-        mostrar_contacto: tool({
-          description: 'Muestra el botón para contactar a un agente humano.',
-          parameters: z.object({ 
-            motivo: z.string().optional() 
-          }),
-          execute: async ({ motivo }) => {
-            return { showButton: true, motivo };
-          },
-        }),
-      },
-    });
+            // Si encontramos el combo, usamos el nombre del combo y su precio
+            periodDetailsMap.set(period.property_id, {
+                price: periodPrice > 0 ? periodPrice : null,
+                duration: period.duration_days,
+                name: period.period_name
+            });
+        }
+      }
 
-    result.pipeDataStreamToResponse(res);
+      let finalResults = propertiesData
+        .map(p => ({
+          ...p,
+          min_rental_price: minPriceMap.get(p.property_id) || null,
+          found_period_price: periodDetailsMap.get(p.property_id)?.price || null,
+          found_period_duration: periodDetailsMap.get(p.property_id)?.duration || null,
+          found_period_name: periodDetailsMap.get(p.property_id)?.name || null
+        }))
+        .filter(p => { 
+            const priceToFilter = userSelectedPeriod ? p.found_period_price : p.min_rental_price;
+            if (!minPrice && !maxPrice) return true;
+            const passesMinPrice = !minPrice || (priceToFilter && priceToFilter >= minPrice);
+            const passesMaxPrice = !maxPrice || (priceToFilter && priceToFilter <= maxPrice);
+            if ((minPrice || maxPrice) && !priceToFilter) return false;
+            return passesMinPrice && passesMaxPrice;
+        });
+
+      if (userSelectedPeriod || (userSelectedDates && !isOffSeason)) {
+         finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
+      }
+      
+      if (sortBy === 'price_asc' || sortBy === 'default') {
+        const priceKey = userSelectedPeriod ? 'found_period_price' : 'min_rental_price';
+        finalResults.sort((a, b) => (a[priceKey] || 9999999) - (b[priceKey] || 9999999));
+      }
+
+      return res.status(200).json({ status: 'OK', count: finalResults.length, results: finalResults });
+    } 
+    
+    // --- VENTA / ANUAL ---
+    else {
+      if (operacion === 'venta') {
+        query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
+        if (minPrice) query = query.gte('price', parseInt(minPrice, 10));
+        if (maxPrice) query = query.lte('price', parseInt(maxPrice, 10));
+        if (sortBy === 'price_asc' || sortBy === 'default') query = query.order('price', { ascending: true, nullsFirst: false });
+      } else if (operacion === 'alquiler_anual') {
+        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO}}`);
+        if (minPrice) query = query.gte('es_property_price_ars', parseInt(minPrice, 10));
+        if (maxPrice) query = query.lte('es_property_price_ars', parseInt(maxPrice, 10));
+        if (sortBy === 'price_asc' || sortBy === 'default') query = query.order('es_property_price_ars', { ascending: true, nullsFirst: false });
+      }
+      
+      if (zona) query = query.eq('zona', zona);
+      if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
+      if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
+      if (pool) query = query.eq('tiene_piscina', true);
+      if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
+      if (minMts) query = query.gte('mts_cubiertos', parseInt(minMts, 10));
+      if (maxMts) query = query.lte('mts_cubiertos', parseInt(maxMts, 10));
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      return res.status(200).json({ status: 'OK', count: data.length, results: data });
+    }
 
   } catch (error) {
-    console.error('Error en Chat API:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ status: 'Error', error: error.message });
   }
 }
