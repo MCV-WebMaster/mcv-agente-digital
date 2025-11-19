@@ -17,62 +17,47 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Comercial de MCV Propiedades'. No eres un robot de soporte, eres un VENDEDOR PROACTIVO.
-
-      --- 🗺️ TU MAPA MENTAL (CONOCIMIENTO OBLIGATORIO) ---
-      Si el usuario menciona cualquier barrio de esta lista, YA SABES la ZONA. No la preguntes.
+      system: `Eres 'Asistente Digital MCV', un vendedor inmobiliario experto y persuasivo.
       
-      **ZONA: COSTA ESMERALDA (La Costa, Pinamar)**
-      * Barrios: "Deportiva", "Ecuestre", "Golf" (I y II), "Marítimo" (I, II, III, IV), "Residencial" (I y II), "Senderos" (I, II, III, IV), "Bosque".
-      * *Tip:* Si dicen "Deportiva", es Costa Esmeralda.
+      --- 🧠 MEMORIA Y CONTEXTO ---
+      * MANTÉN el contexto (fechas, pax).
+      * PERO sé flexible: Si el usuario cambia de barrio (ej. "y en Senderos?") y la búsqueda da 0 con el presupuesto anterior, IGNORA el presupuesto y muestra lo que hay, avisando: "En Senderos los precios son un poco más altos, pero mirá estas opciones:".
 
-      **ZONA: GBA SUR (Berazategui, Hudson)**
-      * "El Carmen" -> Barrio: "Club El Carmen".
-      * "Fincas", "Fincas de Iraola" -> Barrios: "Fincas de Iraola" Y "Fincas de Iraola II".
-      * "Abril" -> Barrio: "Club de Campo Abril".
-      * "Altos" -> Barrio: "Altos de Hudson".
-      * "Greenville", "Maldonado", "San Eliseo".
+      --- 📅 LÓGICA TEMPORAL (COSTA ESMERALDA) ---
+      * **Carnaval** = "Febrero 1ra Quincena" (01/02 al 17/02). SIEMPRE.
+      * **Enero** = Pregunta 1ra (2-15) o 2da (16-31).
 
-      **ZONA: BARILOCHE**
-      * "Arelauquen".
-
-      --- 🧠 INTELIGENCIA DE VENTA ---
+      --- 🔍 MANEJO DE "NO HAY RESULTADOS" ---
+      Si la búsqueda devuelve 0:
+      1. **Auto-Corrección:** Si estabas filtrando por precio o mascota, quita ese filtro internamente y busca de nuevo.
+      2. **Respuesta:** "Con el tope de precio que pusimos no encontré en ese barrio, pero si nos estiramos un poco tengo estas opciones disponibles:".
       
-      1. **EL CLIENTE IMPACIENTE:**
-         - Si el usuario dice "dame opciones", "lo que tengas", "mostrame": **OBEDECE**.
-         - Busca con los datos que tengas. Si son pocos, muestra una selección variada y di: *"Aquí tengo algunas opciones destacadas para empezar. ¿Alguna se acerca a lo que buscas?"*.
+      --- 🏘️ MAPEO DE BARRIOS ---
+      * "El Carmen" -> GBA Sur, "Club El Carmen".
+      * "Fincas", "Fincas 1" -> GBA Sur, "Fincas de Iraola".
+      * "Fincas 2" -> GBA Sur, "Fincas de Iraola II".
+      * "Senderos" -> Costa, "Senderos I", "Senderos II", "Senderos III", "Senderos IV".
+      * "Deportiva" -> Costa, "Deportiva I", "Deportiva II".
       
-      2. **MANEJO DE "NO HAY":**
-         - JAMÁS digas "No hay opciones".
-         - Si la búsqueda exacta da 0, **CAMBIA LA ESTRATEGIA** automáticamente:
-           - Si buscó por precio, busca sin precio y di: *"Por 200k exactos no entró nada, pero mirá estas opciones desde 220k que valen la pena."*
-           - Si buscó "Fincas 2", busca en "Fincas 1" también.
-      
-      3. **LÓGICA DE ALQUILER (COSTA):**
-         - Fechas: Manejamos quincenas (Ene 1ra, Ene 2da, etc.). Si piden fechas raras, ofrece la quincena completa.
-         - Mascotas: Si no lo sabes, asume que NO tienen para mostrar más opciones, pero avisa: *"Te muestro todo. Si traen mascota avísame para filtrar."*
-
-      4. **PRECIOS (K = MIL):**
-         - Si escriben "200k", entiende "200000".
-         - Si escriben "3 mil", entiende "3000".
-
-      --- CIERRE ---
-      Siempre intenta llevar al usuario a ver la ficha o contactar.
+      --- HERRAMIENTAS ---
+      Usa 'buscar_propiedades'. Si el usuario pide una casa específica por nombre, usa el parámetro 'searchText' con el nombre de la casa y MANTÉN el 'selectedPeriod' para darle el precio correcto.
       `,
       tools: {
         buscar_propiedades: tool({
-          description: 'Motor de búsqueda.',
+          description: 'Busca propiedades.',
           parameters: z.object({
-            operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
+            operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            // La IA debe identificar si el usuario dijo un barrio específico
-            barrio_input: z.string().optional().describe('El nombre del barrio tal cual lo dijo el usuario (ej. "el carmen", "fincas").'),
+            barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
+            pax_or_more: z.boolean().optional().describe('Siempre True.'),
             pets: z.boolean().optional(),
             pool: z.boolean().optional(),
             bedrooms: z.string().optional(),
-            maxPrice: z.string().optional().describe('Presupuesto máximo (ej. "200000").'),
+            minPrice: z.string().optional(),
+            maxPrice: z.string().optional().describe('Presupuesto.'),
+            searchText: z.string().optional().describe('Nombre de propiedad o característica.'),
             selectedPeriod: z.enum([
               'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
               'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -80,86 +65,48 @@ export default async function handler(req, res) {
             ]).optional(),
           }),
           execute: async (filtros) => {
-            console.log("🤖 IA Raw Input:", filtros);
+            console.log("🤖 IA Input (Intento 1):", filtros);
             
-            // --- 1. TRADUCCIÓN DE BARRIOS (La IA nos pasa el string, nosotros lo convertimos al array oficial) ---
-            // Esto soluciona el problema de "Fincas" vs "Fincas de Iraola"
-            let barriosArray = [];
-            if (filtros.barrio_input) {
-                const b = filtros.barrio_input.toLowerCase();
-                
-                // GBA SUR
-                if (b.includes('carmen')) barriosArray = ['Club El Carmen'];
-                else if (b.includes('abril')) barriosArray = ['Club de Campo Abril'];
-                else if (b.includes('fincas')) {
-                    if (b.includes('2') || b.includes('dos')) barriosArray = ['Fincas de Iraola II'];
-                    else if (b.includes('1') || b.includes('uno')) barriosArray = ['Fincas de Iraola'];
-                    else barriosArray = ['Fincas de Iraola', 'Fincas de Iraola II']; // Si dice "Fincas" a secas, buscamos en los dos
-                }
-                else if (b.includes('altos')) barriosArray = ['Altos de Hudson', 'Altos de Hudson I', 'Altos de Hudson II'];
-                
-                // COSTA ESMERALDA
-                else if (b.includes('deportiva')) barriosArray = ['Deportiva I', 'Deportiva II']; // Asumiendo nombres en DB
-                else if (b.includes('ecuestre')) barriosArray = ['Ecuestre'];
-                else if (b.includes('senderos')) barriosArray = ['Senderos I', 'Senderos II', 'Senderos III', 'Senderos IV'];
-                else if (b.includes('maritimo')) barriosArray = ['Maritimo I', 'Maritimo II', 'Maritimo III', 'Maritimo IV'];
-                else if (b.includes('golf')) barriosArray = ['Golf I', 'Golf II'];
-                else if (b.includes('residencial')) barriosArray = ['Residencial I', 'Residencial II'];
-                
-                // Si detectamos barrio, forzamos la zona
-                if (barriosArray.length > 0) {
-                    filtros.barrios = barriosArray;
-                    if (!filtros.zona) {
-                        if (b.includes('deportiva') || b.includes('ecuestre') || b.includes('senderos')) filtros.zona = 'Costa Esmeralda';
-                        else filtros.zona = 'GBA Sur';
-                    }
-                }
+            if (filtros.pax) filtros.pax_or_more = true;
+            filtros.sortBy = 'price_asc';
+
+            // 1. Búsqueda Inicial
+            let resultados = await searchProperties(filtros);
+
+            // 2. Estrategia de Recuperación (Si da 0 y hay precio límite)
+            if (resultados.count === 0 && filtros.maxPrice) {
+                console.log("⚠️ 0 Resultados. Reintentando sin límite de precio...");
+                delete filtros.maxPrice; // Quitamos el filtro de precio
+                resultados = await searchProperties(filtros);
+                // Marcamos para que la IA sepa que ignoramos el precio
+                if (resultados.count > 0) resultados.warning = "ignore_price";
             }
 
-            // --- 2. LÓGICA DE PRECIO (Anti-Frustración) ---
-            let searchFilters = { ...filtros };
-            
-            // Limpieza de números (k, millones, puntos)
-            if (searchFilters.maxPrice) {
-                let cleanPrice = searchFilters.maxPrice.toLowerCase().replace(/k/g, '000').replace(/\D/g, '');
-                searchFilters.maxPrice = (parseInt(cleanPrice) * 1.25).toString(); // +25% de tolerancia oculta
-            }
-
-            // --- 3. EJECUCIÓN ---
-            searchFilters.sortBy = 'price_asc';
-            // Upselling automático
-            if (searchFilters.pax) searchFilters.pax_or_more = true;
-
-            let resultados = await searchProperties(searchFilters);
-
-            // --- 4. ESTRATEGIA DE RECUPERACIÓN (Si da 0) ---
-            if (resultados.count === 0) {
-                console.log("⚠️ 0 Resultados. Intentando recuperación...");
-                
-                // Intento 1: Quitar filtro de precio (mostrar lo que hay, aunque sea caro)
-                if (searchFilters.maxPrice) {
-                    delete searchFilters.maxPrice;
-                    const resRescue = await searchProperties(searchFilters);
-                    if (resRescue.count > 0) {
-                        resultados = resRescue;
-                        // Marcamos para que la IA sepa que ignoramos el precio
-                        resultados.warning = "ignore_price"; 
-                    }
-                }
+            // 3. Estrategia de Recuperación de Barrio (Si da 0 y hay barrio específico)
+            // Ej: Buscó "Senderos IV" y no hay. Buscamos en todo "Costa Esmeralda".
+            if (resultados.count === 0 && filtros.barrios && filtros.barrios.length > 0) {
+                 console.log("⚠️ 0 Resultados. Reintentando en toda la zona...");
+                 delete filtros.barrios;
+                 const resZona = await searchProperties(filtros);
+                 if (resZona.count > 0) {
+                     resultados = resZona;
+                     resultados.warning = "ignore_barrio";
+                 }
             }
 
             return {
               count: resultados.count,
-              warning: resultados.warning, // La IA leerá esto y dirá "No hay por 200k, pero mira..."
+              warning: resultados.warning,
+              appliedFilters: filtros,
               properties: resultados.results.slice(0, 6).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
+                summary: `${p.title} (${p.barrio}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : 'Consultar')}.`
               }))
             };
           },
         }),
         mostrar_contacto: tool({
-          description: 'Muestra el botón para contactar.',
+          description: 'Muestra el botón de contacto.',
           parameters: z.object({ motivo: z.string().optional() }),
           execute: async ({ motivo }) => ({ showButton: true, motivo }),
         }),
