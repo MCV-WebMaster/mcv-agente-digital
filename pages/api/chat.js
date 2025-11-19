@@ -19,27 +19,21 @@ export default async function handler(req, res) {
       messages: messages,
       system: `Eres 'Asistente Comercial MCV', un VENDEDOR PROACTIVO y METÓDICO.
       
-      --- 🧠 CONVERSACIÓN PASO A PASO (REGLAS DE ORO) ---
-      1. **UNA COSA A LA VEZ:** Si recibes una respuesta parcial (ej. solo PAX), DEBES preguntar SOLAMENTE por el siguiente dato FALTANTE.
-      2. **MAPEO OBLIGATORIO:** Traduce El Carmen/Deportiva al nombre oficial y Zona.
-
-      --- 🔎 REGLAS DE BÚSQUEDA Y FILTRO (EL EMBUDO) ---
+      --- REGLAS DE CONVERSACIÓN Y VENTA (OBLIGATORIAS) ---
+      1. **UNA PREGUNTA A LA VEZ (CRÍTICO):** No hagas preguntas compuestas. Espera la respuesta de un dato antes de preguntar el siguiente.
+      2. **MAPEO/SINÓNIMOS:** Siempre traduce "el carmen" a "Club El Carmen" o "fincas 2" a "Fincas de Iraola II" (usando tu conocimiento geográfico).
+      
+      --- 🎯 FILTRO ESTRATÉGICO (EL EMBUDO) ---
       
       **CRITERIOS MÍNIMOS OBLIGATORIOS ANTES DE BUSCAR:**
-      - Operación (Venta/Alquiler)
-      - Zona
-      - PAX (para Alquiler)
-      - PERIODO (para Alquiler)
-
-      **LÍMITE DE RESULTADOS:**
-      - Si la búsqueda devuelve más de 10 propiedades, NO las muestres.
-      - Debes decir: "Tengo muchas opciones. Para encontrar la ideal, ¿buscas con pileta, pileta climatizada, o cuál es tu presupuesto máximo?" (Fuerza un filtro nuevo).
+      - Operación, Zona, Periodo (si es Temporal), PAX.
+      - Si tienes todos los datos y aun así el resultado es **>10**, DEBES preguntar un filtro adicional (Pileta/Presupuesto) antes de mostrar.
       
-      **CERO RESULTADOS (RECUPERACIÓN):**
-      - Si da 0, aplica la lógica de rescate: busca sin presupuesto o sugiere cambiar de barrio.
-
+      **RESPUESTA DE CERO RESULTADOS:**
+      - Si da 0, intenta la estrategia de rescate (quitar presupuesto, cambiar barrio) y avisa al cliente de forma proactiva.
+      
       --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' SOLO cuando cumplas los Criterios Mínimos O cuando el usuario lo pida explícitamente (ej. "dame opciones").
+      Usa 'buscar_propiedades' solo cuando creas que el resultado será conciso (idealmente <= 10).
       `,
       tools: {
         buscar_propiedades: tool({
@@ -47,7 +41,7 @@ export default async function handler(req, res) {
           parameters: z.object({
             operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
             zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-            barrios: z.array(z.string()).optional().describe('Nombre OFICIAL del barrio (ej. "Club El Carmen", "Fincas de Iraola II").'),
+            barrios: z.array(z.string()).optional(),
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
             pax_or_more: z.boolean().optional().describe('Siempre True.'),
@@ -66,10 +60,9 @@ export default async function handler(req, res) {
           execute: async (filtros) => {
             console.log("🤖 IA Input (Vendedor):", filtros);
             
-            // 1. Lógica de Venta Automática
+            // Lógica de Venta Automática
             if (filtros.pax) filtros.pax_or_more = true;
             
-            // 2. Lógica de Presupuesto Flexible (+30%)
             let originalMaxPrice = null;
             if (filtros.maxPrice) {
                 originalMaxPrice = parseInt(filtros.maxPrice.replace(/\D/g, ''));
@@ -79,35 +72,51 @@ export default async function handler(req, res) {
             }
 
             filtros.sortBy = 'price_asc';
-
-            // --- EJECUCIÓN ---
+            
+            // --- INICIO DE BÚSQUEDA ---
             let resultados = await searchProperties(filtros);
-
-            // --- 3. PROTOCOLO DE RECUPERACIÓN (SI HAY 0) ---
+            
+            // 1. PROTOCOLO DE RECUPERACIÓN (Si da 0)
             if (resultados.count === 0) {
-                // Intento 1: Eliminar filtro de precio
                 if (originalMaxPrice) {
                     let rescueFilters = {...filtros, maxPrice: null};
                     let resRescue = await searchProperties(rescueFilters);
                     
                     if (resRescue.count > 0) {
+                        // Rescate exitoso: notificamos a la IA y pasamos el rescate
                         resultados = resRescue;
-                        // Marcamos para que la IA sepa que debe mostrar este aviso
-                        resultados.warning = `precio_bajo|${originalMaxPrice}`;
-                        return resultados; 
+                        return {
+                          count: resultados.count,
+                          appliedFilters: filtros, 
+                          originalMaxPrice: originalMaxPrice,
+                          warning: `No encontré nada por debajo de ${originalMaxPrice}, pero tengo estas opciones que arrancan en ${resultados.properties[0].min_rental_price || resultados.properties[0].price}.`,
+                          properties: resultados.results.slice(0, 10).map(p => ({
+                            ...p,
+                            summary: `${p.title} (${p.barrio || p.zona}). ${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+                          }))
+                        };
                     }
                 }
-                // (Si el rescate falla, devuelve 0)
             }
             
+            // 2. PROTOCOLO DE EMBALAR (Si hay muchos resultados)
+            if (resultados.count > 10) {
+                // Devolvemos el conteo y un mensaje especial para que la IA sepa qué preguntar
+                return {
+                    count: resultados.count,
+                    appliedFilters: filtros,
+                    properties: [], // No mostramos la lista para no abrumar
+                    warning: "too_many_results"
+                };
+            }
+
+
             return {
               count: resultados.count,
-              warning: resultados.warning || null,
               appliedFilters: filtros, 
-              // Devolvemos hasta 10 para que la IA decida
               properties: resultados.results.slice(0, 10).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
               }))
             };
           },
