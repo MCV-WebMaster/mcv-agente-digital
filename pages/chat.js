@@ -9,7 +9,7 @@ import Link from 'next/link';
 Modal.setAppElement('#__next');
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, reload } = useChat({
     api: '/api/chat',
   });
 
@@ -22,21 +22,15 @@ export default function ChatPage() {
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Scroll inteligente: Solo al final si es un mensaje corto o del usuario
-  // Si es una respuesta larga de la IA con propiedades, el usuario querrá ver el principio.
   useEffect(() => {
     if (messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      // Si el último mensaje es del usuario, scrolleamos al fondo para que vea su input
       if (lastMessage.role === 'user') {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       } 
-      // Si es de la IA, NO forzamos scroll al fondo si hay contenido largo,
-      // dejamos que el usuario lea desde donde estaba o scrollee si quiere.
     }
   }, [messages]);
 
-  // Foco automático al terminar
   useEffect(() => {
     if (!isLoading) {
       setTimeout(() => inputRef.current?.focus(), 10);
@@ -119,33 +113,53 @@ export default function ChatPage() {
                     
                     if (toolName === 'buscar_propiedades') {
                       const seeAllUrl = buildSearchUrl(result.appliedFilters || args);
+                      
+                      const showResultCards = result.count > 0 && result.count <= 10; // Condición para mostrar tarjetas
 
                       return (
                         <div key={toolCallId} className="mt-4">
                           <div className="text-sm text-gray-500 mb-2">
                              Encontré {result.count} propiedades (mostrando las primeras {result.properties.length}):
                           </div>
-                          <div className="grid grid-cols-1 gap-4 mb-4">
-                            {result.properties.map(prop => (
-                              <PropertyCard 
-                                key={prop.property_id} 
-                                property={prop} 
-                                filters={args}
-                                onContact={handleContactSingleProperty}
-                              />
-                            ))}
-                          </div>
                           
-                          {result.count > result.properties.length && (
+                          {/* --- TARJETAS (SOLO SI NO SON MUCHAS) --- */}
+                          {showResultCards && (
+                            <div className="grid grid-cols-1 gap-4 mb-4">
+                              {result.properties.map(prop => (
+                                <PropertyCard 
+                                  key={prop.property_id} 
+                                  property={prop} 
+                                  filters={args} 
+                                  onContact={handleContactSingleProperty}
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                          {/* --- ACCIONES POST-RESULTADO --- */}
+                          <div className="flex flex-col gap-2">
+                            {/* Botón 1: Contactar (Cierre) */}
+                            <button
+                              onClick={handleGeneralContact}
+                              className="w-full px-4 py-3 bg-mcv-verde text-white font-bold rounded-lg shadow hover:bg-opacity-90 transition-all flex items-center justify-center gap-2"
+                            >
+                              <span>💬</span> Contactar con un Agente
+                            </button>
+                            
+                            {/* Botón 2: Ver Todo / Volver a Empezar */}
                             <a 
                               href={seeAllUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="block w-full text-center py-3 bg-gray-100 text-mcv-azul font-bold rounded-lg border border-gray-300 hover:bg-gray-200 transition-all text-sm"
+                              // Si hay resultados (ej. 40), ofrece ver todo. Si hay 0, ofrece empezar de nuevo.
                             >
-                              🔍 Ver las {result.count} opciones en el Buscador
+                              {result.count > 0 
+                                ? `🔍 Ver las ${result.count} opciones en el Buscador` 
+                                : `🔁 Empezar una Nueva Búsqueda`
+                              }
                             </a>
-                          )}
+                          </div>
                         </div>
                       );
                     }
