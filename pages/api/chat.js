@@ -17,19 +17,29 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'El Asistente Comercial de MCV Propiedades'. Tu trabajo es ser un vendedor experto y metódico.
+      system: `Eres 'Asistente Comercial MCV', un VENDEDOR PROACTIVO y METÓDICO.
       
-      --- 🧠 TU ESTRATEGIA (CONVERSACIÓN PASO A PASO) ---
-      1. **UNA PREGUNTA A LA VEZ:** Si pides 3 datos, espera las 3 respuestas. No te adelantes.
-      2. **MAPEO OBLIGATORIO:** Traduce "el carmen" a "Club El Carmen", etc.
-      3. **REGLA DE AMBIENTES:** Si dicen "X ambientes", busca 'bedrooms: X-1'.
+      --- 🧠 CONVERSACIÓN PASO A PASO (REGLAS DE ORO) ---
+      1. **UNA COSA A LA VEZ:** Si recibes una respuesta parcial (ej. solo PAX), DEBES preguntar SOLAMENTE por el siguiente dato FALTANTE.
+      2. **MAPEO OBLIGATORIO:** Traduce El Carmen/Deportiva al nombre oficial y Zona.
+
+      --- 🔎 REGLAS DE BÚSQUEDA Y FILTRO (EL EMBUDO) ---
       
-      --- REGLAS DE EJECUCIÓN (CUANDO BUSCAR) ---
-      * **Si la búsqueda inicial devuelve más de 10 resultados, DEBES hacer una pregunta de filtro adicional** (ej. Pileta, Presupuesto) antes de mostrar las tarjetas. No abrumes al cliente con una lista larga.
-      * **CERO RESULTADOS:** Si da 0, aplica el protocolo de recuperación (ver código de la herramienta).
+      **CRITERIOS MÍNIMOS OBLIGATORIOS ANTES DE BUSCAR:**
+      - Operación (Venta/Alquiler)
+      - Zona
+      - PAX (para Alquiler)
+      - PERIODO (para Alquiler)
+
+      **LÍMITE DE RESULTADOS:**
+      - Si la búsqueda devuelve más de 10 propiedades, NO las muestres.
+      - Debes decir: "Tengo muchas opciones. Para encontrar la ideal, ¿buscas con pileta, pileta climatizada, o cuál es tu presupuesto máximo?" (Fuerza un filtro nuevo).
+      
+      **CERO RESULTADOS (RECUPERACIÓN):**
+      - Si da 0, aplica la lógica de rescate: busca sin presupuesto o sugiere cambiar de barrio.
 
       --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' para consultar la base de datos.
+      Usa 'buscar_propiedades' SOLO cuando cumplas los Criterios Mínimos O cuando el usuario lo pida explícitamente (ej. "dame opciones").
       `,
       tools: {
         buscar_propiedades: tool({
@@ -41,9 +51,9 @@ export default async function handler(req, res) {
             tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
             pax: z.string().optional(),
             pax_or_more: z.boolean().optional().describe('Siempre True.'),
-            pets: z.boolean().optional().describe('True si tienen mascota.'),
+            pets: z.boolean().optional(),
             pool: z.boolean().optional(),
-            bedrooms: z.string().optional().describe('Calculado: Ambientes - 1.'),
+            bedrooms: z.string().optional(),
             minPrice: z.string().optional(),
             maxPrice: z.string().optional().describe('Presupuesto máximo.'),
             searchText: z.string().optional(),
@@ -54,16 +64,12 @@ export default async function handler(req, res) {
             ]).optional(),
           }),
           execute: async (filtros) => {
-            console.log("🤖 IA Input:", filtros);
+            console.log("🤖 IA Input (Vendedor):", filtros);
             
-            // Lógica de Ambientes (Traducción de X ambientes -> X-1 dormitorios)
-            if (filtros.bedrooms && !isNaN(parseInt(filtros.bedrooms, 10)) && parseInt(filtros.bedrooms, 10) > 1) {
-              filtros.bedrooms = (parseInt(filtros.bedrooms, 10) - 1).toString();
-            }
-
-            // Lógica de Upselling y Presupuesto Flexible (+30%)
+            // 1. Lógica de Venta Automática
             if (filtros.pax) filtros.pax_or_more = true;
             
+            // 2. Lógica de Presupuesto Flexible (+30%)
             let originalMaxPrice = null;
             if (filtros.maxPrice) {
                 originalMaxPrice = parseInt(filtros.maxPrice.replace(/\D/g, ''));
@@ -73,44 +79,41 @@ export default async function handler(req, res) {
             }
 
             filtros.sortBy = 'price_asc';
-            
-            // --- INICIO DE BÚSQUEDA ---
+
+            // --- EJECUCIÓN ---
             let resultados = await searchProperties(filtros);
-            
-            // --- PROTOCOLO DE RECUPERACIÓN (SI HAY 0) ---
+
+            // --- 3. PROTOCOLO DE RECUPERACIÓN (SI HAY 0) ---
             if (resultados.count === 0) {
-                console.log("⚠️ 0 Resultados. Intentando recuperación...");
-                // Intento 1: Eliminar filtro más restrictivo (Presupuesto)
+                // Intento 1: Eliminar filtro de precio
                 if (originalMaxPrice) {
-                    let rescueFilters = {...filtros};
-                    delete rescueFilters.maxPrice;
+                    let rescueFilters = {...filtros, maxPrice: null};
                     let resRescue = await searchProperties(rescueFilters);
                     
                     if (resRescue.count > 0) {
                         resultados = resRescue;
-                        // Marcamos para que la IA sepa que ignoramos el precio
-                        resultados.warning = "ignore_price";
-                        resultados.originalMaxPrice = originalMaxPrice;
-                        return resultados; // Devolver los resultados de rescate
+                        // Marcamos para que la IA sepa que debe mostrar este aviso
+                        resultados.warning = `precio_bajo|${originalMaxPrice}`;
+                        return resultados; 
                     }
                 }
-                // Si el rescate falla o no es relevante, devolver 0.
+                // (Si el rescate falla, devuelve 0)
             }
-
+            
             return {
               count: resultados.count,
               warning: resultados.warning || null,
-              originalMaxPrice: originalMaxPrice,
               appliedFilters: filtros, 
+              // Devolvemos hasta 10 para que la IA decida
               properties: resultados.results.slice(0, 10).map(p => ({
                 ...p,
-                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.pax ? p.pax + ' Pax. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
               }))
             };
           },
         }),
         mostrar_contacto: tool({
-          description: 'Muestra el botón para contactar a un agente humano.',
+          description: 'Muestra el botón de contacto.',
           parameters: z.object({ motivo: z.string().optional() }),
           execute: async ({ motivo }) => ({ showButton: true, motivo }),
         }),
