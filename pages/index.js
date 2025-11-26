@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import Head from 'next/head';
+import Head from 'next/head'; // Metadata SEO
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
@@ -9,12 +9,16 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import FloatingButton from '@/components/FloatingButton'; // Revertimos al botón simple
+import FloatingButton from '@/components/FloatingButton';
+import WelcomeCarousel from '@/components/WelcomeCarousel'; // <-- ¡AQUÍ ESTÁ LA CORRECCIÓN!
 import Footer from '@/components/Footer';
+import { FaCheckCircle } from 'react-icons/fa'; // Necesario si usa el check en el Footer
+
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- Opciones de Período 2026 (INCLUYE LA NUEVA OPCIÓN) ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -154,7 +158,6 @@ export default function SearchPage() {
         throw new Error(data.error || 'Error en la API');
       }
     } catch (err) {
-      console.error('Error al buscar propiedades:', err);
       setError(err.message);
     } finally {
       setIsSearching(false);
