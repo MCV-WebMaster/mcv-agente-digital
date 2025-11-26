@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import Head from 'next/head'; // Metadata SEO
+import { useRouter } from 'next/router';
+import Head from 'next/head';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
 import ActiveFilterTag from '@/components/ActiveFilterTag';
@@ -8,21 +9,17 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import ChatWidget from '@/components/ChatWidget'; // Chat Flotante con Burbujas
-import WelcomeCarousel from '@/components/WelcomeCarousel';
+import FloatingButton from '@/components/FloatingButton'; // Revertimos al botón simple
 import Footer from '@/components/Footer';
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Opciones de Período 2026 (INCLUYE LA NUEVA OPCIÓN) ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  // Opción Recuperada:
   { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
-  
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
   { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
@@ -34,7 +31,8 @@ const EXCLUDE_DATES = [
 ];
 
 export default function SearchPage() {
-  
+  const router = useRouter(); 
+
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -70,6 +68,7 @@ export default function SearchPage() {
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   const pricePlaceholder = {
     venta: "Ej: 300000",
@@ -77,12 +76,32 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
+  // --- 0. LEER URL AL INICIO (Deep Linking) ---
   useEffect(() => {
-    async function loadFilters() {
-      if (!filters.operacion) {
-        setListas({ zonas: [], barrios: {} });
-        return;
+    if (router.isReady && !hasHydrated) {
+      const { query } = router;
+      if (query.operacion) {
+        setFilters(prev => ({
+          ...prev,
+          operacion: query.operacion,
+          zona: query.zona || null,
+          tipo: query.tipo || null,
+          barrios: query.barrios ? query.barrios.split(',') : [],
+          pax: query.pax || '',
+          selectedPeriod: query.selectedPeriod || '',
+          searchText: query.searchText || '',
+          pax_or_more: query.pax ? true : false
+        }));
       }
+      setHasHydrated(true);
+    }
+  }, [router.isReady, hasHydrated, router]);
+
+  // --- 1. CARGAR LISTAS DE FILTROS ---
+  useEffect(() => {
+    if (!filters.operacion) return;
+    
+    async function loadFilters() {
       setIsLoadingFilters(true);
       setError(null);
       try {
@@ -106,6 +125,7 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
+  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -115,7 +135,7 @@ export default function SearchPage() {
     }
     setIsSearching(true);
     setError(null);
-    setResults([]);
+    
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
@@ -142,16 +162,18 @@ export default function SearchPage() {
   }, []);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      fetchProperties(filters);
-    }, 500); 
-    return () => clearTimeout(handler);
-  }, [filters, fetchProperties]);
+    if (hasHydrated) {
+        const handler = setTimeout(() => {
+          fetchProperties(filters);
+        }, 500); 
+        return () => clearTimeout(handler);
+    }
+  }, [filters, fetchProperties, hasHydrated]);
 
+  // --- MANEJADORES DE EVENTOS ---
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
-    const greeting = "Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar";
-
+    
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
@@ -160,30 +182,21 @@ export default function SearchPage() {
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
-      whatsappMessage = `${greeting}, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `${greeting}, me podes dar mas informacion?`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
-    setContactPayload({
-      whatsappMessage,
-      adminEmailHtml,
-      propertyCount: results.length
-    });
+    setContactPayload({ whatsappMessage, adminEmailHtml, propertyCount: results.length });
     setIsModalOpen(true);
   };
-  
+
   const handleContactSingleProperty = (property) => {
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
-
-    setContactPayload({
-      whatsappMessage,
-      adminEmailHtml,
-      propertyCount: 1
-    });
+    setContactPayload({ whatsappMessage, adminEmailHtml, propertyCount: 1 });
     setIsModalOpen(true);
   };
   
@@ -563,16 +576,6 @@ export default function SearchPage() {
     <div id="__next">
       <div className="min-h-screen bg-white text-gray-800">
         
-        {/* --- Metadata SEO --- */}
-        <Head>
-          <title>MCV Vidal Propiedades, inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda</title>
-          <meta name="description" content="MCV Vidal Propiedades, inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda. Venta y alquiler de casas, departamentos y lotes." />
-          <meta property="og:type" content="website" />
-          <meta property="og:title" content="MCV Vidal Propiedades" />
-          <meta property="og:description" content="Inmobiliaria en Zona Sur del Gran Buenos Aires y de Costa Esmeralda" />
-          <link rel="icon" href="/favico_blanco.png" />
-        </Head>
-
         <ContactModal
           isOpen={isModalOpen}
           onRequestClose={() => setIsModalOpen(false)}
@@ -581,8 +584,7 @@ export default function SearchPage() {
           propertyCount={contactPayload.propertyCount}
         />
         
-        {/* --- ChatWidget con Burbujas --- */}
-        <ChatWidget />
+        <FloatingButton onClick={generateContactMessages} />
         
         <div className="max-w-7xl mx-auto p-4 md:p-8">
           
@@ -654,7 +656,7 @@ export default function SearchPage() {
               ) : (
                 (filters.zona || isSearching || filters.searchText) && (
                   <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg">
-                    <p className="text-xl font-bold">No se encontraron propiedades</p>
+                    <p className="font-bold">No se encontraron propiedades</p>
                     <p>Intente ajustar sus filtros de búsqueda.</p>
                   </div>
                 )
@@ -662,7 +664,7 @@ export default function SearchPage() {
             ) : (
                !isLoadingFilters && !isSearching && (
                 <div className="text-center text-gray-500 p-10">
-                  <p className="text-xl font-bold">Bienvenido</p>
+                  <p className="font-bold">Bienvenido</p>
                   <p className="mb-8">Use el asistente de arriba para encontrar su propiedad ideal.</p>
                   <WelcomeCarousel />
                 </div>
