@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; // Agregamos useRef
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
@@ -8,7 +8,6 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-// Note: FloatingButton, WelcomeCarousel, Footer, and Head are removed for the embed
 
 registerLocale('es', es);
 
@@ -34,7 +33,9 @@ const EXCLUDE_DATES = [
 // --- EXPORTAMOS EL COMPONENTE DE PÁGINA ---
 export default function EmbedSearchPage() {
   const router = useRouter(); 
-
+  const contentRef = useRef(null); // Para medir la altura
+  
+  // ... (Resto de estados igual) ...
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -77,6 +78,27 @@ export default function EmbedSearchPage() {
     alquiler_temporal: "Ej: 1500",
     alquiler_anual: "Ej: 1000"
   };
+
+  // --- LÓGICA DE POST MESSAGE (EMISOR) ---
+  const sendHeightToParent = useCallback(() => {
+    if (contentRef.current && window.parent) {
+      const height = contentRef.current.scrollHeight;
+      window.parent.postMessage({ 
+        action: 'set_iframe_height', 
+        height: height, 
+        frameId: 'mcv-asistente-iframe' 
+      }, '*');
+    }
+  }, [contentRef.current]);
+
+  // Disparar envío de altura en cada cambio de estado relevante
+  useEffect(() => {
+    sendHeightToParent();
+    // También enviamos la altura al cambiar el tamaño de la ventana
+    window.addEventListener('resize', sendHeightToParent);
+    return () => window.removeEventListener('resize', sendHeightToParent);
+  }, [results, listas, isSearching, sendHeightToParent]);
+  // --- FIN LÓGICA DE POST MESSAGE ---
 
   // --- 0. LEER URL AL INICIO (Deep Linking) ---
   useEffect(() => {
@@ -304,7 +326,6 @@ export default function EmbedSearchPage() {
   );
 
   const renderAsistente = () => {
-    // Lógica para mostrar los botones de Comprar/Alquilar
     if (!filters.operacion) {
       return (
         <div className="text-center">
@@ -324,7 +345,6 @@ export default function EmbedSearchPage() {
       );
     }
     
-    // Lógica para mostrar las zonas
     if (isLoadingFilters) {
       return <div className="text-center p-10"><Spinner /></div>;
     }
@@ -365,7 +385,6 @@ export default function EmbedSearchPage() {
       );
     }
 
-    // Lógica de Filtros Avanzados (El corazón del Embed)
     const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
 
@@ -556,7 +575,7 @@ export default function EmbedSearchPage() {
   };
   
   return (
-    <div id="__next" className="min-h-screen">
+    <div id="__next" className="min-h-screen p-4 md:p-8">
       
       <ContactModal
         isOpen={isModalOpen}
@@ -566,12 +585,16 @@ export default function EmbedSearchPage() {
         propertyCount={contactPayload.propertyCount}
       />
       
-      <div className="max-w-7xl mx-auto p-4 md:p-8">
+      {/* Remove Header/Logo when embedded */}
+      
+      <div className="max-w-7xl mx-auto">
         
         {/* Main Content Area */}
         <main>
           
+          {/* Active Filters Bar */}
           {renderFiltrosActivos()}
+          {/* Filter Inputs */}
           {renderAsistente()} 
 
           {/* Resultado de la búsqueda */}
@@ -588,7 +611,6 @@ export default function EmbedSearchPage() {
                 <h2 className="text-xl font-bold text-mcv-gris mb-4">
                     {propertyCount} Propiedades Encontradas
                 </h2>
-                
                 {/* Botón de ordenar */}
                 {results.length > 1 && (
                   <div className="flex justify-end mb-4">
@@ -621,7 +643,7 @@ export default function EmbedSearchPage() {
               )
             )
           ) : (
-             // Pantalla inicial (No se muestra nada si no se ha seleccionado la operación)
+             // Pantalla inicial (Botones de operación)
              <div className="text-center text-gray-500 p-10 mt-8">
                 <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
                 <p>Seleccione una operación arriba para comenzar.</p>
