@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'; // Agregamos useRef
+import { useState, useEffect, useCallback, useRef } from 'react'; 
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
@@ -30,12 +30,10 @@ const EXCLUDE_DATES = [
 ];
 
 
-// --- EXPORTAMOS EL COMPONENTE DE PÁGINA ---
 export default function EmbedSearchPage() {
   const router = useRouter(); 
   const contentRef = useRef(null); // Para medir la altura
   
-  // ... (Resto de estados igual) ...
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -83,9 +81,10 @@ export default function EmbedSearchPage() {
   const sendHeightToParent = useCallback(() => {
     if (contentRef.current && window.parent) {
       const height = contentRef.current.scrollHeight;
+      // Enviamos la altura al sitio padre
       window.parent.postMessage({ 
         action: 'set_iframe_height', 
-        height: height, 
+        height: height + 50, // Añadimos un padding de 50px
         frameId: 'mcv-asistente-iframe' 
       }, '*');
     }
@@ -94,10 +93,15 @@ export default function EmbedSearchPage() {
   // Disparar envío de altura en cada cambio de estado relevante
   useEffect(() => {
     sendHeightToParent();
-    // También enviamos la altura al cambiar el tamaño de la ventana
     window.addEventListener('resize', sendHeightToParent);
     return () => window.removeEventListener('resize', sendHeightToParent);
   }, [results, listas, isSearching, sendHeightToParent]);
+
+  // Ejecutar periódicamente si el DOM interno cambia
+  useEffect(() => {
+    const interval = setInterval(sendHeightToParent, 1000);
+    return () => clearInterval(interval);
+  }, [sendHeightToParent]);
   // --- FIN LÓGICA DE POST MESSAGE ---
 
   // --- 0. LEER URL AL INICIO (Deep Linking) ---
@@ -585,8 +589,6 @@ export default function EmbedSearchPage() {
         propertyCount={contactPayload.propertyCount}
       />
       
-      {/* Remove Header/Logo when embedded */}
-      
       <div className="max-w-7xl mx-auto">
         
         {/* Main Content Area */}
@@ -611,6 +613,7 @@ export default function EmbedSearchPage() {
                 <h2 className="text-xl font-bold text-mcv-gris mb-4">
                     {propertyCount} Propiedades Encontradas
                 </h2>
+                
                 {/* Botón de ordenar */}
                 {results.length > 1 && (
                   <div className="flex justify-end mb-4">
