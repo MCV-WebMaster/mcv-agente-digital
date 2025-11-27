@@ -1,7 +1,6 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 
-// Inicializamos Resend (solo para guardar contactos)
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export default async function handler(req, res) {
@@ -49,17 +48,17 @@ export default async function handler(req, res) {
     // 1. Enviamos el correo de aviso
     await transporter.sendMail(adminMail);
 
-    // --- PASO 2: Guardar Contacto en Resend (Con Teléfono) ---
+    // --- PASO 2: Guardar Contacto en Resend (Con Propiedad Custom) ---
     if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
       try {
-        // TRUCO: Guardamos el teléfono en el nombre para verlo en la lista
-        const nameWithPhone = `${name} (${phone})`;
-        
         await resend.contacts.create({
           email: email,
-          firstName: nameWithPhone, // <--- AQUÍ ESTÁ EL CAMBIO
+          firstName: name, // ¡Nombre Limpio!
           unsubscribed: false,
-          audienceId: process.env.RESEND_AUDIENCE_ID
+          audienceId: process.env.RESEND_AUDIENCE_ID,
+          properties: {
+            phone_number: phone, // ¡NUEVO! Campo personalizado
+          }
         });
         console.log(`Contacto ${email} guardado en Resend.`);
       } catch (resendError) {
@@ -71,6 +70,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error al enviar email con Nodemailer:', error);
-    res.status(500).json({ status: 'Error', error: 'No se pudo enviar el email.' });
+    res.status(500).json({ status: 'Error', error: error.message });
   }
 }
