@@ -12,6 +12,10 @@ const customStyles = {
     transform: 'translate(-50%, -50%)',
     width: '90%',
     maxWidth: '500px',
+    // --- FIX DE POSICIÓN Y SCROLL ---
+    maxHeight: '90vh', 
+    overflowY: 'auto', 
+    // -------------------------------
     borderRadius: '8px',
     boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
     padding: '2rem',
@@ -31,7 +35,6 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
   });
   const [status, setStatus] = useState('idle'); 
 
-  // Recuperar datos del usuario si ya los cargó antes
   useEffect(() => {
     if (isOpen) {
         try {
@@ -55,10 +58,8 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
     e.preventDefault();
     setStatus('sending');
 
-    // 1. Guardar datos en Local Storage (para la próxima)
     localStorage.setItem('mcv_contact_data', JSON.stringify(formData));
 
-    // 2. Preparar datos para el Backend (Aviso Admin + DB)
     const propertyDetails = filteredProperties ? filteredProperties.map(p => ({ title: p.title, url: p.url, id: p.property_id })) : [];
     
     const contactData = { 
@@ -68,24 +69,19 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
       rawFilters: currentFilters,      
     };
 
-    // 3. Enviar al Backend (En segundo plano, sin esperar)
     fetch('/api/send-contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contactData),
     }).catch(err => console.error("Error envío silencioso:", err));
 
-    // 4. ABRIR WHATSAPP (La prioridad)
-    // Usamos el mensaje que viene por props
     const finalWhatsappMessage = encodeURIComponent(
         `Hola, soy ${formData.name}. ${whatsappMessage}`
     );
     const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER}?text=${finalWhatsappMessage}`;
 
-    // Abrir en nueva pestaña
     window.open(whatsappLink, '_blank');
     
-    // 5. Feedback visual y cerrar
     setStatus('sent');
     
     setTimeout(() => {
@@ -119,7 +115,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="text" name="name" id="name" required
               value={formData.name} onChange={handleInputChange}
-              placeholder="Ej: Tu Nombre" 
+              placeholder="Ej: Maria Cecilia Vidal" 
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-mcv-azul focus:border-mcv-azul"
             />
           </div>
@@ -128,7 +124,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="tel" name="phone" id="phone" required
               value={formData.phone} onChange={handleInputChange}
-              placeholder="Ej: 1112345678"
+              placeholder="Ej: 1165517385"
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-mcv-azul focus:border-mcv-azul"
             />
           </div>
@@ -137,7 +133,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="email" name="email" id="email" required
               value={formData.email} onChange={handleInputChange}
-              placeholder="Ej: tu@email.com"
+              placeholder="Ej: cecilia@mcvpropiedades.com.ar"
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-mcv-azul focus:border-mcv-azul"
             />
           </div>
