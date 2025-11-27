@@ -1,14 +1,13 @@
 import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { supabase } from '@/lib/supabaseClient'; // ¡Importamos Supabase!
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { name, phone, email, adminMessageHtml } = req.body;
+  // Recibimos nuevos campos: rawFilters y propertyDetails
+  const { name, phone, email, adminMessageHtml, rawFilters, propertyDetails } = req.body; 
 
   // --- PASO 1: Enviar Email de Aviso con Nodemailer (SMTP) ---
   const transporter = nodemailer.createTransport({
@@ -23,7 +22,7 @@ export default async function handler(req, res) {
 
   const adminMail = {
     from: `"Asistente Digital" <${process.env.SMTP_USER}>`,
-    to: process.env.CONTACT_ADMIN_EMAIL,
+    to: process.env.CONTACT_ADMIN_EMAIL, 
     reply_to: email,
     subject: `Nuevo Lead: ${name}`,
     html: `
@@ -48,28 +47,28 @@ export default async function handler(req, res) {
     // 1. Enviamos el correo de aviso
     await transporter.sendMail(adminMail);
 
-    // --- PASO 2: Guardar Contacto en Resend (Con Propiedad Custom) ---
-    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
-      try {
-        await resend.contacts.create({
+    // --- PASO 2: Guardar Contacto en la tabla 'leads' (¡NUEVO!) ---
+    const { data, error } = await supabase
+      .from('leads')
+      .insert([
+        {
+          name: name,
           email: email,
-          firstName: name, // ¡Nombre Limpio!
-          unsubscribed: false,
-          audienceId: process.env.RESEND_AUDIENCE_ID,
-          properties: {
-            phone_number: phone, // ¡NUEVO! Campo personalizado
-          }
-        });
-        console.log(`Contacto ${email} guardado en Resend.`);
-      } catch (resendError) {
-        console.warn('Aviso: No se pudo guardar en Resend:', resendError.message);
-      }
+          phone: phone,
+          properties: propertyDetails, // JSONB de propiedades (links/titulos)
+          filters: rawFilters, // JSONB de filtros usados
+        }
+      ]);
+
+    if (error) {
+      console.error('Error al guardar lead en Supabase:', error);
+      // No rompemos el flujo si la base de datos falla, solo lo logueamos
     }
 
-    res.status(200).json({ status: 'OK', message: 'Email enviado y contacto procesado' });
+    res.status(200).json({ status: 'OK', message: 'Email enviado y lead guardado' });
 
   } catch (error) {
-    console.error('Error al enviar email con Nodemailer:', error);
+    console.error('Error general en API Contact:', error);
     res.status(500).json({ status: 'Error', error: error.message });
   }
 }
