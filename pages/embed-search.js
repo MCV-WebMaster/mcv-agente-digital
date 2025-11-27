@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag';
+import ActiveFilterTag from '@/components/ActiveFilterFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
@@ -13,7 +13,7 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Reusing Constants ---
+// ... (Resto de constantes igual) ...
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -30,10 +30,12 @@ const EXCLUDE_DATES = [
 ];
 
 
+// --- EXPORTAMOS EL COMPONENTE DE PÁGINA ---
 export default function EmbedSearchPage() {
   const router = useRouter(); 
   const contentRef = useRef(null); // Para medir la altura
   
+  // ... (Estados y Handlers de filtros son idénticos a pages/index.js) ...
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -81,7 +83,6 @@ export default function EmbedSearchPage() {
   const sendHeightToParent = useCallback(() => {
     if (contentRef.current && window.parent) {
       const height = contentRef.current.scrollHeight;
-      // Enviamos la altura al sitio padre
       window.parent.postMessage({ 
         action: 'set_iframe_height', 
         height: height + 50, // Añadimos un padding de 50px
@@ -90,21 +91,27 @@ export default function EmbedSearchPage() {
     }
   }, [contentRef.current]);
 
-  // Disparar envío de altura en cada cambio de estado relevante
+  // Disparar envío de altura en cada cambio de estado relevante (El Fix)
   useEffect(() => {
-    sendHeightToParent();
+    // Enviamos la altura DESPUÉS de que el DOM se haya actualizado
+    const delayedSend = setTimeout(sendHeightToParent, 100); 
+
     window.addEventListener('resize', sendHeightToParent);
-    return () => window.removeEventListener('resize', sendHeightToParent);
+    
+    return () => {
+        clearTimeout(delayedSend);
+        window.removeEventListener('resize', sendHeightToParent);
+    };
   }, [results, listas, isSearching, sendHeightToParent]);
 
-  // Ejecutar periódicamente si el DOM interno cambia
+  // Ejecutar periódicamente (El seguro)
   useEffect(() => {
     const interval = setInterval(sendHeightToParent, 1000);
     return () => clearInterval(interval);
   }, [sendHeightToParent]);
   // --- FIN LÓGICA DE POST MESSAGE ---
-
-  // --- 0. LEER URL AL INICIO (Deep Linking) ---
+  
+  // ... (Resto de useEffects y Handlers de eventos igual) ...
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
       const { query } = router;
@@ -125,7 +132,6 @@ export default function EmbedSearchPage() {
     }
   }, [router.isReady, hasHydrated, router]);
 
-  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     if (!filters.operacion) return;
     
@@ -153,7 +159,6 @@ export default function EmbedSearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
-  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -197,7 +202,7 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- MANEJADORES DE EVENTOS ---
+  // ... (Resto de Handlers igual) ...
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     
@@ -579,7 +584,7 @@ export default function EmbedSearchPage() {
   };
   
   return (
-    <div id="__next" className="min-h-screen p-4 md:p-8">
+    <div id="__next" className="min-h-screen">
       
       <ContactModal
         isOpen={isModalOpen}
@@ -589,7 +594,8 @@ export default function EmbedSearchPage() {
         propertyCount={contactPayload.propertyCount}
       />
       
-      <div className="max-w-7xl mx-auto">
+      
+      <div ref={contentRef} className="max-w-7xl mx-auto p-4 md:p-8"> {/* Referencia al contenedor */}
         
         {/* Main Content Area */}
         <main>
