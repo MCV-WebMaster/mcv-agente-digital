@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterFilterTag';
+import ActiveFilterTag from '@/components/ActiveFilterTag'; // <-- CORREGIDO AQUÍ
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
@@ -13,7 +13,7 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// ... (Resto de constantes igual) ...
+// --- Reusing Constants ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -35,7 +35,6 @@ export default function EmbedSearchPage() {
   const router = useRouter(); 
   const contentRef = useRef(null); // Para medir la altura
   
-  // ... (Estados y Handlers de filtros son idénticos a pages/index.js) ...
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -91,13 +90,10 @@ export default function EmbedSearchPage() {
     }
   }, [contentRef.current]);
 
-  // Disparar envío de altura en cada cambio de estado relevante (El Fix)
+  // Disparar envío de altura en cada cambio de estado relevante
   useEffect(() => {
-    // Enviamos la altura DESPUÉS de que el DOM se haya actualizado
     const delayedSend = setTimeout(sendHeightToParent, 100); 
-
     window.addEventListener('resize', sendHeightToParent);
-    
     return () => {
         clearTimeout(delayedSend);
         window.removeEventListener('resize', sendHeightToParent);
@@ -110,8 +106,8 @@ export default function EmbedSearchPage() {
     return () => clearInterval(interval);
   }, [sendHeightToParent]);
   // --- FIN LÓGICA DE POST MESSAGE ---
-  
-  // ... (Resto de useEffects y Handlers de eventos igual) ...
+
+  // --- 0. LEER URL AL INICIO (Deep Linking) ---
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
       const { query } = router;
@@ -132,6 +128,7 @@ export default function EmbedSearchPage() {
     }
   }, [router.isReady, hasHydrated, router]);
 
+  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     if (!filters.operacion) return;
     
@@ -159,6 +156,7 @@ export default function EmbedSearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
+  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -202,7 +200,7 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // ... (Resto de Handlers igual) ...
+  // --- MANEJADORES DE EVENTOS ---
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     
@@ -595,7 +593,7 @@ export default function EmbedSearchPage() {
       />
       
       
-      <div ref={contentRef} className="max-w-7xl mx-auto p-4 md:p-8"> {/* Referencia al contenedor */}
+      <div ref={contentRef} className="max-w-7xl mx-auto">
         
         {/* Main Content Area */}
         <main>
