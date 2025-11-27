@@ -13,10 +13,13 @@ const customStyles = {
     width: '90%',
     maxWidth: '500px',
     borderRadius: '8px',
-    boxShadow: '0 4px 40px rgba(0,0,0,0.5)', // Hacemos la sombra más fuerte
+    boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
+    padding: '2rem',
+    zIndex: 1000,
   },
   overlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    zIndex: 999,
   },
 };
 
@@ -28,16 +31,18 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
   });
   const [status, setStatus] = useState('idle'); 
 
-  // --- LÓGICA DE LOCAL STORAGE (Recordar usuario) ---
+  // Recuperar datos del usuario si ya los cargó antes
   useEffect(() => {
-    try {
-      const storedData = localStorage.getItem('mcv_contact_data');
-      if (storedData) {
-        const { name, phone, email } = JSON.parse(storedData);
-        setFormData({ name: name || '', phone: phone || '', email: email || '' });
-      }
-    } catch (e) {
-      console.error("Error al cargar localStorage:", e);
+    if (isOpen) {
+        try {
+          const storedData = localStorage.getItem('mcv_contact_data');
+          if (storedData) {
+            const { name, phone, email } = JSON.parse(storedData);
+            setFormData({ name: name || '', phone: phone || '', email: email || '' });
+          }
+        } catch (e) {
+          console.error("Error leyendo localStorage", e);
+        }
     }
   }, [isOpen]);
 
@@ -50,45 +55,43 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
     e.preventDefault();
     setStatus('sending');
 
-    // 1. Guardar datos en Local Storage para la próxima vez
+    // 1. Guardar datos en Local Storage (para la próxima)
     localStorage.setItem('mcv_contact_data', JSON.stringify(formData));
 
-    // 2. Preparar el Payload para la API
-    const propertyDetails = filteredProperties.map(p => ({ title: p.title, url: p.url, id: p.property_id }));
+    // 2. Preparar datos para el Backend (Aviso Admin + DB)
+    const propertyDetails = filteredProperties ? filteredProperties.map(p => ({ title: p.title, url: p.url, id: p.property_id })) : [];
     
     const contactData = { 
       ...formData, 
       adminMessageHtml: adminEmailHtml,
-      propertyDetails: propertyDetails, // Para guardar en Supabase
-      rawFilters: currentFilters,      // Para guardar en Supabase
+      propertyDetails: propertyDetails, 
+      rawFilters: currentFilters,      
     };
 
-    // 3. Enviar a la API (guarda en DB y envía email)
-    const apiPromise = fetch('/api/send-contact', {
+    // 3. Enviar al Backend (En segundo plano, sin esperar)
+    fetch('/api/send-contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contactData),
-    });
+    }).catch(err => console.error("Error envío silencioso:", err));
 
-    // 4. Crear Link de WhatsApp para el Usuario
-    const finalWhatsappMessage = encodeURIComponent(whatsappMessage);
+    // 4. ABRIR WHATSAPP (La prioridad)
+    // Usamos el mensaje que viene por props
+    const finalWhatsappMessage = encodeURIComponent(
+        `Hola, soy ${formData.name}. ${whatsappMessage}`
+    );
     const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER}?text=${finalWhatsappMessage}`;
 
-    // 5. Esperar envío de API (opcional, pero mejora UX)
-    try {
-        await apiPromise;
-    } catch (apiError) {
-        console.error("Fallo el envío de email/DB, procediendo a WA.", apiError);
-    }
-    
-    // 6. Redirigir y cerrar
-    setStatus('sent');
+    // Abrir en nueva pestaña
     window.open(whatsappLink, '_blank');
+    
+    // 5. Feedback visual y cerrar
+    setStatus('sent');
     
     setTimeout(() => {
       onRequestClose();
       setStatus('idle');
-    }, 1000);
+    }, 2000);
   };
 
   return (
@@ -98,12 +101,16 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
       style={customStyles}
       contentLabel="Formulario de Contacto"
     >
-      <h2 className="text-2xl font-bold text-mcv-azul mb-4">Contactar con un Agente</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-mcv-azul">Contactar con un Agente</h2>
+        <button onClick={onRequestClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+      </div>
       
       {status === 'sent' ? (
         <div className="text-center p-8">
-          <p className="text-lg text-mcv-verde font-bold">¡Datos enviados!</p>
-          <p className="text-gray-600">Serás redirigido a WhatsApp para enviar tu consulta.</p>
+          <div className="text-5xl mb-4">✅</div>
+          <p className="text-lg text-mcv-verde font-bold">¡Abriendo WhatsApp!</p>
+          <p className="text-gray-600">Gracias por tu consulta.</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
@@ -112,8 +119,8 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="text" name="name" id="name" required
               value={formData.name} onChange={handleInputChange}
-              placeholder="Ej: Maria Cecilia Vidal" 
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              placeholder="Ej: Tu Nombre" 
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-mcv-azul focus:border-mcv-azul"
             />
           </div>
           <div className="mb-4">
@@ -121,8 +128,8 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="tel" name="phone" id="phone" required
               value={formData.phone} onChange={handleInputChange}
-              placeholder="Ej: 1165517385"
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              placeholder="Ej: 1112345678"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-mcv-azul focus:border-mcv-azul"
             />
           </div>
           <div className="mb-4">
@@ -130,32 +137,34 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
             <input
               type="email" name="email" id="email" required
               value={formData.email} onChange={handleInputChange}
-              placeholder="Ej: cecilia@mcvpropiedades.com.ar"
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              placeholder="Ej: tu@email.com"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-mcv-azul focus:border-mcv-azul"
             />
           </div>
-          <p className="text-sm text-gray-500 mb-4">
-            {propertyCount > 0 ?
-              `Se enviará una consulta por las ${propertyCount} propiedades que has filtrado.` :
-              "Se enviará una consulta general."
-            }
-          </p>
           
-          <div className="flex justify-end gap-4">
+          <div className="bg-gray-50 p-3 rounded text-sm text-gray-600 mb-6 border border-gray-200">
+             <p><strong>Estás consultando por:</strong></p>
+             {propertyCount === 1 ? (
+                 <p className="truncate">Propiedad seleccionada</p>
+             ) : (
+                 <p>{propertyCount} propiedades filtradas</p>
+             )}
+          </div>
+          
+          <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={onRequestClose}
-              disabled={status === 'sending'}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={status === 'sending'}
-              className="px-4 py-2 bg-mcv-verde text-white rounded-md hover:bg-opacity-80 flex items-center"
+              className="px-4 py-2 bg-green-600 text-white font-bold rounded-md hover:bg-green-700 transition-colors flex items-center gap-2 shadow-md"
             >
-              {status === 'sending' ? <Spinner /> : 'Enviar por WhatsApp'}
+              {status === 'sending' ? <Spinner /> : 'Ir a WhatsApp'}
             </button>
           </div>
         </form>

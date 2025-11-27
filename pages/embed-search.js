@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; 
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag';
+import ActiveFilterTag from '@/components/ActiveFilterTag'; 
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
-import Select from 'react-select';
+import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 
@@ -13,6 +13,7 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -29,14 +30,14 @@ const EXCLUDE_DATES = [
 ];
 
 export default function EmbedSearchPage() {
-  const router = useRouter();
-  const contentRef = useRef(null);
-
+  const router = useRouter(); 
+  const contentRef = useRef(null); 
+  
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
     tipo: null,
-    barrios: [],
+    barrios: [], 
     pax: '',
     pax_or_more: false,
     pets: false,
@@ -48,16 +49,15 @@ export default function EmbedSearchPage() {
     maxPrice: '',
     startDate: null,
     endDate: null,
-    selectedPeriod: '',
+    selectedPeriod: '', 
     sortBy: 'default',
     searchText: '',
   });
 
   const [dateRange, setDateRange] = useState([null, null]);
-  const [showOtherDates, setShowOtherDates] = useState(false);
+  const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Estado inicial completo para evitar errores de undefined
   const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
     adminEmailHtml: '',
@@ -80,24 +80,24 @@ export default function EmbedSearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- Comunicación con WordPress (PostMessage) ---
+  // --- PostMessage (Scroll) ---
   const sendHeightToParent = useCallback(() => {
     if (contentRef.current && window.parent) {
       const height = contentRef.current.scrollHeight;
-      window.parent.postMessage({
-        action: 'set_iframe_height',
-        height: height + 50,
-        frameId: 'mcv-asistente-iframe'
+      window.parent.postMessage({ 
+        action: 'set_iframe_height', 
+        height: height + 50, 
+        frameId: 'mcv-asistente-iframe' 
       }, '*');
     }
   }, []);
 
   useEffect(() => {
-    const delayedSend = setTimeout(sendHeightToParent, 100);
+    const delayedSend = setTimeout(sendHeightToParent, 100); 
     window.addEventListener('resize', sendHeightToParent);
     return () => {
-      clearTimeout(delayedSend);
-      window.removeEventListener('resize', sendHeightToParent);
+        clearTimeout(delayedSend);
+        window.removeEventListener('resize', sendHeightToParent);
     };
   }, [results, listas, isSearching, sendHeightToParent]);
 
@@ -106,7 +106,7 @@ export default function EmbedSearchPage() {
     return () => clearInterval(interval);
   }, [sendHeightToParent]);
 
-  // --- Inicialización desde URL ---
+  // --- Inicialización ---
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
       const { query } = router;
@@ -130,7 +130,7 @@ export default function EmbedSearchPage() {
   // --- Carga de Filtros ---
   useEffect(() => {
     if (!filters.operacion) return;
-
+    
     async function loadFilters() {
       setIsLoadingFilters(true);
       setError(null);
@@ -138,8 +138,8 @@ export default function EmbedSearchPage() {
         const res = await fetch(`/api/get-filters?operacion=${filters.operacion}`);
         const data = await res.json();
         if (data.status === 'OK') {
-          setListas({
-            zonas: Object.keys(data.filtros).sort().reverse(),
+          setListas({ 
+            zonas: Object.keys(data.filtros).sort().reverse(), 
             barrios: data.filtros
           });
         } else {
@@ -158,14 +158,14 @@ export default function EmbedSearchPage() {
   // --- Búsqueda ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
-      setResults([]);
+      setResults([]); 
       setPropertyCount(0);
       setIsSearching(false);
       return;
     }
     setIsSearching(true);
     setError(null);
-
+    
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
@@ -192,24 +192,24 @@ export default function EmbedSearchPage() {
 
   useEffect(() => {
     if (hasHydrated) {
-      const handler = setTimeout(() => {
-        fetchProperties(filters);
-      }, 500);
-      return () => clearTimeout(handler);
+        const handler = setTimeout(() => {
+          fetchProperties(filters);
+        }, 500); 
+        return () => clearTimeout(handler);
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Handlers de Contacto ---
+  // --- Contacto ---
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
-
+    
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-
+      
       whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
-
+      
     } else if (results.length > 10) {
       whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
@@ -217,13 +217,13 @@ export default function EmbedSearchPage() {
       whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
-
-    setContactPayload({
-      whatsappMessage,
-      adminEmailHtml,
-      propertyCount: results.length,
-      filteredProperties: results,
-      currentFilters: filters
+    
+    setContactPayload({ 
+        whatsappMessage, 
+        adminEmailHtml, 
+        propertyCount: results.length,
+        filteredProperties: results,
+        currentFilters: filters
     });
     setIsModalOpen(true);
   };
@@ -231,17 +231,17 @@ export default function EmbedSearchPage() {
   const handleContactSingleProperty = (property) => {
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
-    setContactPayload({
-      whatsappMessage,
-      adminEmailHtml,
-      propertyCount: 1,
-      filteredProperties: [property],
-      currentFilters: filters
+    setContactPayload({ 
+        whatsappMessage, 
+        adminEmailHtml, 
+        propertyCount: 1,
+        filteredProperties: [property],
+        currentFilters: filters
     });
     setIsModalOpen(true);
   };
 
-  // --- Handlers de Filtros ---
+  // --- Filtros Handlers ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -249,7 +249,7 @@ export default function EmbedSearchPage() {
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
     };
-
+    
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
       if (name === 'operacion') {
@@ -257,10 +257,9 @@ export default function EmbedSearchPage() {
         setDateRange([null, null]);
         setShowOtherDates(false);
       }
-      if (name === 'zona') newState.barrios = [];
+      if (name === 'zona') newState.barrios = []; 
       if (name === 'tipo' && value === 'lote') {
-        newState = {
-          ...newState,
+        newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
           minMts: '', maxMts: '',
         };
@@ -287,7 +286,7 @@ export default function EmbedSearchPage() {
         ...prev,
         startDate: start.toISOString().split('T')[0],
         endDate: end.toISOString().split('T')[0],
-        selectedPeriod: '',
+        selectedPeriod: '', 
       }));
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
@@ -295,12 +294,9 @@ export default function EmbedSearchPage() {
   };
 
   const handleCheckboxChange = (name) => {
-    setFilters(prev => ({
-      ...prev,
-      [name]: !prev[name],
-    }));
+    setFilters(prev => ({ ...prev, [name]: !prev[name] }));
   };
-
+  
   const handleShowOtherDates = () => {
     setShowOtherDates(!showOtherDates);
     setFilters(prev => ({
@@ -332,20 +328,94 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- Sub-Render: Filtros Activos ---
+  // --- Lógica de Renderizado de Contenido Principal ---
+  // Usamos una variable para definir qué mostrar en el cuerpo, evitando ternarios anidados complejos
+  let mainContent;
+
+  if (isSearching) {
+    mainContent = <Spinner />;
+  } else if (error) {
+    mainContent = (
+      <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg mt-8">
+        <p className="font-bold">Error al cargar: {error}</p>
+      </div>
+    );
+  } else if (filters.operacion) {
+    if (results.length > 0) {
+      mainContent = (
+        <div className="mt-8">
+          {/* Contador */}
+          <h2 className="text-xl font-bold text-mcv-gris mb-4">
+              {propertyCount} Propiedades Encontradas
+          </h2>
+          
+          {/* Botón de ordenar */}
+          {results.length > 1 && (
+            <div className="flex justify-end mb-4">
+              <select
+                name="sortBy"
+                value={filters.sortBy}
+                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                className="p-2 rounded-md bg-white border border-gray-300 text-sm"
+              >
+                <option value="default">Ordenar por...</option>
+                <option value="price_asc">Precio: más bajo primero</option>
+                <option value="price_desc">Precio: más alto primero</option>
+              </select>
+            </div>
+          )}
+
+          {/* Lista de Propiedades */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {results.map(prop => (
+              <PropertyCard key={prop.property_id} property={prop} filters={filters} onContact={handleContactSingleProperty} />
+            ))}
+          </div>
+          
+          {/* Botón de Contacto Global */}
+          <div className="flex justify-center mt-8 pb-8">
+              <button
+                  onClick={generateContactMessages}
+                  className="px-6 py-3 bg-mcv-verde text-white font-bold rounded-lg shadow-lg hover:bg-opacity-80 transition-all"
+              >
+                  Contactar con un Agente por estas opciones
+              </button>
+          </div>
+        </div>
+      );
+    } else if (filters.zona || isSearching || filters.searchText) {
+      mainContent = (
+        <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg mt-8">
+          <p className="font-bold">No se encontraron propiedades</p>
+          <p>Intente ajustar sus filtros de búsqueda.</p>
+        </div>
+      );
+    } else {
+      mainContent = null; // Caso raro, no debería pasar si operacion está seteado
+    }
+  } else {
+    // Pantalla inicial (Botones de operación)
+    mainContent = (
+      <div className="text-center text-gray-500 p-10 mt-8">
+        <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
+        <p>Seleccione una operación arriba para comenzar.</p>
+      </div>
+    );
+  }
+
+  // --- Renderizado del Asistente de Filtros ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
       {filters.zona && <ActiveFilterTag label={`Zona: ${filters.zona}`} onRemove={() => removeFilter('zona')} />}
       {filters.tipo && <ActiveFilterTag label={`Tipo: ${filters.tipo}`} onRemove={() => removeFilter('tipo')} />}
       {filters.barrios.map(b => (
-        <ActiveFilterTag key={b} label={`Barrio: ${b}`} onRemove={() => removeFilter('barrios', b)} />
+          <ActiveFilterTag key={b} label={`Barrio: ${b}`} onRemove={() => removeFilter('barrios', b)} />
       ))}
       {filters.searchText && <ActiveFilterTag label={`"${filters.searchText}"`} onRemove={() => removeFilter('searchText')} />}
     </div>
   );
 
-  // --- Sub-Render: Asistente de Filtros ---
   const renderAsistente = () => {
     if (!filters.operacion) {
       return (
@@ -365,16 +435,16 @@ export default function EmbedSearchPage() {
         </div>
       );
     }
-
+    
     if (isLoadingFilters) {
       return <div className="text-center p-10"><Spinner /></div>;
     }
-
+    
     if (error && !listas.zonas.length) {
-      return (
-        <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
-          <p className="font-bold">{error}</p>
-        </div>
+       return (
+         <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
+           <p className="font-bold">{error}</p>
+         </div>
       );
     }
 
@@ -390,9 +460,9 @@ export default function EmbedSearchPage() {
           {listas.zonas.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {listas.zonas.map((zona, index) => (
-                <button
-                  key={zona}
-                  onClick={() => handleFilterChange('zona', zona)}
+                <button 
+                  key={zona} 
+                  onClick={() => handleFilterChange('zona', zona)} 
                   className={`p-4 rounded-lg shadow-lg transition-all text-lg font-bold ${buttonColors[index % buttonColors.length]}`}
                 >
                   {zona}
@@ -400,7 +470,7 @@ export default function EmbedSearchPage() {
               ))}
             </div>
           ) : (
-            <p className="text-gray-500">No hay zonas compatibles con "{filters.operacion.replace('_', ' ')}".</p>
+             <p className="text-gray-500">No hay zonas compatibles con "{filters.operacion.replace('_', ' ')}".</p>
           )}
         </div>
       );
@@ -424,7 +494,7 @@ export default function EmbedSearchPage() {
             />
           </div>
         </div>
-
+        
         {barrioOptions.length > 0 && (
           <div className="mb-4">
             <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -442,6 +512,7 @@ export default function EmbedSearchPage() {
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          
           <div>
             <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
             <select
@@ -491,10 +562,10 @@ export default function EmbedSearchPage() {
               </label>
             </div>
           )}
-
+          
           <div>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
-            <input
+            <input 
               type="number" id="minPrice" name="minPrice"
               placeholder={pricePlaceholder[filters.operacion] || 'Ej: 1000'}
               value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
@@ -503,7 +574,7 @@ export default function EmbedSearchPage() {
           </div>
           <div>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
-            <input
+            <input 
               type="number" id="maxPrice" name="maxPrice"
               placeholder="Sin límite"
               value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
@@ -574,6 +645,7 @@ export default function EmbedSearchPage() {
                 />
                 <span className="text-sm text-gray-700">Con Pileta</span>
               </label>
+              
               {filters.operacion !== 'venta' && (
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -593,6 +665,7 @@ export default function EmbedSearchPage() {
     );
   };
 
+  // --- Render Principal ---
   return (
     <div id="__next" className="min-h-screen">
       
@@ -602,7 +675,7 @@ export default function EmbedSearchPage() {
         whatsappMessage={contactPayload.whatsappMessage}
         adminEmailHtml={contactPayload.adminEmailHtml}
         propertyCount={contactPayload.propertyCount}
-        filteredProperties={contactPayload.filteredProperties} 
+        filteredProperties={contactPayload.filteredProperties}
         currentFilters={contactPayload.currentFilters}
       />
       
@@ -613,57 +686,9 @@ export default function EmbedSearchPage() {
           {renderFiltrosActivos()}
           {renderAsistente()} 
 
-          {isSearching ? (
-            <Spinner />
-          ) : error ? (
-            <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg mt-8">
-              <p className="font-bold">Error al cargar: {error}</p>
-            </div>
-          ) : (filters.operacion) ? (
-            results.length > 0 ? (
-              <div className="mt-8">
-                {/* Contador */}
-                <h2 className="text-xl font-bold text-mcv-gris mb-4">
-                    {propertyCount} Propiedades Encontradas
-                </h2>
-                
-                {/* Botón de ordenar */}
-                {results.length > 1 && (
-                  <div className="flex justify-end mb-4">
-                    <select
-                      name="sortBy"
-                      value={filters.sortBy}
-                      onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                      className="p-2 rounded-md bg-white border border-gray-300 text-sm"
-                    >
-                      <option value="default">Ordenar por...</option>
-                      <option value="price_asc">Precio: más bajo primero</option>
-                      <option value="price_desc">Precio: más alto primero</option>
-                    </select>
-                  </div>
-                )}
+          {/* --- Contenido Dinámico (Variable 'mainContent') --- */}
+          {mainContent} 
 
-                {/* Lista de Propiedades */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {results.map(prop => (
-                    <PropertyCard key={prop.property_id} property={prop} filters={filters} onContact={handleContactSingleProperty} />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              (filters.zona || isSearching || filters.searchText) && (
-                <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg mt-8">
-                  <p className="font-bold">No se encontraron propiedades</p>
-                  <p>Intente ajustar sus filtros de búsqueda.</p>
-                </div>
-              )
-            )
-          ) : (
-             <div className="text-center text-gray-500 p-10 mt-8">
-                <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
-                <p>Seleccione una operación arriba para comenzar.</p>
-             </div>
-          )}
         </main>
 
       </div>
