@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import PropertyCard from '@/components/PropertyCard';
@@ -16,7 +16,6 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -183,7 +182,7 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Handlers de Contacto ---
+  // --- Contacto ---
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     
@@ -660,8 +659,13 @@ export default function SearchPage() {
         );
     }
 
-    return null;
-  };
+    return (
+        <div className="text-center text-gray-500 p-10 mt-8">
+            <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
+            <p>Seleccione una operación arriba para comenzar.</p>
+        </div>
+    );
+  }
 
   // --- Render Principal (JSX) ---
   return (
