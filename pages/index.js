@@ -16,6 +16,7 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -34,8 +35,6 @@ const EXCLUDE_DATES = [
 export default function SearchPage() {
   const router = useRouter(); 
   
-  // Solución al error: Mantenemos 'contentRef' solo en el embed, pero quitamos el PostMessage de aquí.
-
   const [filters, setFilters] = useState({
     operacion: null,
     zona: null,
@@ -283,7 +282,6 @@ export default function SearchPage() {
     setFilters(prev => ({
       ...prev,
       [name]: !prev[name],
-      // Lógica C: Si marco "o más" en Bedrooms, lo reflejo
       ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
     }));
   };
@@ -320,7 +318,7 @@ export default function SearchPage() {
     }
   };
 
-  // --- RENDERIZADO ---
+  // --- Render Helpers ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -354,7 +352,7 @@ export default function SearchPage() {
     }
     
     if (isLoadingFilters) {
-      return <div className="text-center p-10"><Spinner /></div>;
+      return <Spinner />;
     }
     
     if (error && !listas.zonas.length) {
@@ -662,13 +660,8 @@ export default function SearchPage() {
         );
     }
 
-    return (
-        <div className="text-center text-gray-500 p-10 mt-8">
-            <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
-            <p>Seleccione una operación arriba para comenzar.</p>
-        </div>
-    );
-  }
+    return null;
+  };
 
   // --- Render Principal (JSX) ---
   return (
