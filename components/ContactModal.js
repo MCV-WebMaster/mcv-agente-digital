@@ -2,23 +2,23 @@ import { useState, useEffect } from 'react';
 import Modal from 'react-modal';
 import Spinner from './Spinner';
 
-// ¡CORRECCIÓN FINAL DE ESTILOS! Posicionamiento Fijo y Alto
+// ¡SOLUCIÓN DE POSICIONAMIENTO! Anclamos a 50px del Top y lo hacemos fijo.
 const customStyles = {
   content: {
-    // CAMBIOS CLAVE: Quitamos 'top: 50%' y 'translateY(-50%)' para evitar el error de centrado
-    top: '50px', // ANCLAJE: Siempre a 50px del top visible
+    // ANCLAJE: Siempre a 50px del top visible
+    top: '50px', 
     left: '50%',
     right: 'auto',
     bottom: 'auto',
-    marginRight: '-50%', 
+    marginRight: '-50%',
     transform: 'translateX(-50%)', // Solo centrado horizontal
     
-    position: 'fixed', // Fundamental: se queda en la ventana visible
+    position: 'fixed', // CRÍTICO: Se mantiene visible en el viewport
     
     width: '90%',
     maxWidth: '500px',
-    maxHeight: '90vh', 
-    overflowY: 'auto', 
+    maxHeight: '90vh', // Para que no se salga de pantallas pequeñas
+    overflowY: 'auto', // Scroll interno si es necesario
     
     borderRadius: '8px',
     boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
@@ -27,7 +27,7 @@ const customStyles = {
   },
   overlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    position: 'fixed', 
+    position: 'fixed',
     zIndex: 999,
   },
 };
