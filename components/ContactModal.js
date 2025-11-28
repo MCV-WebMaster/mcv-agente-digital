@@ -2,24 +2,19 @@ import { useState, useEffect } from 'react';
 import Modal from 'react-modal';
 import Spinner from './Spinner';
 
-// ¡SOLUCIÓN DE POSICIONAMIENTO! Anclaje Fijo al Top
 const customStyles = {
   content: {
-    // ANCLAJE CORREGIDO: Fijo y anclado a 50px del top visible.
     top: '50px', 
     left: '50%',
     right: 'auto',
     bottom: 'auto',
     marginRight: '-50%',
-    transform: 'translateX(-50%)', // Solo centrado horizontal
-    
-    position: 'fixed', // CRÍTICO: Se mantiene visible en la ventana
-    
+    transform: 'translateX(-50%)',
+    position: 'fixed', 
     width: '90%',
     maxWidth: '500px',
-    maxHeight: '90vh', // Para que quepa en la mayoría de las pantallas
+    maxHeight: '90vh', 
     overflowY: 'auto', 
-    
     borderRadius: '8px',
     boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
     padding: '2rem',
@@ -80,10 +75,11 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
       body: JSON.stringify(contactData),
     }).catch(err => console.error("Error envío silencioso:", err));
 
-    // El mensaje de WA se genera con el prefijo "Hola, soy [Nombre]"
+    // --- ¡CORRECCIÓN FINAL DEL LINK Y NÚMERO! ---
     const finalWhatsappMessage = encodeURIComponent(
-        `Hola, soy ${formData.name}. ${whatsappMessage.replace('Hola...!', '')}` // Eliminamos el 'Hola...!' redundante
+        `Hola, soy ${formData.name}. ${whatsappMessage}`
     );
+    // Usamos el nombre de variable que el código está esperando
     const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER}?text=${finalWhatsappMessage}`;
 
     window.open(whatsappLink, '_blank');
