@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import PropertyCard from '@/components/PropertyCard';
@@ -31,9 +31,11 @@ const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
+const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
+
+
 export default function SearchPage() {
   const router = useRouter(); 
-  const contentRef = useRef(null); // ¡CORRECCIÓN: Inicialización de useRef aquí!
   
   const [filters, setFilters] = useState({
     operacion: null,
@@ -65,8 +67,7 @@ export default function SearchPage() {
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    filteredProperties: [],
-    currentFilters: {}
+    targetAgentNumber: '' 
   });
 
   const [results, setResults] = useState([]);
@@ -81,6 +82,14 @@ export default function SearchPage() {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
     alquiler_anual: "Ej: 1000"
+  };
+
+  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
+  const getAgentNumber = (op, zona) => {
+    if (op === 'venta' && zona === 'Costa Esmeralda') {
+      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
+    }
+    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
   // --- 0. LEER URL AL INICIO (Deep Linking) ---
@@ -183,15 +192,26 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Handlers de Contacto ---
+  // --- LOGIC E: Handler de Mascotas con Alert ---
+  const handleMascotasChange = () => {
+    // Si el usuario marca la casilla (pasa de false a true)
+    if (!filters.pets) {
+        alert(ALERT_MASCOTAS); 
+    }
+    handleCheckboxChange('pets');
+  };
+
+  // --- Handlers de Contacto (F) ---
   const generateContactMessages = () => {
+    const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
+    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
       
-      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
@@ -206,21 +226,21 @@ export default function SearchPage() {
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: results.length,
-        filteredProperties: results,
-        currentFilters: filters
+        targetAgentNumber: targetAgentNumber 
     });
     setIsModalOpen(true);
   };
 
   const handleContactSingleProperty = (property) => {
+    const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
+    
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: 1,
-        filteredProperties: [property],
-        currentFilters: filters
+        targetAgentNumber: targetAgentNumber
     });
     setIsModalOpen(true);
   };
@@ -253,6 +273,10 @@ export default function SearchPage() {
         newState.startDate = null;
         newState.endDate = null;
         setDateRange([null, null]);
+      }
+      // Lógica C: Si cambiamos el número de dormitorios, reseteamos el flag 'or more' si no está explícito
+      if (name === 'bedrooms' && !prev.bedrooms_or_more) {
+          newState.bedrooms_or_more = false;
       }
       return newState;
     });
@@ -575,7 +599,7 @@ export default function SearchPage() {
                   <input
                     type="checkbox" name="pets"
                     checked={filters.pets}
-                    onChange={() => handleCheckboxChange('pets')}
+                    onChange={() => handleMascotasChange()} // <-- USAR HANDLER CON ALERTA
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
