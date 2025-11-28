@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
+// --- Constantes de Categoría ---
 const CATEGORY_IDS = {
   VENTA: 198,
   ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada
@@ -31,10 +32,10 @@ export default async function handler(req, res) {
     const { 
       operacion, zona, tipo, 
       barrios, pax, pax_or_more,
-      pets, pool, bedrooms, bedrooms_or_more, // ¡PUNTO C!
+      pets, pool, bedrooms, bedrooms_or_more, 
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
-      selectedPeriod, 
+      selectedPeriod, // ¡Usamos esta variable directamente!
       sortBy = 'default',
       searchText
     } = req.body;
@@ -55,12 +56,9 @@ export default async function handler(req, res) {
       // LÓGICA A: Mapeo de Categorías
       const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
       
-      // Si hay un período fijo seleccionado o estamos en la temporada, buscamos las de VERANO.
       if (isSearchingInHighSeason) {
-        // Opción 1: Buscamos en la categoría de Verano (la más común)
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       } else {
-        // Opción 2: Si es la vista inicial o fuera de temporada, buscamos AMBAS (para ver todas las opciones "desde").
         query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
       }
 
@@ -69,6 +67,7 @@ export default async function handler(req, res) {
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       
+      // Filtros Checkbox
       if (pool === true) query = query.eq('tiene_piscina', true);
       if (pets === true) query = query.eq('acepta_mascota', true);
       
@@ -76,9 +75,9 @@ export default async function handler(req, res) {
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
-            query = query.gte('bedrooms', bedroomsNum); // O más
+            query = query.gte('bedrooms', bedroomsNum);
         } else {
-            query = query.eq('bedrooms', bedroomsNum); // Exacto
+            query = query.eq('bedrooms', bedroomsNum); 
         }
       }
 
@@ -114,7 +113,7 @@ export default async function handler(req, res) {
         }
       }
       
-      // Lógica de Disponibilidad Específica
+      // Lógica de Fechas
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
 
@@ -125,7 +124,8 @@ export default async function handler(req, res) {
           .in('property_id', propertyIds)
           .eq('status', 'Disponible');
         
-        if (userSelectedPeriod) {
+        // ¡CORRECCIÓN! Usamos selectedPeriod directamente
+        if (selectedPeriod) { 
           const periodsToSearch = [selectedPeriod];
           filteredPeriodQuery = filteredPeriodQuery
             .in('period_name', periodsToSearch)
@@ -134,7 +134,7 @@ export default async function handler(req, res) {
            filteredPeriodQuery = filteredPeriodQuery.lte('start_date', startDate).gte('end_date', endDate);
         }
           
-        if (userSelectedPeriod || userSelectedDates) {
+        if (selectedPeriod || userSelectedDates) {
             const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
             if (filteredPeriodsError) throw filteredPeriodsError;
             
@@ -144,7 +144,7 @@ export default async function handler(req, res) {
                 if (period.price && (typeof period.price === 'string') && (period.price.includes('$') || period.price.match(/^[\d\.,\s]+$/))) {
                    periodPrice = parseInt(period.price.replace(/[^0-9]/g, ''), 10) || 0;
                 }
-                if (userSelectedPeriod && periodPrice === 0) continue; 
+                if (selectedPeriod && periodPrice === 0) continue; 
     
                 availablePropertyIds.add(period.property_id);
                 periodDetailsMap.set(period.property_id, {
@@ -165,8 +165,7 @@ export default async function handler(req, res) {
           found_period_name: periodDetailsMap.get(p.property_id)?.name || null
         }))
         .filter(p => { 
-            const priceToFilter = userSelectedPeriod ? p.found_period_price : p.min_rental_price;
-            
+            const priceToFilter = selectedPeriod ? p.found_period_price : p.min_rental_price;
             if (!minPrice && !maxPrice) return true;
             const passesMinPrice = !minPrice || (priceToFilter && priceToFilter >= minPrice);
             const passesMaxPrice = !maxPrice || (priceToFilter && priceToFilter <= maxPrice);
@@ -174,22 +173,22 @@ export default async function handler(req, res) {
             return passesMinPrice && passesMaxPrice;
         });
 
-      if (isSearchingInHighSeason && (userSelectedPeriod || userSelectedDates)) {
+      if (isSearchingInHighSeason && (selectedPeriod || userSelectedDates)) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
       
       if (sortBy === 'price_asc' || sortBy === 'default') {
-        const priceKey = userSelectedPeriod ? 'found_period_price' : 'min_rental_price';
+        const priceKey = selectedPeriod ? 'found_period_price' : 'min_rental_price';
         finalResults.sort((a, b) => (a[priceKey] || 9999999) - (b[priceKey] || 9999999));
       } else if (sortBy === 'price_desc') {
-        const priceKey = userSelectedPeriod ? 'found_period_price' : 'min_rental_price';
+        const priceKey = selectedPeriod ? 'found_period_price' : 'min_rental_price';
         finalResults.sort((a, b) => (b[priceKey] || 0) - (a[priceKey] || 0));
       }
 
       return res.status(200).json({ status: 'OK', count: finalResults.length, results: finalResults });
     } 
     
-    // --- VENTA / ALQUILER ANUAL ---
+    // --- VENTA / ANUAL ---
     else {
       if (operacion === 'venta') {
         query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
@@ -211,7 +210,6 @@ export default async function handler(req, res) {
       
       if (pool === true) query = query.eq('tiene_piscina', true);
       
-      // LÓGICA C: Dormitorios (Exacto o 'o más')
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
