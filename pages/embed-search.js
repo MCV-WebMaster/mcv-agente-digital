@@ -241,7 +241,7 @@ export default function EmbedSearchPage() {
     setIsModalOpen(true);
   };
   
-  // --- Handlers de Filtros ---
+  // --- Filtros Handlers ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -328,7 +328,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- Render Helpers ---
+  // --- RENDERIZADO ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -679,7 +679,7 @@ export default function EmbedSearchPage() {
         whatsappMessage={contactPayload.whatsappMessage}
         adminEmailHtml={contactPayload.adminEmailHtml}
         propertyCount={contactPayload.propertyCount}
-        filteredProperties={contactPayload.filteredProperties}
+        filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
       />
       
