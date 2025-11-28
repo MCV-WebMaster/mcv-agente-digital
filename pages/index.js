@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import PropertyCard from '@/components/PropertyCard';
@@ -36,6 +36,7 @@ const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglam
 
 export default function SearchPage() {
   const router = useRouter(); 
+  const contentRef = useRef(null); // <--- RESTAURADO: Necesario para que Next.js no dé ReferenceError
   
   const [filters, setFilters] = useState({
     operacion: null,
@@ -49,6 +50,8 @@ export default function SearchPage() {
     bedrooms: '',
     bedrooms_or_more: false,
     minMts: '',
+    maxMts: '',
+    minPrice: '',
     maxMts: '',
     minPrice: '',
     maxPrice: '',
@@ -67,7 +70,8 @@ export default function SearchPage() {
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    targetAgentNumber: '' 
+    filteredProperties: [],
+    currentFilters: {}
   });
 
   const [results, setResults] = useState([]);
@@ -82,14 +86,6 @@ export default function SearchPage() {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
     alquiler_anual: "Ej: 1000"
-  };
-
-  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
-  const getAgentNumber = (op, zona) => {
-    if (op === 'venta' && zona === 'Costa Esmeralda') {
-      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
-    }
-    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
   // --- 0. LEER URL AL INICIO (Deep Linking) ---
@@ -194,14 +190,14 @@ export default function SearchPage() {
 
   // --- LOGIC E: Handler de Mascotas con Alert ---
   const handleMascotasChange = () => {
-    // Si el usuario marca la casilla (pasa de false a true)
+    // Si el usuario marca la casilla, mostramos el disclaimer
     if (!filters.pets) {
         alert(ALERT_MASCOTAS); 
     }
     handleCheckboxChange('pets');
   };
 
-  // --- Handlers de Contacto (F) ---
+  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
     
@@ -226,6 +222,8 @@ export default function SearchPage() {
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: results.length,
+        filteredProperties: results,
+        currentFilters: filters,
         targetAgentNumber: targetAgentNumber 
     });
     setIsModalOpen(true);
@@ -240,9 +238,19 @@ export default function SearchPage() {
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: 1,
+        filteredProperties: [property],
+        currentFilters: filters,
         targetAgentNumber: targetAgentNumber
     });
     setIsModalOpen(true);
+  };
+  
+  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
+  const getAgentNumber = (op, zona) => {
+    if (op === 'venta' && zona === 'Costa Esmeralda') {
+      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
+    }
+    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
   
   // --- Handlers de Filtros ---
@@ -273,10 +281,6 @@ export default function SearchPage() {
         newState.startDate = null;
         newState.endDate = null;
         setDateRange([null, null]);
-      }
-      // Lógica C: Si cambiamos el número de dormitorios, reseteamos el flag 'or more' si no está explícito
-      if (name === 'bedrooms' && !prev.bedrooms_or_more) {
-          newState.bedrooms_or_more = false;
       }
       return newState;
     });
@@ -342,7 +346,7 @@ export default function SearchPage() {
     }
   };
 
-  // --- RENDERIZADO DEL ASISTENTE ---
+  // --- RENDERIZADO ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -599,7 +603,7 @@ export default function SearchPage() {
                   <input
                     type="checkbox" name="pets"
                     checked={filters.pets}
-                    onChange={() => handleMascotasChange()} // <-- USAR HANDLER CON ALERTA
+                    onChange={() => handleCheckboxChange('pets')}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
