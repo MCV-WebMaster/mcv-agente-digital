@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import Modal from 'react-modal';
 import Spinner from './Spinner';
 
-// ¡CORRECCIÓN CRÍTICA DE ESTILOS! Cambiamos de 'absolute' a 'fixed'
-// para que el modal se centre en la VENTANA VISIBLE, no en el iframe completo.
+// Estilos base del modal. Cambiamos 'top' para usar posicionamiento dinámico.
 const customStyles = {
   content: {
     top: '50%',
@@ -12,13 +11,13 @@ const customStyles = {
     bottom: 'auto',
     marginRight: '-50%',
     transform: 'translate(-50%, -50%)',
-    // Usamos 'position: fixed' para que no se pierda en el scroll del iframe
+    // Usamos 'position: fixed' para que el scroll del iframe no lo mueva
     position: 'fixed', 
     
     width: '90%',
     maxWidth: '500px',
-    maxHeight: '90vh', 
-    overflowY: 'auto', 
+    maxHeight: '90vh', // Siempre visible
+    overflowY: 'auto', // Permite scroll interno si la lista es larga
     
     borderRadius: '8px',
     boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
@@ -27,7 +26,7 @@ const customStyles = {
   },
   overlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    position: 'fixed', // También el overlay debe ser fijo
+    position: 'fixed', // El overlay también debe ser fijo
     zIndex: 999,
   },
 };
@@ -40,6 +39,7 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
   });
   const [status, setStatus] = useState('idle'); 
 
+  // Recuperar datos del usuario
   useEffect(() => {
     if (isOpen) {
         try {
@@ -63,8 +63,10 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
     e.preventDefault();
     setStatus('sending');
 
+    // 1. Guardar datos en Local Storage (para la próxima)
     localStorage.setItem('mcv_contact_data', JSON.stringify(formData));
 
+    // 2. Preparar el Payload para la API
     const propertyDetails = filteredProperties ? filteredProperties.map(p => ({ title: p.title, url: p.url, id: p.property_id })) : [];
     
     const contactData = { 
@@ -74,16 +76,18 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
       rawFilters: currentFilters,      
     };
 
+    // 3. Enviar a la API (guarda en DB y envía email)
     fetch('/api/send-contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contactData),
     }).catch(err => console.error("Error envío silencioso:", err));
 
+    // 4. ABRIR WHATSAPP
     const finalWhatsappMessage = encodeURIComponent(
         `Hola, soy ${formData.name}. ${whatsappMessage}`
     );
-    const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_CONTACT_WHATSAPP_NUMBER}?text=${finalWhatsappMessage}`;
+    const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER}?text=${finalWhatsappMessage}`;
 
     window.open(whatsappLink, '_blank');
     

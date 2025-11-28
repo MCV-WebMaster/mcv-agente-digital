@@ -590,7 +590,8 @@ export default function EmbedSearchPage() {
     );
   };
 
-  const renderMainContent = () => {
+  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS ---
+  const renderResults = () => {
     if (isSearching) {
         return <Spinner />;
     }
@@ -603,13 +604,9 @@ export default function EmbedSearchPage() {
         );
     }
 
+    // Si el usuario no ha seleccionado la operación inicial, salimos
     if (!filters.operacion) {
-        return (
-            <div className="text-center text-gray-500 p-10 mt-8">
-                <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
-                <p>Seleccione una operación arriba para comenzar.</p>
-            </div>
-        );
+        return null;
     }
 
     if (results.length > 0) {
@@ -652,6 +649,7 @@ export default function EmbedSearchPage() {
         );
     }
 
+    // Sin Resultados (pero con filtros aplicados)
     if (filters.zona || filters.searchText || filters.barrios.length > 0) {
         return (
             <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg mt-8">
@@ -661,12 +659,8 @@ export default function EmbedSearchPage() {
         );
     }
 
-    return (
-        <div className="text-center text-gray-500 p-10 mt-8">
-            <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
-            <p>Seleccione una operación arriba para comenzar.</p>
-        </div>
-    );
+    // Caso inicial después de seleccionar Operación (antes de seleccionar zona)
+    return null;
   }
 
   // --- Render Principal (JSX) ---
@@ -679,16 +673,20 @@ export default function EmbedSearchPage() {
         whatsappMessage={contactPayload.whatsappMessage}
         adminEmailHtml={contactPayload.adminEmailHtml}
         propertyCount={contactPayload.propertyCount}
-        filteredProperties={contactPayload.filteredProperties}
+        filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
       />
       
       <div ref={contentRef} className="max-w-7xl mx-auto p-4 md:p-8">
+        
         <main>
+          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
+          
         </main>
+
       </div>
       
     </div>
