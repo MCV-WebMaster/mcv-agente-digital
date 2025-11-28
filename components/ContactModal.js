@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import Modal from 'react-modal';
 import Spinner from './Spinner';
 
+// ¡CORRECCIÓN CRÍTICA DE ESTILOS! Cambiamos de 'absolute' a 'fixed'
+// para que el modal se centre en la VENTANA VISIBLE, no en el iframe completo.
 const customStyles = {
   content: {
     top: '50%',
@@ -10,12 +12,14 @@ const customStyles = {
     bottom: 'auto',
     marginRight: '-50%',
     transform: 'translate(-50%, -50%)',
+    // Usamos 'position: fixed' para que no se pierda en el scroll del iframe
+    position: 'fixed', 
+    
     width: '90%',
     maxWidth: '500px',
-    // --- FIX DE POSICIÓN Y SCROLL ---
     maxHeight: '90vh', 
     overflowY: 'auto', 
-    // -------------------------------
+    
     borderRadius: '8px',
     boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
     padding: '2rem',
@@ -23,6 +27,7 @@ const customStyles = {
   },
   overlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    position: 'fixed', // También el overlay debe ser fijo
     zIndex: 999,
   },
 };
