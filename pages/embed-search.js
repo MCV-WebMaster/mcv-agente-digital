@@ -43,6 +43,7 @@ export default function EmbedSearchPage() {
     pets: false,
     pool: false,
     bedrooms: '',
+    bedrooms_or_more: false,
     minMts: '',
     maxMts: '',
     minPrice: '',
@@ -120,7 +121,9 @@ export default function EmbedSearchPage() {
           pax: query.pax || '',
           selectedPeriod: query.selectedPeriod || '',
           searchText: query.searchText || '',
-          pax_or_more: query.pax ? true : false
+          pax_or_more: query.pax ? true : false,
+          bedrooms: query.bedrooms || '',
+          bedrooms_or_more: query.bedrooms ? true : false
         }));
       }
       setHasHydrated(true);
@@ -167,10 +170,15 @@ export default function EmbedSearchPage() {
     setError(null);
     
     try {
+      const payload = { 
+          ...currentFilters, 
+          bedrooms_or_more: currentFilters.bedrooms_or_more 
+      };
+
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentFilters),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errData = await response.json();
@@ -368,7 +376,7 @@ export default function EmbedSearchPage() {
     }
     
     if (isLoadingFilters) {
-      return <div className="text-center p-10"><Spinner /></div>;
+      return <Spinner />;
     }
     
     if (error && !listas.zonas.length) {
@@ -432,12 +440,12 @@ export default function EmbedSearchPage() {
             <Select
               id="barrio"
               instanceId="barrio-select"
-              isMulti
               options={barrioOptions}
               value={selectedBarrios}
               onChange={handleMultiBarrioChange}
               placeholder="Seleccione uno o varios barrios..."
               className="text-sm"
+              isMulti
             />
           </div>
         )}
