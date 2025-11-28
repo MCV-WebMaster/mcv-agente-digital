@@ -1,8 +1,10 @@
 import { supabase } from '@/lib/supabaseClient';
 
+// --- Constantes de Categoría (Aseguramos que ambas temporales existan) ---
 const CATEGORY_IDS = {
   VENTA: 198,
-  ALQUILER_TEMPORAL: 197,
+  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada
+  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada
   ALQUILER_ANUAL: 194,
   ALQUILER_ANUAL_AMUEBLADO: 193,
 };
@@ -30,7 +32,7 @@ export default async function handler(req, res) {
     const { 
       operacion, zona, tipo, 
       barrios, pax, pax_or_more,
-      pets, pool, bedrooms,
+      pets, pool, bedrooms, bedrooms_or_more, // Usamos flag de dormitorios
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
       selectedPeriod, 
@@ -50,20 +52,27 @@ export default async function handler(req, res) {
 
     // --- ALQUILER TEMPORAL ---
     if (operacion === 'alquiler_temporal') {
-      query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
+      
+      // LÓGICA A: Buscamos ambas categorías temporales (Verano e General)
+      query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
 
       if (zona) query = query.eq('zona', zona);
       if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       
-      // --- ¡CORRECCIÓN CRÍTICA DE FILTROS! ---
-      // Solo filtramos si el usuario PIDE explícitamente (true). 
-      // Si es false (desmarcado), mostramos todo (con y sin).
       if (pool === true) query = query.eq('tiene_piscina', true);
       if (pets === true) query = query.eq('acepta_mascota', true);
       
-      if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
+      // LÓGICA C: Dormitorios (Exacto o 'o más')
+      if (bedrooms) {
+        const bedroomsNum = parseInt(bedrooms, 10);
+        if (bedrooms_or_more === true) {
+            query = query.gte('bedrooms', bedroomsNum);
+        } else {
+            query = query.eq('bedrooms', bedroomsNum); // Por defecto es exacto, si no se marca 'o más'
+        }
+      }
 
       if (pax) {
         const paxNum = parseInt(pax, 10);
@@ -112,8 +121,9 @@ export default async function handler(req, res) {
           .eq('status', 'Disponible');
         
         if (userSelectedPeriod) {
+          const periodsToSearch = [selectedPeriod]; // Buscamos solo el período exacto
           filteredPeriodQuery = filteredPeriodQuery
-            .eq('period_name', selectedPeriod)
+            .in('period_name', periodsToSearch)
             .not('price', 'is', null);
         } else {
            filteredPeriodQuery = filteredPeriodQuery.lte('start_date', startDate).gte('end_date', endDate);
@@ -180,7 +190,6 @@ export default async function handler(req, res) {
         if (maxPrice) query = query.lte('price', parseInt(maxPrice, 10));
         if (sortBy === 'price_asc' || sortBy === 'default') query = query.order('price', { ascending: true, nullsFirst: false });
         if (sortBy === 'price_desc') query = query.order('price', { ascending: false, nullsFirst: false });
-
       } else if (operacion === 'alquiler_anual') {
         query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_ANUAL_AMUEBLADO}}`);
         if (minPrice) query = query.gte('es_property_price_ars', parseInt(minPrice, 10));
@@ -193,9 +202,7 @@ export default async function handler(req, res) {
       if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       
-      // ¡CORRECCIÓN CRÍTICA TAMBIÉN AQUÍ!
       if (pool === true) query = query.eq('tiene_piscina', true);
-      // No filtramos mascotas en venta, pero si se usara, sería igual
       
       if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms, 10));
       if (minMts) query = query.gte('mts_cubiertos', parseInt(minMts, 10));
