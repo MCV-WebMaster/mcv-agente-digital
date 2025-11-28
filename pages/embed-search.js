@@ -105,7 +105,7 @@ export default function EmbedSearchPage() {
     const interval = setInterval(sendHeightToParent, 1000);
     return () => clearInterval(interval);
   }, [sendHeightToParent]);
-
+  
   // --- Inicialización ---
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
@@ -201,21 +201,12 @@ export default function EmbedSearchPage() {
 
   // --- Contacto ---
   const generateContactMessages = () => {
-    let whatsappMessage, adminEmailHtml;
+    const whatsappMessage = generateWhatsappMessage(results);
+    const adminEmailHtml = generateEmailHtml(results);
     
-    if (results.length > 0 && results.length <= 10) {
-      const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
-      const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      
-      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
-      adminEmailHtml = `<ul>${propsListHtml}</ul>`;
-      
-    } else if (results.length > 10) {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
-      adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
-    } else {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
-      adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
+    // ¡NUEVA LÓGICA DE SCROLL!
+    if (window.parent) {
+      window.parent.postMessage({ action: 'scroll_to_top' }, '*'); 
     }
     
     setContactPayload({ 
@@ -231,6 +222,12 @@ export default function EmbedSearchPage() {
   const handleContactSingleProperty = (property) => {
     const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
+    
+    // ¡NUEVA LÓGICA DE SCROLL!
+    if (window.parent) {
+      window.parent.postMessage({ action: 'scroll_to_top' }, '*'); 
+    }
+
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
@@ -240,8 +237,18 @@ export default function EmbedSearchPage() {
     });
     setIsModalOpen(true);
   };
-  
-  // --- Filtros Handlers ---
+
+  // Helper para generar el texto del mensaje de WhatsApp
+  const generateWhatsappMessage = (items) => {
+    const greeting = "Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar";
+    if (items.length > 0 && items.length <= 10) {
+        const list = items.map(p => `${p.title}\n${p.url}\n`).join('\n');
+        return `Hola...! Te escribo porque vi estas propiedades que me interesan:\n\n${list}`;
+    }
+    return `${greeting}, me podes dar mas informacion?`;
+  };
+
+  // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -328,7 +335,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO ---
+  // --- Render Helpers ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -590,6 +597,7 @@ export default function EmbedSearchPage() {
     );
   };
 
+  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS (LA CLAVE PARA EVITAR ERRORES) ---
   const renderMainContent = () => {
     if (isSearching) {
         return <Spinner />;
@@ -683,7 +691,7 @@ export default function EmbedSearchPage() {
         currentFilters={contactPayload.currentFilters}
       />
       
-      <div ref={contentRef} className="max-w-7xl mx-auto">
+      <div ref={contentRef} className="max-w-7xl mx-auto p-4 md:p-8">
         
         <main>
           
