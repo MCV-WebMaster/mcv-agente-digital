@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import PropertyCard from '@/components/PropertyCard';
@@ -16,7 +16,6 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Constantes de Períodos ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -32,11 +31,10 @@ const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
-const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
-
-
 export default function SearchPage() {
   const router = useRouter(); 
+  
+  // Solución al error: Mantenemos 'contentRef' solo en el embed, pero quitamos el PostMessage de aquí.
 
   const [filters, setFilters] = useState({
     operacion: null,
@@ -48,7 +46,7 @@ export default function SearchPage() {
     pets: false,
     pool: false,
     bedrooms: '',
-    bedrooms_or_more: false, // ¡NUEVO! Flag para dormitorios
+    bedrooms_or_more: false,
     minMts: '',
     maxMts: '',
     minPrice: '',
@@ -59,17 +57,19 @@ export default function SearchPage() {
     sortBy: 'default',
     searchText: '',
   });
-  
-  // ... (Resto de estados y constantes igual) ...
+
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
   const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    targetAgentNumber: '' // Nuevo campo
+    filteredProperties: [],
+    currentFilters: {}
   });
+
   const [results, setResults] = useState([]);
   const [propertyCount, setPropertyCount] = useState(0);
   const [listas, setListas] = useState({ zonas: [], barrios: {} });
@@ -82,16 +82,6 @@ export default function SearchPage() {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
     alquiler_anual: "Ej: 1000"
-  };
-
-  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
-  const getAgentNumber = (op, zona) => {
-    // Si VENTA y COSTA ESMERALDA, usamos el AGENTE 2 (Venta/Costa)
-    if (op === 'venta' && zona === 'Costa Esmeralda') {
-      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
-    }
-    // Si Alquiler o Venta/GBA Sur, usamos AGENTE 1 (Alquiler/General)
-    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
   // --- 0. LEER URL AL INICIO (Deep Linking) ---
@@ -157,10 +147,8 @@ export default function SearchPage() {
     setError(null);
     
     try {
-      // Ajustamos el payload para el nuevo filtro de dormitorios
       const payload = { 
           ...currentFilters, 
-          // Enviamos flag 'bedrooms_or_more' para la API 
           bedrooms_or_more: currentFilters.bedrooms_or_more 
       };
 
@@ -196,27 +184,15 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC E: Handler de Mascotas con Alert ---
-  const handleMascotasChange = () => {
-    // Si el usuario marca la casilla, mostramos el disclaimer
-    if (!filters.pets) {
-        alert(ALERT_MASCOTAS); 
-    }
-    handleCheckboxChange('pets');
-  };
-
-  // --- HANDLERS DE CONTACTO (F) ---
+  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
-    const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
-    
-    // ... (Lógica de mensajes igual) ...
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
       
-      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
@@ -231,34 +207,31 @@ export default function SearchPage() {
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: results.length,
-        targetAgentNumber: targetAgentNumber // Pasamos el número del Agente
+        filteredProperties: results,
+        currentFilters: filters
     });
     setIsModalOpen(true);
   };
 
   const handleContactSingleProperty = (property) => {
-    const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: 1,
-        targetAgentNumber: targetAgentNumber // Pasamos el número del Agente
+        filteredProperties: [property],
+        currentFilters: filters
     });
     setIsModalOpen(true);
   };
   
-  // --- Filtros UI Handlers ---
-  // ... (handleFilterChange, handleMultiBarrioChange, handleDateChange, handleCheckboxChange, handleShowOtherDates, removeFilter - SON IDÉNTICOS) ...
-  // ... (Render Helpers - Son idénticos) ...
-  
+  // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
-      bedrooms_or_more: false, // Incluimos el nuevo flag
+      bedrooms_or_more: false,
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
     };
@@ -267,13 +240,10 @@ export default function SearchPage() {
       let newState = { ...prev, [name]: value };
       if (name === 'operacion') {
         newState = { ...defaultState, operacion: value };
-        // ... (resto del reset)
+        setDateRange([null, null]);
+        setShowOtherDates(false);
       }
-      // Lógica Bedrooms: Si cambiamos el número de dormitorios, reseteamos el flag 'or more' si no está explícito
-      if (name === 'bedrooms' && !prev.bedrooms_or_more) {
-          newState.bedrooms_or_more = false;
-      }
-      if (name === 'zona') newState.barrios = [];
+      if (name === 'zona') newState.barrios = []; 
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
@@ -289,23 +259,12 @@ export default function SearchPage() {
     });
   };
 
-  const handleCheckboxChange = (name) => {
-    setFilters(prev => ({
-      ...prev,
-      [name]: !prev[name],
-      // LÓGICA C: Si marco "o más" en PAX o Bedrooms, lo reflejo
-      // Nota: El checkbox de dormitorios debe estar en el JSX para que funcione
-      ...(name === 'pax_or_more' && { pax_or_more: !prev.pax_or_more }),
-      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
-    }));
-  };
-  
   const handleMultiBarrioChange = (selectedOptions) => {
     const barrioValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
     setFilters(prev => ({ ...prev, barrios: barrioValues }));
   };
 
-  const handleDateChange = (dates) => { /* ... igual ... */
+  const handleDateChange = (dates) => {
     const [start, end] = dates;
     setDateRange(dates);
     if (start && end) {
@@ -320,7 +279,16 @@ export default function SearchPage() {
     }
   };
 
-  const handleShowOtherDates = () => { /* ... igual ... */
+  const handleCheckboxChange = (name) => {
+    setFilters(prev => ({
+      ...prev,
+      [name]: !prev[name],
+      // Lógica C: Si marco "o más" en Bedrooms, lo reflejo
+      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
+    }));
+  };
+  
+  const handleShowOtherDates = () => {
     setShowOtherDates(!showOtherDates);
     setFilters(prev => ({
       ...prev,
@@ -331,15 +299,14 @@ export default function SearchPage() {
     setDateRange([null, null]);
   };
 
-  const removeFilter = (name, value = null) => { /* ... igual ... */
+  const removeFilter = (name, value = null) => {
     const defaultFilters = {
       operacion: null, zona: null, tipo: null, barrios: [],
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
-      bedrooms_or_more: false, // Incluimos en el reset
+      bedrooms_or_more: false,
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
     };
-    // ... (Lógica de remoción igual)
     if (name === 'operacion') {
       setFilters(defaultFilters);
       setDateRange([null, null]);
@@ -353,8 +320,7 @@ export default function SearchPage() {
     }
   };
 
-
-  // --- RENDERIZADO DEL ASISTENTE ---
+  // --- RENDERIZADO ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -368,7 +334,6 @@ export default function SearchPage() {
   );
 
   const renderAsistente = () => {
-    // ... (Lógica de botones de inicio y zona igual) ...
     if (!filters.operacion) {
       return (
         <div className="text-center">
@@ -481,7 +446,7 @@ export default function SearchPage() {
           </div>
 
           {filters.tipo !== 'lote' && (
-            <div className='col-span-2 md:col-span-1'> {/* Encapsulamos Dormitorios */}
+            <div className='col-span-2 md:col-span-1'>
               <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
               <input
                 type="number" id="bedrooms" name="bedrooms" min="0"
@@ -490,7 +455,6 @@ export default function SearchPage() {
                 placeholder="Ej: 3"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
               />
-              {/* LÓGICA C: Checkbox para Dormitorios */}
               <label className="flex items-center gap-1 cursor-pointer mt-1">
                 <input
                   type="checkbox" name="bedrooms_or_more"
@@ -627,12 +591,11 @@ export default function SearchPage() {
     );
   };
 
-  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS (LIMPIA) ---
   const renderMainContent = () => {
     if (isSearching) {
         return <Spinner />;
     }
-
+    
     if (error) {
         return (
             <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg mt-8">
