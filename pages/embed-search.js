@@ -105,7 +105,7 @@ export default function EmbedSearchPage() {
     const interval = setInterval(sendHeightToParent, 1000);
     return () => clearInterval(interval);
   }, [sendHeightToParent]);
-  
+
   // --- Inicialización ---
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
@@ -201,12 +201,21 @@ export default function EmbedSearchPage() {
 
   // --- Contacto ---
   const generateContactMessages = () => {
-    const whatsappMessage = generateWhatsappMessage(results);
-    const adminEmailHtml = generateEmailHtml(results);
+    let whatsappMessage, adminEmailHtml;
     
-    // ¡NUEVA LÓGICA DE SCROLL!
-    if (window.parent) {
-      window.parent.postMessage({ action: 'scroll_to_top' }, '*'); 
+    if (results.length > 0 && results.length <= 10) {
+      const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
+      const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
+      
+      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      adminEmailHtml = `<ul>${propsListHtml}</ul>`;
+      
+    } else if (results.length > 10) {
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
+    } else {
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
     setContactPayload({ 
@@ -222,12 +231,6 @@ export default function EmbedSearchPage() {
   const handleContactSingleProperty = (property) => {
     const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
-    
-    // ¡NUEVA LÓGICA DE SCROLL!
-    if (window.parent) {
-      window.parent.postMessage({ action: 'scroll_to_top' }, '*'); 
-    }
-
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
@@ -237,22 +240,13 @@ export default function EmbedSearchPage() {
     });
     setIsModalOpen(true);
   };
-
-  // Helper para generar el texto del mensaje de WhatsApp
-  const generateWhatsappMessage = (items) => {
-    const greeting = "Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar";
-    if (items.length > 0 && items.length <= 10) {
-        const list = items.map(p => `${p.title}\n${p.url}\n`).join('\n');
-        return `Hola...! Te escribo porque vi estas propiedades que me interesan:\n\n${list}`;
-    }
-    return `${greeting}, me podes dar mas informacion?`;
-  };
-
+  
   // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
+      bedrooms_or_more: false,
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
     };
@@ -301,7 +295,11 @@ export default function EmbedSearchPage() {
   };
 
   const handleCheckboxChange = (name) => {
-    setFilters(prev => ({ ...prev, [name]: !prev[name] }));
+    setFilters(prev => ({
+      ...prev,
+      [name]: !prev[name],
+      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
+    }));
   };
   
   const handleShowOtherDates = () => {
@@ -319,6 +317,7 @@ export default function EmbedSearchPage() {
     const defaultFilters = {
       operacion: null, zona: null, tipo: null, barrios: [],
       pax: '', pax_or_more: false, pets: false, pool: false, bedrooms: '',
+      bedrooms_or_more: false,
       minMts: '', maxMts: '', minPrice: '', maxPrice: '',
       startDate: null, endDate: null, selectedPeriod: '', sortBy: 'default', searchText: ''
     };
@@ -461,7 +460,7 @@ export default function EmbedSearchPage() {
           </div>
 
           {filters.tipo !== 'lote' && (
-            <div>
+            <div className='col-span-2 md:col-span-1'>
               <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
               <input
                 type="number" id="bedrooms" name="bedrooms" min="0"
@@ -470,6 +469,15 @@ export default function EmbedSearchPage() {
                 placeholder="Ej: 3"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
               />
+              <label className="flex items-center gap-1 cursor-pointer mt-1">
+                <input
+                  type="checkbox" name="bedrooms_or_more"
+                  checked={filters.bedrooms_or_more}
+                  onChange={() => handleCheckboxChange('bedrooms_or_more')}
+                  className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                />
+                <span className="text-xs text-gray-600">o más</span>
+              </label>
             </div>
           )}
 
@@ -597,7 +605,6 @@ export default function EmbedSearchPage() {
     );
   };
 
-  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS (LA CLAVE PARA EVITAR ERRORES) ---
   const renderMainContent = () => {
     if (isSearching) {
         return <Spinner />;
@@ -669,13 +676,8 @@ export default function EmbedSearchPage() {
         );
     }
 
-    return (
-        <div className="text-center text-gray-500 p-10 mt-8">
-            <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
-            <p>Seleccione una operación arriba para comenzar.</p>
-        </div>
-    );
-  }
+    return null;
+  };
 
   // --- Render Principal (JSX) ---
   return (
@@ -691,7 +693,7 @@ export default function EmbedSearchPage() {
         currentFilters={contactPayload.currentFilters}
       />
       
-      <div ref={contentRef} className="max-w-7xl mx-auto p-4 md:p-8">
+      <div ref={contentRef} className="max-w-7xl mx-auto">
         
         <main>
           
