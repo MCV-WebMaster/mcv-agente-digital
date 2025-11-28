@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import PropertyCard from '@/components/PropertyCard';
@@ -33,6 +33,7 @@ const EXCLUDE_DATES = [
 
 export default function SearchPage() {
   const router = useRouter(); 
+  const contentRef = useRef(null); // ¡CORRECCIÓN: Inicialización de useRef aquí!
   
   const [filters, setFilters] = useState({
     operacion: null,
@@ -182,7 +183,7 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Contacto ---
+  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     let whatsappMessage, adminEmailHtml;
     
@@ -317,7 +318,7 @@ export default function SearchPage() {
     }
   };
 
-  // --- Render Helpers ---
+  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -659,13 +660,8 @@ export default function SearchPage() {
         );
     }
 
-    return (
-        <div className="text-center text-gray-500 p-10 mt-8">
-            <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
-            <p>Seleccione una operación arriba para comenzar.</p>
-        </div>
-    );
-  }
+    return null;
+  };
 
   // --- Render Principal (JSX) ---
   return (
