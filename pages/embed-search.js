@@ -241,7 +241,7 @@ export default function EmbedSearchPage() {
     setIsModalOpen(true);
   };
   
-  // --- Filtros Handlers ---
+  // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -530,7 +530,7 @@ export default function EmbedSearchPage() {
                   <input
                     type="checkbox" name="showOtherDates"
                     checked={showOtherDates}
-                    onChange={handleShowOtherDates}
+                    onChange={() => handleCheckboxChange('showOtherDates')}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Otras fechas (Fuera de temporada)</span>
@@ -590,8 +590,7 @@ export default function EmbedSearchPage() {
     );
   };
 
-  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS ---
-  const renderResults = () => {
+  const renderMainContent = () => {
     if (isSearching) {
         return <Spinner />;
     }
@@ -604,9 +603,13 @@ export default function EmbedSearchPage() {
         );
     }
 
-    // Si el usuario no ha seleccionado la operación inicial, salimos
     if (!filters.operacion) {
-        return null;
+        return (
+            <div className="text-center text-gray-500 p-10 mt-8">
+                <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
+                <p>Seleccione una operación arriba para comenzar.</p>
+            </div>
+        );
     }
 
     if (results.length > 0) {
@@ -649,7 +652,6 @@ export default function EmbedSearchPage() {
         );
     }
 
-    // Sin Resultados (pero con filtros aplicados)
     if (filters.zona || filters.searchText || filters.barrios.length > 0) {
         return (
             <div className="text-center text-gray-500 p-10 bg-gray-50 rounded-lg mt-8">
@@ -659,8 +661,12 @@ export default function EmbedSearchPage() {
         );
     }
 
-    // Caso inicial después de seleccionar Operación (antes de seleccionar zona)
-    return null;
+    return (
+        <div className="text-center text-gray-500 p-10 mt-8">
+            <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
+            <p>Seleccione una operación arriba para comenzar.</p>
+        </div>
+    );
   }
 
   // --- Render Principal (JSX) ---
@@ -673,11 +679,11 @@ export default function EmbedSearchPage() {
         whatsappMessage={contactPayload.whatsappMessage}
         adminEmailHtml={contactPayload.adminEmailHtml}
         propertyCount={contactPayload.propertyCount}
-        filteredProperties={contactPayload.filteredProperties} 
+        filteredProperties={contactPayload.filteredProperties}
         currentFilters={contactPayload.currentFilters}
       />
       
-      <div ref={contentRef} className="max-w-7xl mx-auto p-4 md:p-8">
+      <div ref={contentRef} className="max-w-7xl mx-auto">
         
         <main>
           
@@ -688,7 +694,6 @@ export default function EmbedSearchPage() {
         </main>
 
       </div>
-      
     </div>
   );
 }
