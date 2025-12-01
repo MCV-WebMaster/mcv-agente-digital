@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     const { 
       operacion, zona, tipo, 
       barrios, pax, pax_or_more,
-      pets, pool, bedrooms, bedrooms_or_more,
+      pets, pool, bedrooms, bedrooms_or_more, 
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
       selectedPeriod, 
@@ -40,8 +40,7 @@ export default async function handler(req, res) {
     } = req.body;
 
     let query = supabase.from('properties').select('*');
-    // Filtrado de Activas: Solo propiedades con status_ids vacío o que contengan el ID de ACTIVA
-    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); 
+    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
 
     if (searchText) {
       const ftsQuery = formatFTSQuery(searchText);
@@ -53,16 +52,21 @@ export default async function handler(req, res) {
     // --- ALQUILER TEMPORAL ---
     if (operacion === 'alquiler_temporal') {
       
-      // LÓGICA A: Mapeo de Categorías
       const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
+      const isSearchingOutOfSeason = !selectedPeriod && !startDate && !endDate; // Vista inicial SIN fechas
       
-      if (isSearchingInHighSeason) {
-        // Opción 1: Buscamos en la categoría de Verano (197)
-        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
-      } else {
-        // Opción 2: Si es la vista inicial o fuera de temporada, buscamos AMBAS (196 y 197).
+      // LÓGICA A: Mapeo de Categorías
+      if (isSearchingOutOfSeason) {
+        // Vista inicial y Out of Season: buscamos AMBAS (196 y 197) para mostrar todo lo temporal
         query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
+      } else if (isSearchingInHighSeason) {
+        // Si hay periodo o fecha de verano, buscamos Verano (197) y/o General (196)
+        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
+      } else {
+        // Si el usuario marcó 'Otras fechas' (Fuera de temporada), solo buscamos General (196)
+         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
       }
+
 
       if (zona) query = query.eq('zona', zona);
       if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
@@ -76,9 +80,9 @@ export default async function handler(req, res) {
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
-            query = query.gte('bedrooms', bedroomsNum); // O más
+            query = query.gte('bedrooms', bedroomsNum); 
         } else {
-            query = query.eq('bedrooms', bedroomsNum); // Exacto
+            query = query.eq('bedrooms', bedroomsNum); 
         }
       }
 
@@ -99,7 +103,7 @@ export default async function handler(req, res) {
         .select('property_id, price')
         .in('property_id', propertyIds)
         .eq('status', 'Disponible');
-      if (allPeriodsError) throw allPeriodsError;
+      if (allPeriodsData.error) throw allPeriodsData.error;
 
       const minPriceMap = new Map();
       for (const period of allPeriodsData) {
@@ -189,7 +193,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'OK', count: finalResults.length, results: finalResults });
     } 
     
-    // --- VENTA / ANUAL ---
+    // --- VENTA / ALQUILER ANUAL ---
     else {
       if (operacion === 'venta') {
         query = query.contains('category_ids', [CATEGORY_IDS.VENTA]);
@@ -211,6 +215,7 @@ export default async function handler(req, res) {
       
       if (pool === true) query = query.eq('tiene_piscina', true);
       
+      // LÓGICA C: Dormitorios (Exacto o 'o más')
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
