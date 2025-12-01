@@ -91,7 +91,7 @@ export default function EmbedSearchPage() {
         frameId: 'mcv-asistente-iframe' 
       }, '*');
     }
-  }, []);
+  }, [contentRef]);
 
   useEffect(() => {
     const delayedSend = setTimeout(sendHeightToParent, 100); 
@@ -237,7 +237,7 @@ export default function EmbedSearchPage() {
   };
 
   const handleContactSingleProperty = (property) => {
-    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
         whatsappMessage, 
@@ -342,7 +342,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- Render Helpers ---
+  // --- RENDERIZADO ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
