@@ -36,7 +36,7 @@ const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglam
 
 export default function SearchPage() {
   const router = useRouter(); 
-  const contentRef = useRef(null); // <--- RESTAURADO: Necesario para que Next.js no dé ReferenceError
+  const contentRef = useRef(null); // ¡Devolvemos el useRef para que compile!
   
   const [filters, setFilters] = useState({
     operacion: null,
@@ -50,8 +50,6 @@ export default function SearchPage() {
     bedrooms: '',
     bedrooms_or_more: false,
     minMts: '',
-    maxMts: '',
-    minPrice: '',
     maxMts: '',
     minPrice: '',
     maxPrice: '',
@@ -190,7 +188,6 @@ export default function SearchPage() {
 
   // --- LOGIC E: Handler de Mascotas con Alert ---
   const handleMascotasChange = () => {
-    // Si el usuario marca la casilla, mostramos el disclaimer
     if (!filters.pets) {
         alert(ALERT_MASCOTAS); 
     }
@@ -207,7 +204,7 @@ export default function SearchPage() {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
       
-      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
@@ -252,7 +249,7 @@ export default function SearchPage() {
     }
     return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
-  
+
   // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
@@ -346,7 +343,7 @@ export default function SearchPage() {
     }
   };
 
-  // --- RENDERIZADO ---
+  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -444,12 +441,12 @@ export default function SearchPage() {
             <Select
               id="barrio"
               instanceId="barrio-select"
-              isMulti
               options={barrioOptions}
               value={selectedBarrios}
               onChange={handleMultiBarrioChange}
-              placeholder="Seleccione uno o varios barrios..."
+              placeholder="Todos los barrios seleccionados, seleccionar uno o varios barrios para mejorar la búsqueda"
               className="text-sm"
+              isMulti
             />
           </div>
         )}
