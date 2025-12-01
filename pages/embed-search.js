@@ -443,7 +443,7 @@ export default function EmbedSearchPage() {
               options={barrioOptions}
               value={selectedBarrios}
               onChange={handleMultiBarrioChange}
-              placeholder="Seleccione uno o varios barrios..."
+              placeholder="Todos los barrios seleccionados, seleccionar uno o varios barrios para mejorar la búsqueda"
               className="text-sm"
               isMulti
             />

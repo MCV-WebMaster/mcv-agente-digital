@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
 
-// --- Constantes de Categoría ---
 const CATEGORY_IDS = {
   VENTA: 198,
   ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada
@@ -32,16 +31,17 @@ export default async function handler(req, res) {
     const { 
       operacion, zona, tipo, 
       barrios, pax, pax_or_more,
-      pets, pool, bedrooms, bedrooms_or_more, 
+      pets, pool, bedrooms, bedrooms_or_more,
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
-      selectedPeriod, // ¡Usamos esta variable directamente!
+      selectedPeriod, 
       sortBy = 'default',
       searchText
     } = req.body;
 
     let query = supabase.from('properties').select('*');
-    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
+    // Filtrado de Activas: Solo propiedades con status_ids vacío o que contengan el ID de ACTIVA
+    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); 
 
     if (searchText) {
       const ftsQuery = formatFTSQuery(searchText);
@@ -57,8 +57,10 @@ export default async function handler(req, res) {
       const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
       
       if (isSearchingInHighSeason) {
+        // Opción 1: Buscamos en la categoría de Verano (197)
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       } else {
+        // Opción 2: Si es la vista inicial o fuera de temporada, buscamos AMBAS (196 y 197).
         query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
       }
 
@@ -67,7 +69,6 @@ export default async function handler(req, res) {
       if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       
-      // Filtros Checkbox
       if (pool === true) query = query.eq('tiene_piscina', true);
       if (pets === true) query = query.eq('acepta_mascota', true);
       
@@ -75,9 +76,9 @@ export default async function handler(req, res) {
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
-            query = query.gte('bedrooms', bedroomsNum);
+            query = query.gte('bedrooms', bedroomsNum); // O más
         } else {
-            query = query.eq('bedrooms', bedroomsNum); 
+            query = query.eq('bedrooms', bedroomsNum); // Exacto
         }
       }
 
@@ -113,7 +114,7 @@ export default async function handler(req, res) {
         }
       }
       
-      // Lógica de Fechas
+      // Lógica de Disponibilidad Específica
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
 
@@ -124,8 +125,7 @@ export default async function handler(req, res) {
           .in('property_id', propertyIds)
           .eq('status', 'Disponible');
         
-        // ¡CORRECCIÓN! Usamos selectedPeriod directamente
-        if (selectedPeriod) { 
+        if (selectedPeriod) {
           const periodsToSearch = [selectedPeriod];
           filteredPeriodQuery = filteredPeriodQuery
             .in('period_name', periodsToSearch)
@@ -166,6 +166,7 @@ export default async function handler(req, res) {
         }))
         .filter(p => { 
             const priceToFilter = selectedPeriod ? p.found_period_price : p.min_rental_price;
+            
             if (!minPrice && !maxPrice) return true;
             const passesMinPrice = !minPrice || (priceToFilter && priceToFilter >= minPrice);
             const passesMaxPrice = !maxPrice || (priceToFilter && priceToFilter <= maxPrice);
