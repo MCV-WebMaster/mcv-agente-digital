@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; 
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag';
+import ActiveFilterTag from '@/components/ActiveFilterTag'; 
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
@@ -27,9 +27,6 @@ const PERIOD_OPTIONS_2026 = [
 const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
-
-const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
-
 
 export default function EmbedSearchPage() {
   const router = useRouter(); 
@@ -57,15 +54,18 @@ export default function EmbedSearchPage() {
     searchText: '',
   });
 
-  const [dateRange, setDateRange] = useState([null, null]);
+  // Estado independiente para "Otras Fechas" para asegurar UX visual
   const [showOtherDates, setShowOtherDates] = useState(false); 
+  
+  const [dateRange, setDateRange] = useState([null, null]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    targetAgentNumber: '' 
+    filteredProperties: [],
+    currentFilters: {}
   });
 
   const [results, setResults] = useState([]);
@@ -173,7 +173,8 @@ export default function EmbedSearchPage() {
     try {
       const payload = { 
           ...currentFilters, 
-          bedrooms_or_more: currentFilters.bedrooms_or_more 
+          bedrooms_or_more: currentFilters.bedrooms_or_more,
+          showOtherDates: showOtherDates // ¡ENVIAMOS EL ESTADO AL BACKEND!
       };
 
       const response = await fetch('/api/search', {
@@ -197,7 +198,7 @@ export default function EmbedSearchPage() {
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [showOtherDates]); // Dependencia añadida
 
   useEffect(() => {
     if (hasHydrated) {
@@ -208,21 +209,19 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
+  // --- Contacto ---
   const getAgentNumber = (op, zona) => {
+    // LOGIC F: Routing WhatsApp
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
     return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
-  
 
-  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
     
     let whatsappMessage, adminEmailHtml;
-    
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
@@ -230,12 +229,9 @@ export default function EmbedSearchPage() {
       whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
-    } else if (results.length > 10) {
-      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
-      adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
-      adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda?`;
+      adminEmailHtml = `<p>El cliente hizo una consulta general.</p>`;
     }
     
     setContactPayload({ 
@@ -251,9 +247,9 @@ export default function EmbedSearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    
-    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
+    
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
@@ -289,9 +285,11 @@ export default function EmbedSearchPage() {
           minMts: '', maxMts: '',
         };
       }
-      if (name === 'selectedPeriod') {
+      // Si selecciono un periodo, desactivo "Otras fechas"
+      if (name === 'selectedPeriod' && value !== '') {
         newState.startDate = null;
         newState.endDate = null;
+        setShowOtherDates(false);
         setDateRange([null, null]);
       }
       return newState;
@@ -326,15 +324,24 @@ export default function EmbedSearchPage() {
     }));
   };
   
-  const handleShowOtherDates = () => {
-    setShowOtherDates(!showOtherDates);
-    setFilters(prev => ({
-      ...prev,
-      startDate: null,
-      endDate: null,
-      selectedPeriod: '',
-    }));
-    setDateRange([null, null]);
+  // --- FIX G: Handler de Otras Fechas ---
+  const handleToggleOtherDates = () => {
+    const newState = !showOtherDates;
+    setShowOtherDates(newState);
+    
+    setFilters(prev => {
+        const newFilters = { ...prev };
+        if (newState) {
+            // Si activamos, limpiamos el periodo
+            newFilters.selectedPeriod = '';
+        } else {
+            // Si desactivamos, limpiamos las fechas
+            newFilters.startDate = null;
+            newFilters.endDate = null;
+            setDateRange([null, null]);
+        }
+        return newFilters;
+    });
   };
 
   const removeFilter = (name, value = null) => {
@@ -358,7 +365,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO DEL ASISTENTE ---
+  // --- Render Helpers ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -438,75 +445,66 @@ export default function EmbedSearchPage() {
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
-          <div className="w-full md:w-1/2 mt-2 md:mt-0">
-            <input
-              type="text"
-              name="searchText"
-              value={filters.searchText}
-              onChange={(e) => handleFilterChange('searchText', e.target.value)}
-              placeholder="Buscar por palabra clave (ej. quincho, polo)"
-              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            />
+          
+          <div className="grid grid-cols-4 gap-4 w-full">
+            <div className="col-span-2">
+                <input
+                    type="text" name="searchText" value={filters.searchText}
+                    onChange={(e) => handleFilterChange('searchText', e.target.value)}
+                    placeholder="Buscar por palabra clave"
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                />
+            </div>
+            <div className="col-span-2">
+                <select
+                    id="tipo" name="tipo" value={filters.tipo || ''}
+                    onChange={(e) => handleFilterChange('tipo', e.target.value)}
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                >
+                    <option value="">Tipo</option>
+                    <option value="casa">Casa</option>
+                    <option value="departamento">Departamento</option>
+                    {filters.operacion === 'venta' && <option value="lote">Lote</option>}
+                </select>
+            </div>
           </div>
         </div>
         
         {barrioOptions.length > 0 && (
-          <div className="mb-4">
-            <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
-            <Select
-              id="barrio"
-              instanceId="barrio-select"
-              options={barrioOptions}
-              value={selectedBarrios}
-              onChange={handleMultiBarrioChange}
-              placeholder="Todos los barrios seleccionados, seleccionar uno o varios barrios para mejorar la búsqueda"
-              className="text-sm"
-              isMulti
-            />
-          </div>
+            <div className="mb-4">
+                <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
+                <Select
+                    id="barrio" instanceId="barrio-select" options={barrioOptions}
+                    value={selectedBarrios} onChange={handleMultiBarrioChange}
+                    placeholder="Todos los barrios seleccionados, seleccionar uno o varios barrios para mejorar la búsqueda"
+                    className="text-sm" isMulti
+                />
+            </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          
-          <div>
-            <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-            <select
-              id="tipo" name="tipo"
-              value={filters.tipo || ''}
-              onChange={(e) => handleFilterChange('tipo', e.target.value)}
+        <div className="grid grid-cols-4 gap-4 mb-4">
+          <div className='col-span-1'>
+            <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
+            <input
+              type="number" id="bedrooms" name="bedrooms" min="0"
+              value={filters.bedrooms}
+              onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
+              placeholder="Ej: 3"
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            >
-              <option value="">Cualquiera</option>
-              <option value="casa">Casa</option>
-              <option value="departamento">Departamento</option>
-              {filters.operacion === 'venta' && <option value="lote">Lote</option>}
-            </select>
+            />
+            <label className="flex items-center gap-1 cursor-pointer mt-1">
+              <input
+                type="checkbox" name="bedrooms_or_more"
+                checked={filters.bedrooms_or_more}
+                onChange={() => handleCheckboxChange('bedrooms_or_more')}
+                className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+              />
+              <span className="text-xs text-gray-600">o más</span>
+            </label>
           </div>
 
-          {filters.tipo !== 'lote' && (
-            <div className='col-span-2 md:col-span-1'>
-              <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
-              <input
-                type="number" id="bedrooms" name="bedrooms" min="0"
-                value={filters.bedrooms}
-                onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
-                placeholder="Ej: 3"
-                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-              />
-              <label className="flex items-center gap-1 cursor-pointer mt-1">
-                <input
-                  type="checkbox" name="bedrooms_or_more"
-                  checked={filters.bedrooms_or_more}
-                  onChange={() => handleCheckboxChange('bedrooms_or_more')}
-                  className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                />
-                <span className="text-xs text-gray-600">o más</span>
-              </label>
-            </div>
-          )}
-
-          {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
-            <div className="col-span-2 md:col-span-1">
+          {filters.operacion !== 'venta' && (
+            <div className="col-span-1">
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
                 type="number" id="pax" name="pax" min="0"
@@ -527,7 +525,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
           
-          <div>
+          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
@@ -536,7 +534,7 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
-          <div>
+          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
             <input 
               type="number" id="maxPrice" name="maxPrice"
@@ -545,17 +543,18 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
+        </div>
 
-          {filters.operacion === 'alquiler_temporal' && (
-            <>
+        {filters.operacion === 'alquiler_temporal' && (
+            <div className="grid grid-cols-4 gap-4 mb-4">
               <div className="col-span-2">
                 <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                 <select
                   id="selectedPeriod" name="selectedPeriod"
                   value={filters.selectedPeriod}
                   onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates}
-                  className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                  disabled={showOtherDates} // G: Desactivado si Otras Fechas está activo
+                  className={`w-full p-2 rounded-md bg-white border border-gray-300 text-sm ${showOtherDates ? 'bg-gray-200 cursor-not-allowed' : ''}`}
                 >
                   <option value="">Todas (Temporada 2026)</option>
                   {PERIOD_OPTIONS_2026.map(p => (
@@ -564,12 +563,12 @@ export default function EmbedSearchPage() {
                 </select>
               </div>
 
-              <div className="col-span-2 flex items-end pb-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="col-span-2 flex items-end">
+                <label className="flex items-center gap-2 cursor-pointer pb-3">
                   <input
                     type="checkbox" name="showOtherDates"
-                    checked={showOtherDates}
-                    onChange={() => handleCheckboxChange('showOtherDates')}
+                    checked={showOtherDates} // G: Visualmente marcado
+                    onChange={handleToggleOtherDates} // G: Handler corregido
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Otras fechas (Fuera de temporada)</span>
@@ -577,8 +576,8 @@ export default function EmbedSearchPage() {
               </div>
 
               {showOtherDates && (
-                <div className="col-span-2">
-                  <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas</label>
+                <div className="col-span-4">
+                  <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas Específico</label>
                   <DatePicker
                     id="dateRange"
                     selectsRange={true}
@@ -595,15 +594,14 @@ export default function EmbedSearchPage() {
                   />
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {filters.tipo !== 'lote' && (
-            <div className="col-span-2 flex flex-row gap-4 pt-6">
+            <div className="flex flex-row gap-4 pt-2 pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
-                  type="checkbox" name="pool"
-                  checked={filters.pool}
+                  type="checkbox" name="pool" checked={filters.pool}
                   onChange={() => handleCheckboxChange('pool')}
                   className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                 />
@@ -613,9 +611,8 @@ export default function EmbedSearchPage() {
               {filters.operacion !== 'venta' && (
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
-                    type="checkbox" name="pets"
-                    checked={filters.pets}
-                    onChange={() => handleCheckboxChange('pets')}
+                    type="checkbox" name="pets" checked={filters.pets}
+                    onChange={handleCheckboxChange} // E: Usar el handler simple por ahora
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
@@ -623,8 +620,6 @@ export default function EmbedSearchPage() {
               )}
             </div>
           )}
-
-        </div>
       </div>
     );
   };
@@ -703,7 +698,6 @@ export default function EmbedSearchPage() {
     return null;
   };
 
-  // --- Render Principal (JSX) ---
   return (
     <div id="__next" className="min-h-screen">
       
@@ -718,15 +712,11 @@ export default function EmbedSearchPage() {
       />
       
       <div ref={contentRef} className="max-w-7xl mx-auto">
-        
         <main>
-          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
-          
         </main>
-
       </div>
     </div>
   );
