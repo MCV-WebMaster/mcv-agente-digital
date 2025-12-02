@@ -2,8 +2,8 @@ import { supabase } from '@/lib/supabaseClient';
 
 const CATEGORY_IDS = {
   VENTA: 198,
-  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada
-  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada
+  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada (~52)
+  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada (~89)
   ALQUILER_ANUAL: 194,
   ALQUILER_ANUAL_AMUEBLADO: 193,
 };
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     const { 
       operacion, zona, tipo, 
       barrios, pax, pax_or_more,
-      pets, pool, bedrooms, bedrooms_or_more, 
+      pets, pool, bedrooms, bedrooms_or_more,
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
       selectedPeriod, 
@@ -53,20 +53,19 @@ export default async function handler(req, res) {
     if (operacion === 'alquiler_temporal') {
       
       const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
-      const isSearchingOutOfSeason = !selectedPeriod && !startDate && !endDate; // Vista inicial SIN fechas
+      const isSearchingOutOfSeason = !selectedPeriod && !startDate && !endDate && req.body.showOtherDates; // El flag 'showOtherDates' es clave aquí
       
       // LÓGICA A: Mapeo de Categorías
-      if (isSearchingOutOfSeason) {
-        // Vista inicial y Out of Season: buscamos AMBAS (196 y 197) para mostrar todo lo temporal
-        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
-      } else if (isSearchingInHighSeason) {
-        // Si hay periodo o fecha de verano, buscamos Verano (197) y/o General (196)
-        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
+      if (isSearchingInHighSeason) {
+        // Vista de Temporada o Periodo Seleccionado
+        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
+      } else if (isSearchingOutOfSeason) {
+        // Vista de "Otras fechas (Fuera de temporada)"
+        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
       } else {
-        // Si el usuario marcó 'Otras fechas' (Fuera de temporada), solo buscamos General (196)
-         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
+        // Vista Inicial (Mostramos solo Verano por defecto para empezar con las 89)
+        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       }
-
 
       if (zona) query = query.eq('zona', zona);
       if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
@@ -103,7 +102,7 @@ export default async function handler(req, res) {
         .select('property_id, price')
         .in('property_id', propertyIds)
         .eq('status', 'Disponible');
-      if (allPeriodsData.error) throw allPeriodsData.error;
+      if (allPeriodsError) throw allPeriodsError;
 
       const minPriceMap = new Map();
       for (const period of allPeriodsData) {

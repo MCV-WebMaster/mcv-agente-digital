@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'; 
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag'; 
+import ActiveFilterTag from '@/components/ActiveFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
@@ -13,7 +13,6 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -28,6 +27,9 @@ const PERIOD_OPTIONS_2026 = [
 const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
+
+const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
+
 
 export default function EmbedSearchPage() {
   const router = useRouter(); 
@@ -63,8 +65,7 @@ export default function EmbedSearchPage() {
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    filteredProperties: [],
-    currentFilters: {}
+    targetAgentNumber: ''
   });
 
   const [results, setResults] = useState([]);
@@ -91,7 +92,7 @@ export default function EmbedSearchPage() {
         frameId: 'mcv-asistente-iframe' 
       }, '*');
     }
-  }, [contentRef]);
+  }, []);
 
   useEffect(() => {
     const delayedSend = setTimeout(sendHeightToParent, 100); 
@@ -207,8 +208,19 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Contacto ---
+  // --- LOGIC E: Handler de Mascotas con Alert ---
+  const handleMascotasChange = () => {
+    // Si el usuario marca la casilla (pasa de false a true)
+    if (!filters.pets) {
+        alert(ALERT_MASCOTAS); 
+    }
+    handleCheckboxChange('pets');
+  };
+
+  // --- Handlers de Contacto (F) ---
   const generateContactMessages = () => {
+    const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
+    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
@@ -219,10 +231,10 @@ export default function EmbedSearchPage() {
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
       
     } else if (results.length > 10) {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
@@ -231,12 +243,15 @@ export default function EmbedSearchPage() {
         adminEmailHtml, 
         propertyCount: results.length,
         filteredProperties: results,
-        currentFilters: filters
+        currentFilters: filters,
+        targetAgentNumber: targetAgentNumber 
     });
     setIsModalOpen(true);
   };
 
   const handleContactSingleProperty = (property) => {
+    const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
+    
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
@@ -244,11 +259,20 @@ export default function EmbedSearchPage() {
         adminEmailHtml, 
         propertyCount: 1,
         filteredProperties: [property],
-        currentFilters: filters
+        currentFilters: filters,
+        targetAgentNumber: targetAgentNumber
     });
     setIsModalOpen(true);
   };
   
+  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
+  const getAgentNumber = (op, zona) => {
+    if (op === 'venta' && zona === 'Costa Esmeralda') {
+      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
+    }
+    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
+  };
+
   // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
@@ -342,7 +366,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO ---
+  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
