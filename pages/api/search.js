@@ -31,16 +31,17 @@ export default async function handler(req, res) {
     const { 
       operacion, zona, tipo, 
       barrios, pax, pax_or_more,
-      pets, pool, bedrooms, bedrooms_or_more, // ¡PUNTO C!
+      pets, pool, bedrooms, bedrooms_or_more,
       minPrice, maxPrice, minMts, maxMts,
       startDate, endDate,
       selectedPeriod, 
       sortBy = 'default',
-      searchText
+      searchText,
+      showOtherDates // Recibimos el estado del checkbox
     } = req.body;
 
     let query = supabase.from('properties').select('*');
-    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); 
+    query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`);
 
     if (searchText) {
       const ftsQuery = formatFTSQuery(searchText);
@@ -53,15 +54,15 @@ export default async function handler(req, res) {
     if (operacion === 'alquiler_temporal') {
       
       const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
-      const hasDateSelected = selectedPeriod || startDate || endDate;
-
+      
       // LÓGICA A: Mapeo de Categorías
-      if (hasDateSelected) {
-        // Opción 1: Si hay fecha/período, buscamos Verano (197) y/o General (196)
+      if (showOtherDates) {
+        // Vista de "Otras fechas" (Fuera de temporada): Buscamos solo la categoría General (196)
+        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
+      } else if (isSearchingInHighSeason || (!selectedPeriod && !startDate && !endDate)) {
+        // Vista de Temporada o Periodo Seleccionado o Vista Inicial (Default)
+        // Mostramos Verano (197) y/o General (196)
         query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
-      } else {
-        // Opción 2: Vista Inicial (Sin filtro de fecha - Mostramos solo Verano por defecto para empezar con las 89)
-        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       }
 
 
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
 
-      if (hasDateSelected) {
+      if (isSearchingInHighSeason) {
         let filteredPeriodQuery = supabase
           .from('periods')
           .select('property_id, price, duration_days, period_name')
@@ -175,7 +176,7 @@ export default async function handler(req, res) {
             return passesMinPrice && passesMaxPrice;
         });
 
-      if (hasDateSelected) {
+      if (isSearchingInHighSeason && (selectedPeriod || userSelectedDates)) {
          finalResults = finalResults.filter(p => availablePropertyIds.has(p.property_id));
       }
       
