@@ -215,9 +215,8 @@ export default function EmbedSearchPage() {
 
   // --- LOGIC E: Handler de Mascotas con Popup Personalizado ---
   const handleMascotasChange = () => {
-    // Si el usuario marca la casilla (pasa de false a true), abrimos el modal
     if (!filters.pets) {
-        setShowPetAlert(true); // <--- CAMBIO: Activa el estado, no usa alert()
+        setShowPetAlert(true);
     }
     handleCheckboxChange('pets');
   };
@@ -237,13 +236,13 @@ export default function EmbedSearchPage() {
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
     } else if (results.length > 10) {
-      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
@@ -260,7 +259,7 @@ export default function EmbedSearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
         whatsappMessage, 
@@ -381,7 +380,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- Render Helpers ---
+  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -415,7 +414,7 @@ export default function EmbedSearchPage() {
     }
     
     if (isLoadingFilters) {
-      return <div className="text-center p-10"><Spinner /></div>;
+      return <Spinner />;
     }
     
     if (error && !listas.zonas.length) {
@@ -467,7 +466,7 @@ export default function EmbedSearchPage() {
                 <input
                     type="text" name="searchText" value={filters.searchText}
                     onChange={(e) => handleFilterChange('searchText', e.target.value)}
-                    placeholder="Buscar por palabra clave, ejemplo: Lavavajilla" // CAMBIO DE TEXTO
+                    placeholder="Buscar por palabra clave, ejemplo: Lavavajilla"
                     className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 />
             </div>
@@ -570,7 +569,7 @@ export default function EmbedSearchPage() {
                   id="selectedPeriod" name="selectedPeriod"
                   value={filters.selectedPeriod}
                   onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates} 
+                  disabled={showOtherDates}
                   className={`w-full p-2 rounded-md bg-white border border-gray-300 text-sm ${showOtherDates ? 'bg-gray-200 cursor-not-allowed' : ''}`}
                 >
                   <option value="">Todas (Temporada 2026)</option>
@@ -629,7 +628,7 @@ export default function EmbedSearchPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox" name="pets" checked={filters.pets}
-                    onChange={handleMascotasChange} // USO DEL NUEVO HANDLER
+                    onChange={handleMascotasChange}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
@@ -641,7 +640,6 @@ export default function EmbedSearchPage() {
     );
   };
 
-  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS (LIMPIA) ---
   const renderMainContent = () => {
     if (isSearching) {
         return <Spinner />;
@@ -716,30 +714,33 @@ export default function EmbedSearchPage() {
     return null;
   };
 
-  // --- Custom Popup de Mascotas ---
-  // Este es el modal personalizado que reemplaza al alert() del navegador
+  // --- MODAL DE MASCOTAS PERSONALIZADO ---
   const PetAlertModal = () => {
       if (!showPetAlert) return null;
       
       return (
-        <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md text-center border border-gray-200">
-                <h3 className="text-xl font-bold text-mcv-azul mb-4">Política de Mascotas</h3>
-                <p className="text-gray-700 mb-6 text-sm leading-relaxed">
+        <div className="fixed inset-0 bg-black/60 z-[2000] flex items-start justify-center pt-20 p-4">
+            <div className="bg-white p-6 rounded-lg shadow-2xl max-w-md text-center border-l-4 border-red-500 relative animate-fade-in-down">
+                <div className="flex justify-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h3 className="text-xl font-bold text-red-600 mb-2">Política de Mascotas</h3>
+                <p className="text-gray-700 mb-6 text-sm leading-relaxed font-medium">
                     {ALERT_MASCOTAS_TEXT}
                 </p>
                 <button
                     onClick={() => setShowPetAlert(false)}
-                    className="px-6 py-2 bg-mcv-verde text-white rounded hover:bg-green-700 transition-colors font-bold"
+                    className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-bold w-full"
                 >
-                    Entendido
+                    Entendido, acepto
                 </button>
             </div>
         </div>
       );
   };
 
-  // --- Render Principal (JSX) ---
   return (
     <div id="__next" className="min-h-screen">
       
@@ -753,15 +754,19 @@ export default function EmbedSearchPage() {
         currentFilters={contactPayload.currentFilters}
       />
 
-      {/* Renderizamos el Modal de Mascotas aquí */}
+      {/* Render del Modal de Mascotas */}
       <PetAlertModal />
       
       <div ref={contentRef} className="max-w-7xl mx-auto">
+        
         <main>
+          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
+          
         </main>
+
       </div>
     </div>
   );
