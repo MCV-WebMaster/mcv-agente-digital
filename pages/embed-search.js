@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'; 
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag'; 
+import ActiveFilterTag from '@/components/ActiveFilterTag';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
@@ -13,7 +13,6 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
-// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -29,8 +28,8 @@ const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
-// Texto del reglamento
-const ALERT_MASCOTAS_TEXT = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
+const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
+
 
 export default function EmbedSearchPage() {
   const router = useRouter(); 
@@ -62,15 +61,11 @@ export default function EmbedSearchPage() {
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // NUEVO ESTADO: Controla el popup personalizado de mascotas
-  const [showPetAlert, setShowPetAlert] = useState(false);
-  
   const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    filteredProperties: [],
-    currentFilters: {}
+    targetAgentNumber: '' 
   });
 
   const [results, setResults] = useState([]);
@@ -106,7 +101,7 @@ export default function EmbedSearchPage() {
         clearTimeout(delayedSend);
         window.removeEventListener('resize', sendHeightToParent);
     };
-  }, [results, listas, isSearching, sendHeightToParent, showPetAlert]); // Agregamos showPetAlert para ajustar altura si aparece
+  }, [results, listas, isSearching, sendHeightToParent]);
 
   useEffect(() => {
     const interval = setInterval(sendHeightToParent, 1000);
@@ -178,7 +173,8 @@ export default function EmbedSearchPage() {
     try {
       const payload = { 
           ...currentFilters, 
-          bedrooms_or_more: currentFilters.bedrooms_or_more 
+          bedrooms_or_more: currentFilters.bedrooms_or_more,
+          showOtherDates: showOtherDates 
       };
 
       const response = await fetch('/api/search', {
@@ -202,7 +198,7 @@ export default function EmbedSearchPage() {
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [showOtherDates]); 
 
   useEffect(() => {
     if (hasHydrated) {
@@ -213,18 +209,25 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC E: Handler de Mascotas con Popup Personalizado ---
+  // --- LOGIC E: Handler de Mascotas ---
   const handleMascotasChange = () => {
-    // Si el usuario marca la casilla (pasa de false a true), mostramos NUESTRO popup
     if (!filters.pets) {
-        setShowPetAlert(true);
+        alert(ALERT_MASCOTAS); 
     }
     handleCheckboxChange('pets');
   };
 
-  // --- Handlers de Contacto ---
+  // --- Contacto ---
+  const getAgentNumber = (op, zona) => {
+    if (op === 'venta' && zona === 'Costa Esmeralda') {
+      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
+    }
+    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
+  };
+
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
+    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
@@ -233,6 +236,7 @@ export default function EmbedSearchPage() {
       
       whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
+      
     } else if (results.length > 10) {
       whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
@@ -254,7 +258,6 @@ export default function EmbedSearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
@@ -268,14 +271,6 @@ export default function EmbedSearchPage() {
     setIsModalOpen(true);
   };
   
-  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
-  const getAgentNumber = (op, zona) => {
-    if (op === 'venta' && zona === 'Costa Esmeralda') {
-      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
-    }
-    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
-  };
-
   // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
@@ -305,6 +300,7 @@ export default function EmbedSearchPage() {
         newState.startDate = null;
         newState.endDate = null;
         newState.showOtherDates = false; 
+        setShowOtherDates(false);
         setDateRange([null, null]);
       }
       return newState;
@@ -327,6 +323,7 @@ export default function EmbedSearchPage() {
         selectedPeriod: '', 
         showOtherDates: true,
       }));
+      if (!showOtherDates) setShowOtherDates(true);
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null, showOtherDates: false }));
     }
@@ -340,11 +337,13 @@ export default function EmbedSearchPage() {
     }));
   };
   
-  const handleShowOtherDates = () => {
+  const handleToggleOtherDates = () => {
+    const newState = !showOtherDates;
+    setShowOtherDates(newState);
+    
     setFilters(prev => {
-        const nextState = !prev.showOtherDates;
-        const newFilters = { ...prev, showOtherDates: nextState };
-        if (nextState) {
+        const newFilters = { ...prev, showOtherDates: newState };
+        if (newState) {
             newFilters.selectedPeriod = '';
             newFilters.startDate = null;
             newFilters.endDate = null;
@@ -356,7 +355,6 @@ export default function EmbedSearchPage() {
         }
         return newFilters;
     });
-    setShowOtherDates(prev => !prev);
   };
 
   const removeFilter = (name, value = null) => {
@@ -380,7 +378,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO DEL ASISTENTE ---
+  // --- RENDERIZADO ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -498,7 +496,8 @@ export default function EmbedSearchPage() {
         )}
 
         <div className="grid grid-cols-4 gap-4 mb-4">
-          <div className='col-span-1'>
+          
+          <div className={filters.tipo !== 'lote' ? 'col-span-1' : 'hidden'}>
             <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
             <input
               type="number" id="bedrooms" name="bedrooms" min="0"
@@ -540,7 +539,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
           
-          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
+          <div className={filters.operacion === 'venta' && filters.tipo === 'lote' ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
@@ -549,7 +548,7 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
-          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
+          <div className={filters.operacion === 'venta' ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
             <input 
               type="number" id="maxPrice" name="maxPrice"
@@ -568,7 +567,7 @@ export default function EmbedSearchPage() {
                   id="selectedPeriod" name="selectedPeriod"
                   value={filters.selectedPeriod}
                   onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates}
+                  disabled={showOtherDates} 
                   className={`w-full p-2 rounded-md bg-white border border-gray-300 text-sm ${showOtherDates ? 'bg-gray-200 cursor-not-allowed' : ''}`}
                 >
                   <option value="">Todas (Temporada 2026)</option>
@@ -583,7 +582,7 @@ export default function EmbedSearchPage() {
                   <input
                     type="checkbox" name="showOtherDates"
                     checked={showOtherDates}
-                    onChange={handleShowOtherDates}
+                    onChange={handleToggleOtherDates}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Otras fechas (Fuera de temporada)</span>
@@ -619,7 +618,7 @@ export default function EmbedSearchPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox" name="pets" checked={filters.pets}
-                    onChange={handleMascotasChange} // HANDLER CON ALERTA
+                    onChange={handleMascotasChange}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
@@ -705,28 +704,6 @@ export default function EmbedSearchPage() {
     return null;
   };
 
-  // --- POPUP PERSONALIZADO DE MASCOTAS ---
-  const PetAlertModal = () => {
-      if (!showPetAlert) return null;
-      
-      return (
-        <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md text-center border border-gray-200">
-                <h3 className="text-xl font-bold text-mcv-azul mb-4">Política de Mascotas</h3>
-                <p className="text-gray-700 mb-6 text-sm leading-relaxed">
-                    {ALERT_MASCOTAS}
-                </p>
-                <button
-                    onClick={() => setShowPetAlert(false)}
-                    className="px-6 py-2 bg-mcv-verde text-white rounded hover:bg-green-700 transition-colors font-bold"
-                >
-                    Entendido
-                </button>
-            </div>
-        </div>
-      );
-  };
-
   // --- Render Principal (JSX) ---
   return (
     <div id="__next" className="min-h-screen">
@@ -740,9 +717,6 @@ export default function EmbedSearchPage() {
         filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
       />
-
-      {/* --- AQUI INSERTAMOS EL MODAL DE MASCOTAS --- */}
-      <PetAlertModal />
       
       <div ref={contentRef} className="max-w-7xl mx-auto">
         

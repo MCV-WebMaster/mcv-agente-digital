@@ -2,8 +2,8 @@ import { supabase } from '@/lib/supabaseClient';
 
 const CATEGORY_IDS = {
   VENTA: 198,
-  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada
-  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada
+  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada (~52)
+  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada (~89)
   ALQUILER_ANUAL: 194,
   ALQUILER_ANUAL_AMUEBLADO: 193,
 };
@@ -37,11 +37,10 @@ export default async function handler(req, res) {
       selectedPeriod, 
       sortBy = 'default',
       searchText,
-      showOtherDates // Recibimos el flag del checkbox "Otras Fechas"
+      showOtherDates
     } = req.body;
 
     let query = supabase.from('properties').select('*');
-    // Filtramos propiedades activas
     query = query.or(`status_ids.cs.{${STATUS_ID_ACTIVA}},status_ids.eq.{}`); 
 
     if (searchText) {
@@ -54,15 +53,15 @@ export default async function handler(req, res) {
     // --- ALQUILER TEMPORAL ---
     if (operacion === 'alquiler_temporal') {
       
-      // LÓGICA A: Separación Estricta de Categorías
+      const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
+      const hasDateSelected = selectedPeriod || startDate || endDate;
+
+      // LÓGICA A: Mapeo de Categorías
       if (showOtherDates) {
-        // Caso 1: Usuario marcó "Otras fechas (Fuera de temporada)"
-        // Buscamos SOLO la categoría 196 (Alquiler Temporal General)
+        // Opción 1: Vista de "Otras fechas" (Fuera de temporada) -> Buscamos General (196)
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
-      } else {
-        // Caso 2: Vista por Defecto (Temporada 2026) o Periodo Seleccionado
-        // Buscamos SOLO la categoría 197 (Alquiler Temporal Verano)
-        // Esto elimina el problema de sumar inventarios (107 props -> 89 props)
+      } else if (isSearchingInHighSeason || !hasDateSelected) {
+        // Opción 2: Vista Inicial o Temporada Alta -> Buscamos Verano (197)
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       }
 
@@ -74,7 +73,7 @@ export default async function handler(req, res) {
       if (pool === true) query = query.eq('tiene_piscina', true);
       if (pets === true) query = query.eq('acepta_mascota', true);
       
-      // Lógica C: Dormitorios
+      // LÓGICA C: Dormitorios
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
@@ -95,7 +94,7 @@ export default async function handler(req, res) {
       const propertyIds = propertiesData.map(p => p.property_id);
       if (propertyIds.length === 0) return res.status(200).json({ status: 'OK', count: 0, results: [] });
 
-      // Buscar Precios en tabla periods
+      // Buscar TODOS los períodos (Para tener precios "desde")
       const { data: allPeriodsData, error: allPeriodsError } = await supabase
         .from('periods')
         .select('property_id, price')
@@ -103,7 +102,6 @@ export default async function handler(req, res) {
         .eq('status', 'Disponible');
       if (allPeriodsError) throw allPeriodsError;
 
-      // Calculamos precio "Desde"
       const minPriceMap = new Map();
       for (const period of allPeriodsData) {
         let periodPrice = 0;
@@ -120,12 +118,14 @@ export default async function handler(req, res) {
       // Lógica de Disponibilidad Específica
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
+      
       const userSelectedPeriod = selectedPeriod;
       const userSelectedDates = startDate && endDate;
       
-      // Solo filtramos por disponibilidad de tabla 'periods' si NO estamos en "Otras fechas"
-      // O si estamos en "Otras fechas" pero seleccionaron rango de calendario.
-      const shouldCheckAvailability = !showOtherDates || (showOtherDates && userSelectedDates);
+      // ¡CORRECCIÓN CRÍTICA!
+      // Solo filtramos por disponibilidad estricta si NO estamos en "Otras fechas".
+      // Si estamos en "Otras fechas", asumimos que es "A consultar" y mostramos todo.
+      const shouldCheckAvailability = !showOtherDates;
 
       if (shouldCheckAvailability) {
         let filteredPeriodQuery = supabase
@@ -135,17 +135,14 @@ export default async function handler(req, res) {
           .eq('status', 'Disponible');
         
         if (userSelectedPeriod) {
-          // Filtro por nombre de periodo (Verano)
           const periodsToSearch = [selectedPeriod];
           filteredPeriodQuery = filteredPeriodQuery
             .in('period_name', periodsToSearch)
             .not('price', 'is', null); 
         } else if (userSelectedDates) {
-           // Filtro por calendario
            filteredPeriodQuery = filteredPeriodQuery.lte('start_date', startDate).gte('end_date', endDate);
         }
         
-        // Solo ejecutamos si hay un criterio de fecha activo, sino mostramos todo lo disponible en la categoría
         if (userSelectedPeriod || userSelectedDates) {
             const { data: filteredPeriodsData, error: filteredPeriodsError } = await filteredPeriodQuery;
             if (filteredPeriodsError) throw filteredPeriodsError;
@@ -177,6 +174,9 @@ export default async function handler(req, res) {
           found_period_name: periodDetailsMap.get(p.property_id)?.name || null
         }))
         .filter(p => { 
+            // Si estamos en Otras Fechas, no filtramos por precio específico (es consultar)
+            if (showOtherDates) return true;
+
             const priceToFilter = userSelectedPeriod ? p.found_period_price : p.min_rental_price;
             
             if (!minPrice && !maxPrice) return true;
