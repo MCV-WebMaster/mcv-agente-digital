@@ -28,6 +28,8 @@ const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
+const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
+
 export default function EmbedSearchPage() {
   const router = useRouter(); 
   const contentRef = useRef(null); 
@@ -54,10 +56,8 @@ export default function EmbedSearchPage() {
     searchText: '',
   });
 
-  // Estado independiente para "Otras Fechas" para asegurar UX visual
-  const [showOtherDates, setShowOtherDates] = useState(false); 
-  
   const [dateRange, setDateRange] = useState([null, null]);
+  const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [contactPayload, setContactPayload] = useState({
@@ -174,7 +174,7 @@ export default function EmbedSearchPage() {
       const payload = { 
           ...currentFilters, 
           bedrooms_or_more: currentFilters.bedrooms_or_more,
-          showOtherDates: showOtherDates // ¡ENVIAMOS EL ESTADO AL BACKEND!
+          showOtherDates: showOtherDates // Enviamos el estado de Otras Fechas
       };
 
       const response = await fetch('/api/search', {
@@ -198,7 +198,7 @@ export default function EmbedSearchPage() {
     } finally {
       setIsSearching(false);
     }
-  }, [showOtherDates]); // Dependencia añadida
+  }, [showOtherDates]); // Dependencia importante
 
   useEffect(() => {
     if (hasHydrated) {
@@ -209,9 +209,8 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Contacto ---
+  // --- Contacto Helpers ---
   const getAgentNumber = (op, zona) => {
-    // LOGIC F: Routing WhatsApp
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
@@ -222,16 +221,18 @@ export default function EmbedSearchPage() {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
     
     let whatsappMessage, adminEmailHtml;
+    
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      
-      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
-      
+    } else if (results.length > 10) {
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda?`;
-      adminEmailHtml = `<p>El cliente hizo una consulta general.</p>`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
     setContactPayload({ 
@@ -247,9 +248,8 @@ export default function EmbedSearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
-    
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
@@ -285,13 +285,16 @@ export default function EmbedSearchPage() {
           minMts: '', maxMts: '',
         };
       }
-      // Si selecciono un periodo, desactivo "Otras fechas"
+      
+      // LÓGICA A: Si selecciono un periodo, desactivo "Otras fechas"
       if (name === 'selectedPeriod' && value !== '') {
         newState.startDate = null;
         newState.endDate = null;
-        setShowOtherDates(false);
+        newState.showOtherDates = false; // Apagamos el flag interno en filtros si lo hubiera
+        setShowOtherDates(false); // Apagamos el estado visual
         setDateRange([null, null]);
       }
+
       return newState;
     });
   };
@@ -311,6 +314,8 @@ export default function EmbedSearchPage() {
         endDate: end.toISOString().split('T')[0],
         selectedPeriod: '', 
       }));
+      // Si selecciona fecha manual, asumimos que quiere "Otras fechas"
+      if (!showOtherDates) setShowOtherDates(true);
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
     }
@@ -324,7 +329,15 @@ export default function EmbedSearchPage() {
     }));
   };
   
-  // --- FIX G: Handler de Otras Fechas ---
+  // HANDLER ESPECIFICO PARA MASCOTAS (FIXED)
+  const handleMascotasChange = (e) => {
+    const isChecked = e.target.checked;
+    if (isChecked) {
+        alert(ALERT_MASCOTAS);
+    }
+    setFilters(prev => ({ ...prev, pets: isChecked }));
+  };
+  
   const handleToggleOtherDates = () => {
     const newState = !showOtherDates;
     setShowOtherDates(newState);
@@ -332,7 +345,7 @@ export default function EmbedSearchPage() {
     setFilters(prev => {
         const newFilters = { ...prev };
         if (newState) {
-            // Si activamos, limpiamos el periodo
+            // Si activamos, limpiamos el periodo fijo
             newFilters.selectedPeriod = '';
         } else {
             // Si desactivamos, limpiamos las fechas
@@ -446,12 +459,13 @@ export default function EmbedSearchPage() {
         <div className="flex flex-col md:flex-row justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
           
+          {/* PRIMERA FILA: Palabra Clave y Tipo */}
           <div className="grid grid-cols-4 gap-4 w-full">
             <div className="col-span-2">
                 <input
                     type="text" name="searchText" value={filters.searchText}
                     onChange={(e) => handleFilterChange('searchText', e.target.value)}
-                    placeholder="Buscar por palabra clave"
+                    placeholder="Buscar por palabra clave, ejemplo: Lavavajilla"
                     className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 />
             </div>
@@ -470,6 +484,7 @@ export default function EmbedSearchPage() {
           </div>
         </div>
         
+        {/* SEGUNDA FILA: Barrios */}
         {barrioOptions.length > 0 && (
             <div className="mb-4">
                 <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -482,8 +497,10 @@ export default function EmbedSearchPage() {
             </div>
         )}
 
+        {/* TERCERA FILA: Dormitorios, Personas, Precios */}
         <div className="grid grid-cols-4 gap-4 mb-4">
-          <div className='col-span-1'>
+          
+          <div className={filters.tipo !== 'lote' ? 'col-span-1' : 'hidden'}>
             <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
             <input
               type="number" id="bedrooms" name="bedrooms" min="0"
@@ -545,6 +562,7 @@ export default function EmbedSearchPage() {
           </div>
         </div>
 
+        {/* CUARTA FILA: Temporada y Otras Fechas */}
         {filters.operacion === 'alquiler_temporal' && (
             <div className="grid grid-cols-4 gap-4 mb-4">
               <div className="col-span-2">
@@ -553,7 +571,7 @@ export default function EmbedSearchPage() {
                   id="selectedPeriod" name="selectedPeriod"
                   value={filters.selectedPeriod}
                   onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates} // G: Desactivado si Otras Fechas está activo
+                  disabled={showOtherDates}
                   className={`w-full p-2 rounded-md bg-white border border-gray-300 text-sm ${showOtherDates ? 'bg-gray-200 cursor-not-allowed' : ''}`}
                 >
                   <option value="">Todas (Temporada 2026)</option>
@@ -567,8 +585,8 @@ export default function EmbedSearchPage() {
                 <label className="flex items-center gap-2 cursor-pointer pb-3">
                   <input
                     type="checkbox" name="showOtherDates"
-                    checked={showOtherDates} // G: Visualmente marcado
-                    onChange={handleToggleOtherDates} // G: Handler corregido
+                    checked={showOtherDates}
+                    onChange={handleToggleOtherDates}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Otras fechas (Fuera de temporada)</span>
@@ -579,24 +597,18 @@ export default function EmbedSearchPage() {
                 <div className="col-span-4">
                   <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas Específico</label>
                   <DatePicker
-                    id="dateRange"
-                    selectsRange={true}
-                    startDate={dateRange[0]}
-                    endDate={dateRange[1]}
-                    onChange={handleDateChange}
-                    locale="es"
-                    dateFormat="dd/MM/yyyy"
-                    placeholderText="Seleccione un rango"
-                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                    isClearable={true}
-                    minDate={new Date()}
-                    excludeDateIntervals={EXCLUDE_DATES}
+                    id="dateRange" selectsRange={true} startDate={dateRange[0]} endDate={dateRange[1]}
+                    onChange={handleDateChange} locale="es" dateFormat="dd/MM/yyyy"
+                    placeholderText="Seleccione un rango" className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                    isClearable={true} minDate={new Date()} excludeDateIntervals={EXCLUDE_DATES}
                   />
                 </div>
               )}
             </div>
           )}
 
+
+          {/* QUINTA FILA: Checkboxes Finales */}
           {filters.tipo !== 'lote' && (
             <div className="flex flex-row gap-4 pt-2 pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -612,7 +624,7 @@ export default function EmbedSearchPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox" name="pets" checked={filters.pets}
-                    onChange={handleCheckboxChange} // E: Usar el handler simple por ahora
+                    onChange={handleMascotasChange} // Handler corregido
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
@@ -698,6 +710,7 @@ export default function EmbedSearchPage() {
     return null;
   };
 
+  // --- Render Principal (JSX) ---
   return (
     <div id="__next" className="min-h-screen">
       
@@ -712,11 +725,15 @@ export default function EmbedSearchPage() {
       />
       
       <div ref={contentRef} className="max-w-7xl mx-auto">
+        
         <main>
+          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
+          
         </main>
+
       </div>
     </div>
   );
