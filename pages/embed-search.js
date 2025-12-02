@@ -65,7 +65,7 @@ export default function EmbedSearchPage() {
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    targetAgentNumber: ''
+    targetAgentNumber: '' 
   });
 
   const [results, setResults] = useState([]);
@@ -208,16 +208,16 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC E: Handler de Mascotas con Alert ---
-  const handleMascotasChange = () => {
-    // Si el usuario marca la casilla (pasa de false a true)
-    if (!filters.pets) {
-        alert(ALERT_MASCOTAS); 
+  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
+  const getAgentNumber = (op, zona) => {
+    if (op === 'venta' && zona === 'Costa Esmeralda') {
+      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
-    handleCheckboxChange('pets');
+    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
+  
 
-  // --- Handlers de Contacto (F) ---
+  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
     
@@ -265,14 +265,6 @@ export default function EmbedSearchPage() {
     setIsModalOpen(true);
   };
   
-  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
-  const getAgentNumber = (op, zona) => {
-    if (op === 'venta' && zona === 'Costa Esmeralda') {
-      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
-    }
-    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
-  };
-
   // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
