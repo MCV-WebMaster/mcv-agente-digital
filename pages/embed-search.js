@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; 
 import { useRouter } from 'next/router';
 import PropertyCard from '@/components/PropertyCard';
 import Spinner from '@/components/Spinner';
-import ActiveFilterTag from '@/components/ActiveFilterTag';
+import ActiveFilterTag from '@/components/ActiveFilterTag'; 
 import DatePicker, { registerLocale } from 'react-datepicker';
 import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
@@ -13,6 +13,7 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -28,8 +29,7 @@ const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
-const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
-
+const ALERT_MASCOTAS_TEXT = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
 
 export default function EmbedSearchPage() {
   const router = useRouter(); 
@@ -61,11 +61,15 @@ export default function EmbedSearchPage() {
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  // Estado para el Popup Personalizado de Mascotas
+  const [showPetAlert, setShowPetAlert] = useState(false);
+  
   const [contactPayload, setContactPayload] = useState({
     whatsappMessage: '',
     adminEmailHtml: '',
     propertyCount: 0,
-    targetAgentNumber: '' 
+    filteredProperties: [],
+    currentFilters: {}
   });
 
   const [results, setResults] = useState([]);
@@ -101,7 +105,7 @@ export default function EmbedSearchPage() {
         clearTimeout(delayedSend);
         window.removeEventListener('resize', sendHeightToParent);
     };
-  }, [results, listas, isSearching, sendHeightToParent]);
+  }, [results, listas, isSearching, sendHeightToParent, showPetAlert]); 
 
   useEffect(() => {
     const interval = setInterval(sendHeightToParent, 1000);
@@ -209,10 +213,11 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC E: Handler de Mascotas ---
+  // --- LOGIC E: Handler de Mascotas con Popup Personalizado ---
   const handleMascotasChange = () => {
+    // Si el usuario marca la casilla (pasa de false a true), abrimos el modal
     if (!filters.pets) {
-        alert(ALERT_MASCOTAS); 
+        setShowPetAlert(true); // <--- CAMBIO: Activa el estado, no usa alert()
     }
     handleCheckboxChange('pets');
   };
@@ -227,16 +232,13 @@ export default function EmbedSearchPage() {
 
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
-    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      
-      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
-      
     } else if (results.length > 10) {
       whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
@@ -295,7 +297,7 @@ export default function EmbedSearchPage() {
           minMts: '', maxMts: '',
         };
       }
-      // LÓGICA A: Mutua exclusión
+      
       if (name === 'selectedPeriod' && value !== '') {
         newState.startDate = null;
         newState.endDate = null;
@@ -303,6 +305,7 @@ export default function EmbedSearchPage() {
         setShowOtherDates(false);
         setDateRange([null, null]);
       }
+
       return newState;
     });
   };
@@ -378,7 +381,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO ---
+  // --- Render Helpers ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -412,7 +415,7 @@ export default function EmbedSearchPage() {
     }
     
     if (isLoadingFilters) {
-      return <Spinner />;
+      return <div className="text-center p-10"><Spinner /></div>;
     }
     
     if (error && !listas.zonas.length) {
@@ -457,14 +460,14 @@ export default function EmbedSearchPage() {
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
+          <h2 className="text-lg font-bold text-mcv-gris">Personalizá tu búsqueda:</h2>
           
           <div className="grid grid-cols-4 gap-4 w-full">
             <div className="col-span-2">
                 <input
                     type="text" name="searchText" value={filters.searchText}
                     onChange={(e) => handleFilterChange('searchText', e.target.value)}
-                    placeholder="Buscar por palabra clave, ejemplo: Lavavajilla"
+                    placeholder="Buscar por palabra clave, ejemplo: Lavavajilla" // CAMBIO DE TEXTO
                     className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 />
             </div>
@@ -539,7 +542,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
           
-          <div className={filters.operacion === 'venta' && filters.tipo === 'lote' ? 'col-span-2' : 'col-span-1'}>
+          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
@@ -548,7 +551,7 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
-          <div className={filters.operacion === 'venta' ? 'col-span-2' : 'col-span-1'}>
+          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
             <input 
               type="number" id="maxPrice" name="maxPrice"
@@ -593,10 +596,18 @@ export default function EmbedSearchPage() {
                 <div className="col-span-4">
                   <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas Específico</label>
                   <DatePicker
-                    id="dateRange" selectsRange={true} startDate={dateRange[0]} endDate={dateRange[1]}
-                    onChange={handleDateChange} locale="es" dateFormat="dd/MM/yyyy"
-                    placeholderText="Seleccione un rango" className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                    isClearable={true} minDate={new Date()} excludeDateIntervals={EXCLUDE_DATES}
+                    id="dateRange"
+                    selectsRange={true}
+                    startDate={dateRange[0]}
+                    endDate={dateRange[1]}
+                    onChange={handleDateChange}
+                    locale="es"
+                    dateFormat="dd/MM/yyyy"
+                    placeholderText="Seleccione un rango"
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                    isClearable={true}
+                    minDate={new Date()}
+                    excludeDateIntervals={EXCLUDE_DATES}
                   />
                 </div>
               )}
@@ -618,7 +629,7 @@ export default function EmbedSearchPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox" name="pets" checked={filters.pets}
-                    onChange={handleMascotasChange}
+                    onChange={handleMascotasChange} // USO DEL NUEVO HANDLER
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>
@@ -630,6 +641,7 @@ export default function EmbedSearchPage() {
     );
   };
 
+  // --- FUNCIÓN DE RENDERIZADO DE RESULTADOS (LIMPIA) ---
   const renderMainContent = () => {
     if (isSearching) {
         return <Spinner />;
@@ -704,6 +716,29 @@ export default function EmbedSearchPage() {
     return null;
   };
 
+  // --- Custom Popup de Mascotas ---
+  // Este es el modal personalizado que reemplaza al alert() del navegador
+  const PetAlertModal = () => {
+      if (!showPetAlert) return null;
+      
+      return (
+        <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md text-center border border-gray-200">
+                <h3 className="text-xl font-bold text-mcv-azul mb-4">Política de Mascotas</h3>
+                <p className="text-gray-700 mb-6 text-sm leading-relaxed">
+                    {ALERT_MASCOTAS_TEXT}
+                </p>
+                <button
+                    onClick={() => setShowPetAlert(false)}
+                    className="px-6 py-2 bg-mcv-verde text-white rounded hover:bg-green-700 transition-colors font-bold"
+                >
+                    Entendido
+                </button>
+            </div>
+        </div>
+      );
+  };
+
   // --- Render Principal (JSX) ---
   return (
     <div id="__next" className="min-h-screen">
@@ -717,17 +752,16 @@ export default function EmbedSearchPage() {
         filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
       />
+
+      {/* Renderizamos el Modal de Mascotas aquí */}
+      <PetAlertModal />
       
       <div ref={contentRef} className="max-w-7xl mx-auto">
-        
         <main>
-          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
-          
         </main>
-
       </div>
     </div>
   );
