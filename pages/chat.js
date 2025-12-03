@@ -26,12 +26,10 @@ export default function ChatPage() {
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Scroll suave al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Foco al input al terminar
   useEffect(() => {
     if (!isLoading) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -43,7 +41,6 @@ export default function ChatPage() {
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     
     let targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
-    // Lógica de agente (Venta en Costa -> Agente 2)
     if (property.zona === 'Costa Esmeralda' && (!property.min_rental_price)) { 
          targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
@@ -122,6 +119,9 @@ export default function ChatPage() {
                         return null; 
                     }
                     
+                    // Recuperamos los filtros que usó la IA para pasarlos a la tarjeta
+                    const usedFilters = result?.appliedFilters || {};
+
                     return (
                       <div key={toolCallId} className="mt-4 grid gap-4">
                          {properties.length > 0 ? (
@@ -132,8 +132,7 @@ export default function ChatPage() {
                                     <PropertyCard 
                                         key={prop.property_id} 
                                         property={prop} 
-                                        // FIX CRÍTICO: Pasamos un objeto vacío para que no explote al leer startDate
-                                        filters={{}} 
+                                        filters={usedFilters} // ¡AQUÍ ESTÁ EL FIX! Pasamos los filtros reales
                                         onContact={handleContactSingleProperty}
                                         small 
                                     />

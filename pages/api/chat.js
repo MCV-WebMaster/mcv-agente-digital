@@ -7,17 +7,17 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo cuando el cliente muestre interés real o pida hablar con alguien.',
+  description: 'Muestra el botón para contactar a un agente.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
+  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-    barrios: z.array(z.string()).optional().describe('Nombre OFICIAL del barrio.'),
+    barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
     pax_or_more: z.boolean().optional().describe('Siempre True.'),
@@ -49,7 +49,7 @@ const buscarPropiedadesTool = tool({
             originalMaxPrice = parseInt(cleanPrice);
             if (!isNaN(originalMaxPrice)) {
                 if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
-                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% Tolerancia
+                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
             } else {
                 delete filtros.maxPrice;
             }
@@ -59,9 +59,8 @@ const buscarPropiedadesTool = tool({
         // 1. BÚSQUEDA
         let resultados = await searchProperties(filtros);
 
-        // 2. PROTOCOLO DE RESCATE (0 resultados)
+        // 2. PROTOCOLO DE RESCATE
         if (resultados.count === 0) {
-            // Intento A: Quitar precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -71,7 +70,6 @@ const buscarPropiedadesTool = tool({
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
             }
-            // Intento B: Quitar barrio (si buscaba en un barrio específico y no encontró)
             else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
@@ -83,7 +81,6 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // 3. Sobrecarga (+10 resultados en primera página)
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
@@ -92,13 +89,33 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        const safeProperties = (resultados.results || []).map(p => ({
-            ...p,
-            price: p.price || 0, 
-            min_rental_price: p.min_rental_price || 0,
-            title: p.title || 'Propiedad',
-            summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
-        }));
+        // 3. MAPEO INTELIGENTE DE PRECIOS
+        const safeProperties = (resultados.results || []).map(p => {
+            // Lógica de Precio para el Resumen de la IA
+            let displayPrice = "Consultar";
+            
+            // Prioridad 1: Precio del periodo específico encontrado (el correcto)
+            if (p.found_period_price) {
+                displayPrice = `USD ${p.found_period_price} (Total por ${p.found_period_name || 'el periodo'})`;
+            } 
+            // Prioridad 2: Precio "Desde" (Min Rental)
+            else if (p.min_rental_price) {
+                displayPrice = `USD ${p.min_rental_price} (Desde)`;
+            } 
+            // Prioridad 3: Precio de Venta/Anual
+            else if (p.price) {
+                 displayPrice = `USD ${p.price}`;
+            }
+
+            return {
+                ...p,
+                price: p.price || 0, 
+                min_rental_price: p.min_rental_price || 0,
+                found_period_price: p.found_period_price || 0, // Pasamos esto al front
+                title: p.title || 'Propiedad',
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
+            };
+        });
 
         return {
           count: resultados.count || 0,
@@ -106,7 +123,7 @@ const buscarPropiedadesTool = tool({
           nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
           originalMaxPrice: resultados.originalMaxPrice || null,
-          appliedFilters: filtros, 
+          appliedFilters: filtros, // Importante: devuelve los filtros usados
           properties: safeProperties 
         };
 
@@ -128,42 +145,26 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      maxSteps: 5, // Permite re-pensar si falla la búsqueda
-      system: `Eres 'Asistente Comercial MCV', un agente inmobiliario amable, profesional y astuto.
-
-      --- 🗺️ TU CONOCIMIENTO ---
-      * **"Senderos"** -> incluye: Senderos I, II, III y IV.
-      * **"Marítimo"** -> incluye: Marítimo I, II, III y IV.
-      * **"Golf"** -> incluye: Golf I y II.
-      * **"Residencial"** -> incluye: Residencial I y II.
-      * **"Fincas"** -> incluye: Fincas de Iraola I y II.
-      * **Temporada:** Diciembre, Navidad, Año Nuevo, Enero (1ra/2da), Febrero (1ra/2da).
+      maxSteps: 5, 
+      system: `Eres 'Asistente Comercial MCV'.
       
-      --- 🗣️ TU ESTILO DE CONVERSACIÓN ---
-      1. **Sé cálido:** Saluda, usa emojis moderados.
-      2. **Indaga antes de disparar:**
-         - **Venta:** Antes de buscar, pregunta: "¿Cuántos dormitorios necesitas?" o "¿Qué presupuesto aproximado manejas?".
-         - **Alquiler:** Necesitas Periodo, Pax y Mascotas.
-      3. **El Cierre (CRÍTICO):** NUNCA termines una frase con un punto final después de mostrar propiedades. 
-         - SIEMPRE haz una pregunta de cierre: *"¿Te gustaría ver el detalle?", "¿Querés contactar a un agente?", "¿Buscamos otra fecha?"*.
-
-      --- 🛠️ MANEJO DE RESULTADOS ---
+      --- 🗺️ MAPEO ---
+      * "Senderos" -> Senderos I, II, III, IV.
+      * "Marítimo" -> Marítimo I, II, III, IV.
+      * "Golf" -> Golf I, II.
+      * "Residencial" -> Residencial I, II.
+      * "El Carmen" -> Club El Carmen.
       
-      **CASO: CERO RESULTADOS (Alquiler)**
-      - **NO DIGAS SOLO "NO HAY".**
-      - Si buscó "Senderos" y no hay, busca automáticamente en "Cualquiera" o avisa: "En Senderos está todo ocupado, pero tengo opciones en barrios vecinos...".
-      - Si la fecha está llena, sugiere la quincena siguiente.
+      --- 🧠 REGLAS DE PRECIO ---
+      * Cuando presentes una propiedad, menciona el precio EXACTO que te da la herramienta. 
+      * Si dice "(Total por el periodo)", enfatízalo.
       
-      **CASO: MUCHOS RESULTADOS (warning: "too_many")**
-      - Di: "¡Tengo [X] opciones disponibles! Para no marearte, contame: ¿Buscás algo con pileta climatizada o preferís filtrar por precio?".
-
-      **CASO: RESULTADOS ENCONTRADOS (ÉXITO)**
-      - Presenta las 3 opciones.
-      - Pregunta: "¿Qué te parecen estas? ¿Querés ver más opciones o te gustaría visitar alguna?".
+      --- 🚦 REGLAS DE FLUJO ---
+      1. **INDAGA:** Venta (Dorms/$$), Alquiler (Fecha/Pax/Mascotas).
+      2. **RESCATA:** Si Alquiler da 0 en fecha exacta -> Ofrece fecha vecina.
+      3. **CIERRA:** Siempre termina con pregunta. "¿Qué te parecen?", "¿Vemos más?".
       
-      --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' para consultar.
-      Usa 'mostrar_contacto' si el usuario quiere reservar o hablar con un humano.
+      Usa 'buscar_propiedades'.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
