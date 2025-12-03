@@ -7,17 +7,17 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo cuando el cliente muestre interés real o pida hablar con alguien.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-    barrios: z.array(z.string()).optional(),
+    barrios: z.array(z.string()).optional().describe('Nombre OFICIAL del barrio.'),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
     pax_or_more: z.boolean().optional().describe('Siempre True.'),
@@ -59,8 +59,9 @@ const buscarPropiedadesTool = tool({
         // 1. BÚSQUEDA
         let resultados = await searchProperties(filtros);
 
-        // 2. PROTOCOLO DE RESCATE
+        // 2. PROTOCOLO DE RESCATE (0 resultados)
         if (resultados.count === 0) {
+            // Intento A: Quitar precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -70,6 +71,7 @@ const buscarPropiedadesTool = tool({
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
             }
+            // Intento B: Quitar barrio
             else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
@@ -81,6 +83,7 @@ const buscarPropiedadesTool = tool({
             }
         }
 
+        // 3. Sobrecarga
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
@@ -89,33 +92,15 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        // 3. MAPEO INTELIGENTE DE PRECIOS
-        const safeProperties = (resultados.results || []).map(p => {
-            // Lógica de Precio para el Resumen de la IA
-            let displayPrice = "Consultar";
-            
-            // Prioridad 1: Precio del periodo específico encontrado (el correcto)
-            if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total por ${p.found_period_name || 'el periodo'})`;
-            } 
-            // Prioridad 2: Precio "Desde" (Min Rental)
-            else if (p.min_rental_price) {
-                displayPrice = `USD ${p.min_rental_price} (Desde)`;
-            } 
-            // Prioridad 3: Precio de Venta/Anual
-            else if (p.price) {
-                 displayPrice = `USD ${p.price}`;
-            }
-
-            return {
-                ...p,
-                price: p.price || 0, 
-                min_rental_price: p.min_rental_price || 0,
-                found_period_price: p.found_period_price || 0, // Pasamos esto al front
-                title: p.title || 'Propiedad',
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
-            };
-        });
+        const safeProperties = (resultados.results || []).map(p => ({
+            ...p,
+            price: p.price || 0, 
+            min_rental_price: p.min_rental_price || 0,
+            found_period_price: p.found_period_price || 0,
+            title: p.title || 'Propiedad',
+            // El summary es solo para que la IA sepa qué encontró, NO para que lo lea en voz alta
+            summary: `${p.title} (${p.barrio || p.zona}).` 
+        }));
 
         return {
           count: resultados.count || 0,
@@ -123,7 +108,7 @@ const buscarPropiedadesTool = tool({
           nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
           originalMaxPrice: resultados.originalMaxPrice || null,
-          appliedFilters: filtros, // Importante: devuelve los filtros usados
+          appliedFilters: filtros, 
           properties: safeProperties 
         };
 
@@ -154,17 +139,26 @@ export default async function handler(req, res) {
       * "Golf" -> Golf I, II.
       * "Residencial" -> Residencial I, II.
       * "El Carmen" -> Club El Carmen.
-      
-      --- 🧠 REGLAS DE PRECIO ---
-      * Cuando presentes una propiedad, menciona el precio EXACTO que te da la herramienta. 
-      * Si dice "(Total por el periodo)", enfatízalo.
+      * "Fincas" -> Fincas de Iraola I y II.
       
       --- 🚦 REGLAS DE FLUJO ---
-      1. **INDAGA:** Venta (Dorms/$$), Alquiler (Fecha/Pax/Mascotas).
-      2. **RESCATA:** Si Alquiler da 0 en fecha exacta -> Ofrece fecha vecina.
-      3. **CIERRA:** Siempre termina con pregunta. "¿Qué te parecen?", "¿Vemos más?".
+      1. INDAGA: Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
+      2. RESCATA: Si no hay en la fecha exacta, ofrece la siguiente.
       
-      Usa 'buscar_propiedades'.
+      --- 🚫 PROHIBICIONES AL MOSTRAR RESULTADOS ---
+      1. **NO repitas la lista de propiedades en texto.** El usuario ya ve las tarjetas visuales.
+      2. **NO describas las casas** ("La primera es...", "La segunda tiene...").
+      
+      --- ✅ CÓMO RESPONDER CUANDO HAY PROPIEDADES ---
+      Solo di una frase de contexto y la pregunta de cierre.
+      
+      *Ejemplo Correcto:*
+      "Aquí tienes algunas opciones disponibles en [Zona] que se ajustan a tu búsqueda.
+      ¿Qué te parecen estas opciones? ¿Te gustaría ver más detalles o contactar para visitarlas?"
+      
+      *Ejemplo si hubo rescate de precio:*
+      "No encontré por debajo de [Precio], pero mira estas opciones en [Zona] que valen la pena.
+      ¿Te gustaría ver alguna en detalle?"
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
