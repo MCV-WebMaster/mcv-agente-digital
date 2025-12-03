@@ -7,28 +7,28 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar.',
+  description: 'Muestra el botón para contactar a un agente.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
+  description: 'Busca propiedades. IMPORTANTE: MANTÉN LOS FILTROS ANTERIORES SI EL USUARIO SOLO AGREGA UNO NUEVO.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional().describe('Siempre True.'),
+    pax_or_more: z.boolean().optional(),
     pets: z.boolean().optional(),
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto.'),
+    maxPrice: z.string().optional().describe('Presupuesto Tope.'),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
-    offset: z.number().optional().describe('Desde dónde mostrar.'),
+    limit: z.number().optional(),
+    offset: z.number().optional(),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -58,7 +58,6 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // RESCATE
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -79,8 +78,9 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // SOBRECARGA
-        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
+        // Sobrecarga
+        const hasSpecificFilter = filtros.maxPrice || filtros.pool || filtros.selectedPeriod;
+        if (resultados.count > 10 && !hasSpecificFilter && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -91,7 +91,7 @@ const buscarPropiedadesTool = tool({
         const safeProperties = (resultados.results || []).map(p => {
             let displayPrice = "Consultar";
             if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total)`;
+                displayPrice = `USD ${p.found_period_price} (Total por quincena)`;
             } else if (p.min_rental_price) {
                 displayPrice = `USD ${p.min_rental_price} (Desde)`;
             } else if (p.price) {
@@ -138,24 +138,19 @@ export default async function handler(req, res) {
       messages: messages,
       maxSteps: 5, 
       system: `Eres 'Asistente Comercial MCV'.
-      
-      --- 🚫 REGLAS DE SILENCIO (ESTRICTO) ---
-      1. Cuando la herramienta muestra propiedades (tarjetas), **TU RESPUESTA DE TEXTO DEBE SER MÍNIMA**.
-      2. **PROHIBIDO** repetir la lista en texto (nada de "1. Casa en... 2. Casa en...").
-      3. **PROHIBIDO** describir las casas.
-      4. Solo di: "Aquí tienes las mejores opciones. ¿Qué te parecen?" o similar.
 
-      --- 🚦 FLUJO ---
-      1. INDAGA: Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
-      2. RESCATA: Si da 0, ofrece la fecha siguiente. NO inventes zonas.
-      3. SOBRECARGA: Si dice "too_many", pide presupuesto.
+      --- 🚦 REGLAS DE ORO ---
+      1. **FRASEO:** Pregunta SIEMPRE: **"¿Llevan mascotas?"** (NO digas "¿Aceptan?").
+      2. **MEMORIA:** Si el usuario refina la búsqueda (ej. agrega precio), **MANTÉN** los filtros anteriores (Zona, Periodo, Pax) en tu llamada a la herramienta. No los borres.
+      
+      --- 🗣️ ESTILO ---
+      - **NO REPITAS** la lista de casas en texto. El usuario ya ve las tarjetas.
+      - Di: *"Estas son [X] opciones de [Total] encontradas. ¿Qué te parecen?"*
       
       --- 🗺️ MAPEO ---
       * "Costa" -> Costa Esmeralda.
       * "Senderos" -> Senderos I, II, III, IV.
-      * "Carnaval" -> Febrero 1ra (y pregunta si buscan 10 días o quincena).
-
-      Usa 'buscar_propiedades' cuando tengas los datos.
+      * "Carnaval" -> Febrero 1ra (o pregunta).
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
