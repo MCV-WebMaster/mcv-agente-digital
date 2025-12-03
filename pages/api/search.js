@@ -2,13 +2,13 @@ import { supabase } from '@/lib/supabaseClient';
 
 const CATEGORY_IDS = {
   VENTA: 198,
-  ALQUILER_TEMPORAL: 196,     
-  ALQUILER_TEMPORAL_VERANO: 197, 
+  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada
+  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada
   ALQUILER_ANUAL: 194,
   ALQUILER_ANUAL_AMUEBLADO: 193,
 };
 
-// --- IDs OFICIALES DE WORDPRESS ---
+// IDs confirmados + Placeholders para nuevos tipos
 const TYPE_IDS = {
   CASA: 162,
   DEPARTAMENTO: 163,
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
       selectedPeriod, 
       sortBy = 'default',
       searchText,
-      showOtherDates
+      showOtherDates // Recibimos el estado del checkbox
     } = req.body;
 
     let query = supabase.from('properties').select('*');
@@ -70,16 +70,14 @@ export default async function handler(req, res) {
     // --- ALQUILER TEMPORAL ---
     if (operacion === 'alquiler_temporal') {
       
-      const isSearchingInHighSeason = selectedPeriod || (startDate && endDate && !(endDate < SEASON_START_DATE || startDate > SEASON_END_DATE));
-      const hasDateSelected = selectedPeriod || startDate || endDate;
-
-      // LÓGICA A: Mapeo de Categorías
+      // LÓGICA A (CORREGIDA): Separación Estricta de Categorías
       if (showOtherDates) {
+        // Caso 1: Usuario marcó "Otras fechas" -> SOLO Categoría 196
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
-      } else if (isSearchingInHighSeason || !hasDateSelected) {
-        // Por defecto o Temporada Alta: Verano (197) y/o General (196)
-        // (Usamos OR para cubrir casos bordes, pero prioriza verano visualmente en frontend)
-        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
+      } else {
+        // Caso 2: Por defecto (Inicio) o Temporada -> SOLO Categoría 197 (Verano)
+        // Esto asegura que veamos las 89 propiedades, no las 107 sumadas.
+        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       }
 
       if (zona) query = query.eq('zona', zona);
@@ -109,7 +107,7 @@ export default async function handler(req, res) {
       const propertyIds = propertiesData.map(p => p.property_id);
       if (propertyIds.length === 0) return res.status(200).json({ status: 'OK', count: 0, results: [] });
 
-      // Buscar Precios
+      // Buscar Precios y Disponibilidad en tabla 'periods'
       const { data: allPeriodsData, error: allPeriodsError } = await supabase
         .from('periods')
         .select('property_id, price')
@@ -130,12 +128,14 @@ export default async function handler(req, res) {
         }
       }
       
-      // Lógica de Disponibilidad
+      // Lógica de Disponibilidad Específica
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
 
       const userSelectedPeriod = selectedPeriod;
       const userSelectedDates = startDate && endDate;
+      
+      // Solo chequeamos disponibilidad estricta si NO estamos en "Otras Fechas"
       const shouldCheckAvailability = !showOtherDates;
 
       if (shouldCheckAvailability) {
@@ -185,7 +185,9 @@ export default async function handler(req, res) {
           found_period_name: periodDetailsMap.get(p.property_id)?.name || null
         }))
         .filter(p => { 
+            // Si estamos en Otras Fechas, no filtramos por precio específico (es consultar)
             if (showOtherDates) return true;
+            
             const priceToFilter = userSelectedPeriod ? p.found_period_price : p.min_rental_price;
             
             if (!minPrice && !maxPrice) return true;
