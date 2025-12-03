@@ -7,15 +7,15 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo cuando el cliente muestre interés real o pida hablar con alguien.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
+  description: 'Busca propiedades en la base de datos.',
   parameters: z.object({
-    operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
+    operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
@@ -27,10 +27,8 @@ const buscarPropiedadesTool = tool({
     minPrice: z.string().optional(),
     maxPrice: z.string().optional().describe('Presupuesto.'),
     searchText: z.string().optional(),
-    // PAGINACIÓN PARA EL CHAT
     limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
-    offset: z.number().optional().describe('Desde dónde mostrar (para ver más).'),
-    
+    offset: z.number().optional().describe('Desde dónde mostrar.'),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -42,7 +40,6 @@ const buscarPropiedadesTool = tool({
         console.log("🤖 IA Input:", filtros);
         
         if (filtros.pax) filtros.pax_or_more = true;
-        // Forzamos límite de 3 para el chat si no viene definido
         if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
@@ -59,12 +56,12 @@ const buscarPropiedadesTool = tool({
         }
         filtros.sortBy = 'price_asc';
 
-        // 1. BÚSQUEDA (Ahora propertyService soporta limit/offset)
+        // 1. BÚSQUEDA
         let resultados = await searchProperties(filtros);
 
-        // 2. PROTOCOLO DE RESCATE (Si da 0 total)
+        // 2. PROTOCOLO DE RESCATE (0 resultados)
         if (resultados.count === 0) {
-            // Rescate A: Quitar precio
+            // Intento A: Quitar precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -74,7 +71,7 @@ const buscarPropiedadesTool = tool({
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
             }
-            // Rescate B: Quitar barrio
+            // Intento B: Quitar barrio (si buscaba en un barrio específico)
             else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
@@ -86,10 +83,8 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // 3. PROTOCOLO "MUCHOS RESULTADOS" (El Vendedor Experto)
-        // Si es la primera página (offset 0), hay más de 5 resultados totales y NO hay filtro de precio ni pileta...
-        // ... BLOQUEAMOS y pedimos filtro.
-        if (filtros.offset === 0 && resultados.count > 5 && !filtros.maxPrice && !filtros.pool) {
+        // 3. Sobrecarga
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -97,19 +92,18 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        // 4. Mapeo seguro
         const safeProperties = (resultados.results || []).map(p => ({
             ...p,
             price: p.price || 0, 
             min_rental_price: p.min_rental_price || 0,
             title: p.title || 'Propiedad',
-            summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
+            summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
         }));
 
         return {
-          count: resultados.count || 0, // Total disponible en DB
-          showing: safeProperties.length, // Cantidad que enviamos ahora (3)
-          nextOffset: filtros.offset + safeProperties.length, // Para que la IA sepa qué pedir después
+          count: resultados.count || 0,
+          showing: safeProperties.length,
+          nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
           originalMaxPrice: resultados.originalMaxPrice || null,
           appliedFilters: filtros, 
@@ -134,21 +128,40 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'Asistente Comercial MCV', el mejor vendedor de la inmobiliaria.
+      system: `Eres 'Asistente Comercial MCV', un agente inmobiliario amable, profesional y astuto.
+
+      --- 🗺️ TU CONOCIMIENTO ---
+      * **"Senderos"** -> incluye: Senderos I, II, III y IV.
+      * **"Marítimo"** -> incluye: Marítimo I, II, III y IV.
+      * **"Golf"** -> incluye: Golf I y II.
+      * **"Residencial"** -> incluye: Residencial I y II.
+      * **"Fincas"** -> incluye: Fincas de Iraola I y II.
+      * **Temporada:** Diciembre, Navidad, Año Nuevo, Enero (1ra/2da), Febrero (1ra/2da).
       
-      --- TU PERSONALIDAD DE VENTA ---
-      1. **CORTÉS PERO DIRECTO:** No saludes dos veces. Ve al grano.
-      2. **EL EMBUDO:** Nunca muestres propiedades sin filtrar.
-         - Si piden Alquiler en Costa: 1. Periodo? -> 2. Pax? -> 3. Mascotas?
-      3. **MANEJO DE VOLUMEN:**
-         - Si la herramienta dice "warning: too_many", NO MUESTRES NADA. Pregunta: *"Encontré muchas opciones. Para darte las mejores, ¿cuál es tu presupuesto tope?"* o *"¿Buscas con pileta?"*.
-      4. **LA REGLA DEL 3:**
-         - Solo muestra 3 propiedades a la vez (la herramienta ya lo limita).
-         - Después de mostrar las 3, **SIEMPRE** pregunta: *"¿Te gusta alguna de estas o quieres ver 3 opciones más?"* o *"¿Quieres refinar con palabras clave como 'Lavavajillas'?"*.
-         - Si el usuario dice "ver más", llama a la herramienta con el \`offset\` que te dio la respuesta anterior.
+      --- 🗣️ TU ESTILO DE CONVERSACIÓN ---
+      1. **Sé cálido:** Saluda, usa emojis moderados, sé empático ("¡Qué lindo plan!", "Entiendo perfecto").
+      2. **Indaga antes de disparar:**
+         - **Venta:** Antes de buscar, pregunta: "¿Cuántos dormitorios necesitas?" o "¿Qué comodidades son imprescindibles?". NO busques solo con el precio.
+         - **Alquiler:** Necesitas Periodo, Pax y Mascotas.
+      3. **El Cierre:** NUNCA termines una frase con un punto final. SIEMPRE termina con una pregunta o una llamada a la acción ("¿Te gustaría verlas?", "¿Querés contactar a un agente?", "¿Buscamos otra fecha?").
+
+      --- 🛠️ MANEJO DE RESULTADOS ---
       
-      --- CIERRE ---
-      Siempre intenta llevar al usuario a contactar a un humano cuando muestre interés real.
+      **CASO: CERO RESULTADOS (Alquiler)**
+      Si el usuario pide una fecha (ej. Año Nuevo) y hay 0 opciones:
+      - **NO DIGAS SOLO "NO HAY".**
+      - **PROPÓN:** "Para Año Nuevo ya está todo reservado, pero tengo excelentes opciones para **Navidad** o la **1ra de Enero**. ¿Te gustaría ver qué hay disponible en esas fechas?"
+      
+      **CASO: MUCHOS RESULTADOS (warning: "too_many")**
+      - Di: "¡Tengo [X] opciones disponibles! Para no marearte, contame: ¿Buscás algo con pileta climatizada o preferís filtrar por precio?".
+
+      **CASO: RESULTADOS ENCONTRADOS**
+      - Presenta las 3 opciones.
+      - Pregunta: "¿Qué te parecen estas? ¿Querés ver más opciones o te gustaría visitar alguna?".
+      
+      --- HERRAMIENTAS ---
+      Usa 'buscar_propiedades' para consultar.
+      Usa 'mostrar_contacto' si el usuario quiere reservar o hablar con un humano.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
