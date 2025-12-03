@@ -13,11 +13,11 @@ const mostrarContactoTool = tool({
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-    barrios: z.array(z.string()).optional(),
+    barrios: z.array(z.string()).optional().describe('Nombre OFICIAL del barrio.'),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
     pax_or_more: z.boolean().optional().describe('Siempre True.'),
@@ -49,7 +49,7 @@ const buscarPropiedadesTool = tool({
             originalMaxPrice = parseInt(cleanPrice);
             if (!isNaN(originalMaxPrice)) {
                 if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
-                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
+                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% Tolerancia
             } else {
                 delete filtros.maxPrice;
             }
@@ -61,6 +61,7 @@ const buscarPropiedadesTool = tool({
 
         // 2. PROTOCOLO DE RESCATE (0 resultados)
         if (resultados.count === 0) {
+            // Intento A: Quitar precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -70,6 +71,7 @@ const buscarPropiedadesTool = tool({
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
             }
+            // Intento B: Quitar barrio (si buscaba en un barrio específico y no encontró)
             else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
@@ -81,7 +83,7 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // 3. Sobrecarga
+        // 3. Sobrecarga (+10 resultados en primera página)
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
@@ -126,8 +128,7 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      // ¡IMPORTANTE! maxSteps permite a la IA "ver" el resultado de la herramienta y luego hablar.
-      maxSteps: 5, 
+      maxSteps: 5, // Permite re-pensar si falla la búsqueda
       system: `Eres 'Asistente Comercial MCV', un agente inmobiliario amable, profesional y astuto.
 
       --- 🗺️ TU CONOCIMIENTO ---
@@ -143,21 +144,22 @@ export default async function handler(req, res) {
       2. **Indaga antes de disparar:**
          - **Venta:** Antes de buscar, pregunta: "¿Cuántos dormitorios necesitas?" o "¿Qué presupuesto aproximado manejas?".
          - **Alquiler:** Necesitas Periodo, Pax y Mascotas.
-      3. **El Cierre (CRÍTICO):** - NUNCA termines una frase con un punto final después de mostrar propiedades. 
-         - SIEMPRE debes hacer una pregunta inmediatamente después de mostrar la lista.
-         - Ejemplos: *"¿Te gustaría ver el detalle de alguna?", "¿Querés que busquemos más opciones?", "¿Te paso con un humano para reservar?"*.
+      3. **El Cierre (CRÍTICO):** NUNCA termines una frase con un punto final después de mostrar propiedades. 
+         - SIEMPRE haz una pregunta de cierre: *"¿Te gustaría ver el detalle?", "¿Querés contactar a un agente?", "¿Buscamos otra fecha?"*.
 
       --- 🛠️ MANEJO DE RESULTADOS ---
       
-      **CASO: CERO RESULTADOS**
-      - PROPÓN ALTERNATIVAS: "Para esa fecha exacta no tengo, pero mirá Navidad...".
+      **CASO: CERO RESULTADOS (Alquiler)**
+      - **NO DIGAS SOLO "NO HAY".**
+      - Si buscó "Senderos" y no hay, busca automáticamente en "Cualquiera" o avisa: "En Senderos está todo ocupado, pero tengo opciones en barrios vecinos...".
+      - Si la fecha está llena, sugiere la quincena siguiente.
       
       **CASO: MUCHOS RESULTADOS (warning: "too_many")**
       - Di: "¡Tengo [X] opciones disponibles! Para no marearte, contame: ¿Buscás algo con pileta climatizada o preferís filtrar por precio?".
 
       **CASO: RESULTADOS ENCONTRADOS (ÉXITO)**
-      - La herramienta mostrará las tarjetas automáticamente.
-      - TU TRABAJO ES HABLAR DESPUÉS: "Aquí tienes las mejores 3 opciones. La primera tiene [Destacar algo]. ¿Te gustaría ver más fotos de alguna o contactar para visitarla?".
+      - Presenta las 3 opciones.
+      - Pregunta: "¿Qué te parecen estas? ¿Querés ver más opciones o te gustaría visitar alguna?".
       
       --- HERRAMIENTAS ---
       Usa 'buscar_propiedades' para consultar.
