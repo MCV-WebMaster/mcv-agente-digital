@@ -114,25 +114,18 @@ export default function ChatPage() {
 
                   if (state === 'result' && toolName === 'buscar_propiedades') {
                     const properties = Array.isArray(result?.properties) ? result.properties : [];
+                    // FIX: Eliminado el chequeo de 'too_many', siempre mostramos lo que hay
                     
-                    if (result?.warning === 'too_many') {
-                        return null; 
-                    }
-                    
-                    // Recuperamos los filtros que usó la IA para pasarlos a la tarjeta
-                    const usedFilters = result?.appliedFilters || {};
-
                     return (
                       <div key={toolCallId} className="mt-4 grid gap-4">
                          {properties.length > 0 ? (
                              properties.map(prop => {
                                 if (!prop || !prop.property_id) return null;
-                                
                                 return (
                                     <PropertyCard 
                                         key={prop.property_id} 
                                         property={prop} 
-                                        filters={usedFilters} // ¡AQUÍ ESTÁ EL FIX! Pasamos los filtros reales
+                                        filters={result?.appliedFilters || {}} 
                                         onContact={handleContactSingleProperty}
                                         small 
                                     />
