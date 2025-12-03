@@ -6,29 +6,27 @@ import { searchProperties } from '@/lib/propertyService';
 export const maxDuration = 60;
 const model = openai('gpt-4o');
 
-// --- HERRAMIENTA DE CONTACTO ---
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente humano. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada (marzo-diciembre).',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
-// --- HERRAMIENTA DE BÚSQUEDA ---
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS (Venta: Dorms/Zona | Alquiler: Periodo/Pax/Mascotas).',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional().describe('Siempre True para búsquedas de capacidad.'),
+    pax_or_more: z.boolean().optional().describe('Siempre True.'),
     pets: z.boolean().optional(),
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto Tope.'),
-    searchText: z.string().optional().describe('Palabras clave: lavavajillas, losa, aire, etc.'),
+    maxPrice: z.string().optional().describe('Presupuesto.'),
+    searchText: z.string().optional(),
     limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
     offset: z.number().optional().describe('Desde dónde mostrar.'),
     selectedPeriod: z.enum([
@@ -41,32 +39,27 @@ const buscarPropiedadesTool = tool({
     try {
         console.log("🤖 MaCA Input:", filtros);
         
-        // Ajustes por defecto
         if (filtros.pax) filtros.pax_or_more = true;
         if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
-        // Limpieza de precio
         let originalMaxPrice = null;
         if (filtros.maxPrice) {
             const cleanPrice = filtros.maxPrice.replace(/[\.,kK$USD\s]/g, '');
             originalMaxPrice = parseInt(cleanPrice);
             if (!isNaN(originalMaxPrice)) {
-                // Corrección de miles si el usuario puso "200"
                 if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
-                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% Tolerancia
+                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
             } else {
                 delete filtros.maxPrice;
             }
         }
         filtros.sortBy = 'price_asc';
 
-        // 1. EJECUTAR BÚSQUEDA PRINCIPAL
         let resultados = await searchProperties(filtros);
 
-        // 2. PROTOCOLO DE RESCATE (Si da 0 resultados)
+        // PROTOCOLO DE RESCATE (Si da 0)
         if (resultados.count === 0) {
-            // Intento A: Si tenía precio, probamos sin precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -75,9 +68,7 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = `precio_bajo|${originalMaxPrice}`;
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
-            }
-            // Intento B: Si tenía barrio específico, probamos en toda la zona
-            else if (filtros.barrios && filtros.barrios.length > 0) {
+            } else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
@@ -88,12 +79,11 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // 3. PREPARAR DATOS PARA LA IA (Resumen de texto seguro)
+        // Mapeo de propiedades (La IA recibe este JSON, no el usuario)
         const safeProperties = (resultados.results || []).map(p => {
             let displayPrice = "Consultar";
-            // Lógica de visualización de precio para la IA
             if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total por el periodo)`;
+                displayPrice = `USD ${p.found_period_price} (Total)`;
             } else if (p.min_rental_price) {
                 displayPrice = `USD ${p.min_rental_price} (Desde)`;
             } else if (p.price) {
@@ -102,13 +92,13 @@ const buscarPropiedadesTool = tool({
 
             return {
                 ...p,
-                // Datos crudos para el frontend
                 price: p.price || 0, 
                 min_rental_price: p.min_rental_price || 0,
                 found_period_price: p.found_period_price || 0,
-                title: p.title || 'Propiedad sin título',
-                // Resumen semántico para que la IA entienda qué encontró
-                summary: `${p.title} en ${p.barrio || p.zona}. ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
+                title: p.title || 'Propiedad',
+                // Este summary es SOLO para que la IA sepa qué encontró.
+                // NO DEBE USARSE PARA GENERAR TEXTO REPETITIVO.
+                summary: `ID: ${p.property_id} | Barrio: ${p.barrio || p.zona}` 
             };
         });
 
@@ -124,7 +114,7 @@ const buscarPropiedadesTool = tool({
 
     } catch (error) {
         console.error("Error en tool buscar_propiedades:", error);
-        return { count: 0, properties: [], error: "Error interno en la búsqueda." };
+        return { count: 0, properties: [], error: "Error interno." };
     }
   },
 });
@@ -141,39 +131,39 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
-      
-      --- 👩‍💼 TU IDENTIDAD ---
-      * Nombre: MaCA.
-      * Equipo: Cecilia (Martillera), Marcela (GBA), Andrea (Costa).
-      * Tono: Cálido, profesional, resolutivo y empático. Nunca robótico.
-      
-      --- 🗺️ CONOCIMIENTO DE ZONA ---
-      * "Costa" = Costa Esmeralda.
-      * Barrios Costa: Senderos (I,II,III,IV), Marítimo (I,II,III,IV), Golf (I,II), Residencial (I,II), Ecuestre, Deportiva, Bosque.
-      * Barrios GBA Sur: El Carmen, Fincas de Iraola, Abril.
-      
-      --- 🚦 FLUJO DE VENTA (EMBUDO) ---
-      1. **Calificación:**
-         - **Venta:** "¿Qué buscas (Casa/Lote)?", "¿Cuántos dormitorios necesitas?", "¿Qué presupuesto aproximado manejas?".
-         - **Alquiler:** 1. "¿Para qué fecha exacta?" (Enero 1ra, Febrero 2da...).
-             2. "¿Cuántas personas son?".
-             3. **"¿Llevan mascotas?"** (Pregunta obligatoria antes de buscar).
-      
-      2. **Búsqueda:** Solo busca cuando tengas los datos mínimos.
-      
-      3. **Manejo de Resultados:**
-         - **Caso Éxito:** "Acá te muestro las mejores opciones. ¿Qué te parecen?".
-         - **Caso "barrio_ampliado":** "En ese barrio no encontré, pero mirá estas opciones en barrios vecinos:".
-         - **Caso "precio_bajo":** "Por ese valor no hay nada disponible, pero si estiramos un poco el presupuesto, mirá estas oportunidades:".
-         - **Caso 0 absoluto:** "Para esa fecha exacta está todo completo. ¿Te gustaría ver disponibilidad para la quincena siguiente?".
+      system: `Eres **MaCA**, la asistente comercial experta de MCV Propiedades. Tu tono es cálido, empático y muy profesional.
 
-      --- 🚫 REGLAS DE SALIDA (CRÍTICO) ---
-      * **NO repitas** la lista de propiedades en texto (el usuario ya ve las tarjetas visuales).
-      * **NO inventes** datos que no estén en el summary.
-      * **SIEMPRE** termina con una pregunta de cierre ("¿Vemos más?", "¿Te contacto?", "¿Te gusta alguna?").
+      --- 🗺️ MAPEO ---
+      * "Costa" -> Costa Esmeralda.
+      * "Senderos" -> Senderos I, II, III, IV.
+      * "Marítimo" -> Marítimo I, II, III, IV.
+      * "Golf" -> Golf I, II.
+      * "Carnaval" -> Febrero 1ra.
+
+      --- 🚦 REGLAS DE ORO PARA EL TEXTO (ESTRICTO) ---
       
-      Usa las herramientas con inteligencia y pausa.
+      1. **PROHIBICIÓN ABSOLUTA DE LISTAS:**
+         - Cuando la herramienta muestra tarjetas visuales, **TU NO DEBES ESCRIBIR** una lista de texto repitiendo los títulos, precios o descripciones.
+         - **MALO:** "Aquí tienes: 1. Casa en Golf... 2. Casa en Senderos..."
+         - **BUENO:** "Acá te separé las mejores opciones que encontré."
+
+      2. **FORMATO DE RESPUESTA OBLIGATORIO (Si hay resultados):**
+         Debes usar esta estructura exacta para tu respuesta de texto:
+         
+         > "Estas son **[showing]** opciones disponibles de **[count]** encontradas para [Criterio de búsqueda].
+         >
+         > ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+
+         *(Reemplaza [showing] y [count] con los números reales que devuelve la herramienta).*
+
+      3. **CIERRE CÁLIDO:**
+         - Siempre invita a la acción con amabilidad.
+         - Si hay muchas propiedades (count > 10), agrega: *"Tengo muchas más opciones. Si querés, podemos filtrar por algo específico como 'con lavavajillas' o 'cerca del mar'."*
+
+      --- 🛠️ MANEJO DE ERRORES ---
+      * **0 Resultados:** "Para esa fecha exacta está todo reservado. Pero fijate estas opciones en la quincena siguiente (o barrios vecinos) que podrían servirte. ¿Las miramos?".
+      
+      Usa 'buscar_propiedades' cuando tengas Periodo, Pax y Mascotas.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
