@@ -8,12 +8,8 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import "react-datepicker/dist/react-datepicker.css"; // Aseguramos estilos si faltaban
 
-// Registrar idioma español
-if (es) {
-  registerLocale('es', es);
-}
+registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
@@ -60,7 +56,7 @@ export default function EmbedSearchPage() {
     searchText: '',
   });
 
-  // FIX DE ESTABILIDAD: Siempre inicializar como array, nunca null
+  // FIX: Inicializar siempre como array para evitar fallos en render
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -238,13 +234,13 @@ export default function EmbedSearchPage() {
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
     } else if (results.length > 10) {
-      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
@@ -261,7 +257,7 @@ export default function EmbedSearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
         whatsappMessage, 
@@ -316,10 +312,10 @@ export default function EmbedSearchPage() {
     setFilters(prev => ({ ...prev, barrios: barrioValues }));
   };
 
-  // FIX DE ESTABILIDAD: Handler de Fechas Seguro
+  // FIX: Handler de Fechas Blindado contra null
   const handleDateChange = (dates) => {
-    // react-datepicker puede enviar null si se limpia
     if (!dates) {
+        // Si se limpia el datepicker, reseteamos a nulo
         setDateRange([null, null]);
         setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
         return;
@@ -338,7 +334,6 @@ export default function EmbedSearchPage() {
       }));
       if (!showOtherDates) setShowOtherDates(true);
     } else {
-      // Si falta alguna fecha, solo actualizamos el estado local de dateRange
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
     }
   };
@@ -764,6 +759,7 @@ export default function EmbedSearchPage() {
         propertyCount={contactPayload.propertyCount}
         filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
+        targetAgentNumber={contactPayload.targetAgentNumber}
       />
 
       <PetAlertModal />
