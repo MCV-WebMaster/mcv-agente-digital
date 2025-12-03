@@ -114,7 +114,10 @@ export default function ChatPage() {
 
                   if (state === 'result' && toolName === 'buscar_propiedades') {
                     const properties = Array.isArray(result?.properties) ? result.properties : [];
-                    // FIX: Eliminado el chequeo de 'too_many', siempre mostramos lo que hay
+                    
+                    if (result?.warning === 'too_many') {
+                        return null; 
+                    }
                     
                     return (
                       <div key={toolCallId} className="mt-4 grid gap-4">
@@ -132,8 +135,8 @@ export default function ChatPage() {
                                 );
                              })
                          ) : (
-                             <div className="text-sm italic opacity-80 p-2 bg-gray-100 rounded">
-                                No se encontraron resultados exactos.
+                             <div className="text-sm italic text-gray-500 p-2 bg-gray-50 rounded border border-gray-200">
+                                (Sin resultados exactos para mostrar en tarjetas)
                              </div>
                          )}
                       </div>
@@ -145,9 +148,9 @@ export default function ChatPage() {
                           <div key={toolCallId} className="mt-4">
                             <button 
                                 onClick={handleGeneralContact}
-                                className="w-full bg-green-600 text-white py-2 px-4 rounded font-bold hover:bg-green-700 transition-colors"
+                                className="w-full bg-green-600 text-white py-2 px-4 rounded font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                             >
-                                Contactar Agente
+                                <span>💬</span> Contactar por WhatsApp
                             </button>
                           </div>
                       );
