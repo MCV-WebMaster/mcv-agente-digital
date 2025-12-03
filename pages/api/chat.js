@@ -7,28 +7,28 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional().describe('True'),
+    pax_or_more: z.boolean().optional().describe('Siempre True.'),
     pets: z.boolean().optional(),
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
     maxPrice: z.string().optional().describe('Presupuesto Tope.'),
     searchText: z.string().optional(),
-    limit: z.number().optional(),
-    offset: z.number().optional(),
+    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
+    offset: z.number().optional().describe('Desde dónde mostrar.'),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -43,12 +43,14 @@ const buscarPropiedadesTool = tool({
         if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
+        // Sanitización de precios (Ej. "200k" -> 200000)
         let originalMaxPrice = null;
         if (filtros.maxPrice) {
-            const clean = parseInt(filtros.maxPrice.replace(/\D/g, ''));
-            if (!isNaN(clean)) {
-                originalMaxPrice = (clean < 1000) ? clean * 1000 : clean;
-                filtros.maxPrice = originalMaxPrice.toString();
+            const cleanPrice = filtros.maxPrice.replace(/[\.,kK$USD\s]/g, '');
+            originalMaxPrice = parseInt(cleanPrice);
+            if (!isNaN(originalMaxPrice)) {
+                if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
+                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% tolerancia interna
             } else {
                 delete filtros.maxPrice;
             }
@@ -57,25 +59,22 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // --- LOGICA DE NEGOCIO (MAQUINA DE ESTADOS) ---
-
-        // CASO 1: CERO RESULTADOS (RESCATE)
+        // PROTOCOLO DE RESCATE
         if (resultados.count === 0) {
-            // Si falló por precio, buscamos el más barato disponible
+            // Intento A: Quitar precio
             if (originalMaxPrice) {
-                let rescueFilters = {...filtros, maxPrice: null, limit: 1, offset: 0}; // Solo traer el más barato
+                let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
-                
                 if (resRescue.count > 0) {
-                    // Encontramos algo más caro
                     resultados = resRescue;
-                    resultados.warning = `price_low`; // Aviso a la IA
-                    resultados.minAvailablePrice = resRescue.results[0].final_display_price;
+                    resultados.warning = `precio_bajo|${originalMaxPrice}`;
+                    resultados.originalMaxPrice = originalMaxPrice;
                 }
-            }
-            // Si no fue precio, probamos quitando barrio
+            } 
+            // Intento B: Quitar barrio (si no fue precio)
             else if (filtros.barrios && filtros.barrios.length > 0) {
-                let rescueFilters = {...filtros, barrios: undefined, limit: 3};
+                let rescueFilters = {...filtros, offset: 0};
+                delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
                 if (resRescue.count > 0) {
                     resultados = resRescue;
@@ -84,40 +83,46 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // CASO 2: SOBRECARGA (> 6)
-        // Si hay muchos resultados y NO es un rescate de precio, bloqueamos.
-        if (resultados.count > 6 && !resultados.warning) {
-             return {
+        // PROTOCOLO DE SOBRECARGA (El Vendedor Experto)
+        // Si hay > 6 resultados en la primera página y no es un rescate... bloqueamos.
+        if (resultados.count > 6 && !resultados.warning && filtros.offset === 0) {
+            return {
                 count: resultados.count,
                 warning: "too_many",
-                properties: [] // BLOQUEO: No mandamos data para que no la muestre.
-             };
+                properties: [] // No enviamos propiedades para forzar la pregunta
+            };
         }
 
-        // CASO 3: ÉXITO (1 a 6 resultados, o Rescate)
+        // Mapeo seguro
         const safeProperties = (resultados.results || []).map(p => {
-            const priceVal = p.final_display_price || 0;
-            // Formateo U$S 1.500
-            const formattedPrice = priceVal > 0 
-                ? `U$S ${priceVal.toLocaleString('es-AR')}` 
-                : 'Consultar';
+            let displayPrice = "Consultar";
+            if (p.found_period_price) {
+                displayPrice = `USD ${p.found_period_price} (Total)`;
+            } else if (p.min_rental_price) {
+                displayPrice = `USD ${p.min_rental_price} (Desde)`;
+            } else if (p.price) {
+                 displayPrice = `USD ${p.price}`;
+            } else if (p.final_display_price) {
+                 displayPrice = `USD ${p.final_display_price}`; // GBA
+            }
 
             return {
-                property_id: p.property_id,
-                title: p.title,
-                url: p.url,
-                zona: p.zona,
-                min_rental_price: p.min_rental_price, // Para routing
-                // Summary para la IA
-                summary: `ID: ${p.property_id}. Precio: ${formattedPrice}.`
+                ...p,
+                price: p.price || 0, 
+                min_rental_price: p.min_rental_price || 0,
+                found_period_price: p.found_period_price || 0,
+                title: p.title || 'Propiedad',
+                // Summary para uso INTERNO de la IA (no para mostrar)
+                summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` 
             };
         });
 
         return {
-          count: resultados.count, // Total real
+          count: resultados.count || 0,
           showing: safeProperties.length,
+          nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
-          minAvailablePrice: resultados.minAvailablePrice || null,
+          originalMaxPrice: resultados.originalMaxPrice || null,
           appliedFilters: filtros, 
           properties: safeProperties 
         };
@@ -138,36 +143,34 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres MaCA, asistente de MCV Propiedades.
+      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
       
-      --- 🚦 MANEJO DE RESPUESTAS (LÓGICA ESTRICTA) ---
+      --- 👩‍💼 IDENTIDAD ---
+      * Nombre: MaCA.
+      * Tono: Cálido, profesional, resolutivo.
       
-      1. **SI LA HERRAMIENTA DICE 'too_many' (Más de 6):**
-         - Di: "Encontré [count] opciones. Para mostrarte las mejores, ¿cuál es tu presupuesto tope? ¿O buscás con pileta climatizada?".
-         - **NO muestres nada más.**
+      --- 🚦 REGLAS DE ORO (ESTRICTAS) ---
+      1. **NO REPITAS LISTAS:** Si la herramienta muestra tarjetas, TU NO ESCRIBAS LA LISTA EN TEXTO.
+         * MAL: "Aquí están: 1. Casa X..."
+         * BIEN: "Acá te muestro [showing] opciones de las [count] encontradas."
+      2. **FRASEO:** Pregunta SIEMPRE: **"¿Llevan mascotas?"**.
+      3. **MEMORIA:** Si el usuario refina la búsqueda, MANTÉN los filtros anteriores.
+      
+      --- 🛠️ MANEJO DE SITUACIONES ---
+      * **Caso "too_many" (>6):** "¡Tengo [count] opciones! Para no marearte y mostrarte las mejores: ¿Cuál es tu presupuesto tope? ¿O buscás con pileta?".
+      * **Caso "precio_bajo" (Rescate):** "Por [originalMaxPrice] no hay nada disponible, pero si estiramos el presupuesto, mirá la opción más económica que encontré:".
+      * **Caso 0:** "Para esa fecha exacta está todo completo. ¿Te gustaría ver disponibilidad para la quincena siguiente?".
 
-      2. **SI LA HERRAMIENTA DICE 'price_low' (Rescate):**
-         - Di: "Por ese presupuesto no quedó nada disponible. La opción más económica arranca en **U$S [minAvailablePrice]**. ¿Te gustaría verla?".
-         - La herramienta ya te pasó esa propiedad, muéstrala si el usuario dice sí.
-
-      3. **SI LA HERRAMIENTA DICE 'barrio_ampliado':**
-         - Di: "En ese barrio no encontré, pero mirá estas opciones en la zona:".
-
-      4. **SI MUESTRA PROPIEDADES (Caso Normal):**
-         - Di: "Estas son **[showing]** opciones de las **[count]** encontradas. ¿Qué te parecen? ¿Te gustaría ver el detalle de alguna?".
-         - **PROHIBIDO:** Escribir listas, precios o descripciones en texto.
-
-      --- 🗺️ MAPEO ---
-      * "Costa" -> Costa Esmeralda.
-      * "Senderos" -> Senderos I, II, III, IV.
-      * "Carnaval" -> Febrero 1ra.
+      Usa 'buscar_propiedades' cuando tengas los datos.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
         mostrar_contacto: mostrarContactoTool,
       },
     });
+
     result.pipeDataStreamToResponse(res);
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

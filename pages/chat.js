@@ -54,6 +54,7 @@ export default function ChatPage() {
 
   return (
     <div id="__next" className="flex flex-col h-screen bg-gray-50">
+      
       <ContactModal
         isOpen={isModalOpen}
         onRequestClose={() => setIsModalOpen(false)}
@@ -90,7 +91,7 @@ export default function ChatPage() {
                             <PropertyCard 
                                 key={p.property_id} 
                                 property={p} 
-                                filters={applied} 
+                                filters={applied} // Pasamos los filtros para mostrar precio correcto
                                 onContact={handleContact} 
                                 small 
                             />
