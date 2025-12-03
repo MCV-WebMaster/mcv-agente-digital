@@ -13,7 +13,7 @@ const mostrarContactoTool = tool({
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -38,7 +38,6 @@ const buscarPropiedadesTool = tool({
   execute: async (filtros) => {
     try {
         console.log("🤖 IA Input:", filtros);
-        
         if (filtros.pax) filtros.pax_or_more = true;
         if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
@@ -58,7 +57,6 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // 2. PROTOCOLO DE RESCATE (0 resultados)
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -68,8 +66,7 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = `precio_bajo|${originalMaxPrice}`;
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
-            }
-            else if (filtros.barrios && filtros.barrios.length > 0) {
+            } else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
@@ -80,10 +77,7 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // 3. SOBRECARGA (Fix: No bloquear si hay SelectedPeriod)
-        const hasSpecificFilter = filtros.maxPrice || filtros.pool || filtros.selectedPeriod;
-        
-        if (resultados.count > 10 && !hasSpecificFilter && filtros.offset === 0) {
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -91,25 +85,14 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        const safeProperties = (resultados.results || []).map(p => {
-            let displayPrice = "Consultar";
-            if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total por quincena)`;
-            } else if (p.min_rental_price) {
-                displayPrice = `USD ${p.min_rental_price} (Desde)`;
-            } else if (p.price) {
-                 displayPrice = `USD ${p.price}`;
-            }
-
-            return {
-                ...p,
-                price: p.price || 0, 
-                min_rental_price: p.min_rental_price || 0,
-                found_period_price: p.found_period_price || 0,
-                title: p.title || 'Propiedad',
-                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${displayPrice}.`
-            };
-        });
+        const safeProperties = (resultados.results || []).map(p => ({
+            ...p,
+            price: p.price || 0, 
+            min_rental_price: p.min_rental_price || 0,
+            found_period_price: p.found_period_price || 0,
+            title: p.title || 'Propiedad',
+            summary: `${p.title} (${p.barrio || p.zona}).` 
+        }));
 
         return {
           count: resultados.count || 0,
@@ -141,24 +124,35 @@ export default async function handler(req, res) {
       messages: messages,
       maxSteps: 5, 
       system: `Eres 'Asistente Comercial MCV'.
+
+      --- 🗺️ MAPEO DE BARRIOS Y ZONAS ---
+      * **"Senderos"** -> barrios: ["Senderos I", "Senderos II", "Senderos III", "Senderos IV"]
+      * **"Marítimo"** -> barrios: ["Marítimo I", "Marítimo II", "Marítimo III", "Marítimo IV"]
+      * **"Golf"** -> barrios: ["Golf I", "Golf II"]
+      * **"Residencial"** -> barrios: ["Residencial I", "Residencial II"]
+      * **"El Carmen"** -> barrios: ["Club El Carmen"]
+      * **"Costa"** -> zona: "Costa Esmeralda"
       
-      --- 🗺️ MAPEO ---
-      * "Senderos" -> Senderos I, II, III, IV.
-      * "Marítimo" -> Marítimo I, II, III, IV.
-      * "Golf" -> Golf I, II.
-      * "Residencial" -> Residencial I, II.
-      * "El Carmen" -> Club El Carmen.
-      * "Fincas" -> Fincas de Iraola I y II.
+      --- 📅 MAPEO DE FECHAS (2026) ---
+      * **"Carnaval"** -> "Febrero 1ra Quincena" (o pregunta si prefieren febrero completo).
+      * **"Enero"** -> Pregunta: "¿1ra o 2da quincena?".
+      * **"Febrero"** -> Pregunta: "¿1ra o 2da quincena?".
       
-      --- 🚦 REGLAS ---
-      1. INDAGA: Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
-      2. RESCATE: Si no hay en la fecha exacta, ofrece la siguiente.
+      --- 🚦 REGLAS DE CONVERSACIÓN ---
+      1. **UNA PREGUNTA A LA VEZ:** No ametralles al usuario.
+      2. **PREGUNTA DE MASCOTAS:** Di siempre: **"¿Llevan mascotas?"** o **"¿Viajan con mascotas?"**. NUNCA digas "¿Se permiten mascotas?" (eso confunde).
       
-      --- ✅ RESPUESTAS ---
-      "Estas son [showing] opciones disponibles de [count] encontradas para [Periodo/Zona].
-      ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+      --- 🚫 PROHIBICIÓN ABSOLUTA DE TEXTO ---
+      * Si la herramienta devuelve resultados, **NO ESCRIBAS LA LISTA EN TEXTO**.
+      * El usuario YA VE las tarjetas visuales. Tu texto debe ser SOLO:
+        *"Aquí tienes las [X] mejores opciones. ¿Cuál te gusta más?"* o *"¿Te gustaría ver más?"*.
+      * **Bajo ninguna circunstancia repitas títulos o precios en tu respuesta de texto.**
       
-      Usa 'buscar_propiedades' cuando tengas los datos mínimos.
+      --- 🛠️ MANEJO DE RESULTADOS ---
+      * **0 Resultados:** "Para esa fecha exacta está difícil, pero tengo disponibilidad para [Fecha Alternativa]. ¿Te gustaría verlas?".
+      * **Muchos Resultados:** "Tengo muchas opciones. Para filtrar las mejores: ¿Cuál es tu presupuesto tope?".
+      
+      Usa 'buscar_propiedades' cuando tengas Periodo, Pax y Mascotas.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
