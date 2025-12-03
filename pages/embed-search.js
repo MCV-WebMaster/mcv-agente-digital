@@ -8,12 +8,15 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
+import "react-datepicker/dist/react-datepicker.css"; // Aseguramos estilos si faltaban
 
-registerLocale('es', es);
+// Registrar idioma español
+if (es) {
+  registerLocale('es', es);
+}
 
 Modal.setAppElement('#__next');
 
-// --- Constantes ---
 const PERIOD_OPTIONS_2026 = [
   { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
@@ -57,6 +60,7 @@ export default function EmbedSearchPage() {
     searchText: '',
   });
 
+  // FIX DE ESTABILIDAD: Siempre inicializar como array, nunca null
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,8 +71,7 @@ export default function EmbedSearchPage() {
     adminEmailHtml: '',
     propertyCount: 0,
     filteredProperties: [],
-    currentFilters: {},
-    targetAgentNumber: '' // Guardamos aquí el número correcto
+    currentFilters: {}
   });
 
   const [results, setResults] = useState([]);
@@ -220,62 +223,53 @@ export default function EmbedSearchPage() {
     handleCheckboxChange('pets');
   };
 
-  // --- Contacto & Routing ---
+  // --- Contacto ---
   const getAgentNumber = (op, zona) => {
-    // Si es VENTA y COSTA ESMERALDA -> Agente 2
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
-    // Todo lo demás -> Agente 1 (Default)
     return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
   const generateContactMessages = () => {
-    // 1. Calculamos el agente correcto
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
-    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
     } else if (results.length > 10) {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
-    // 2. Lo guardamos en el payload
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: results.length,
         filteredProperties: results,
         currentFilters: filters,
-        targetAgentNumber: targetAgentNumber // ¡DATO CLAVE!
+        targetAgentNumber: targetAgentNumber 
     });
     setIsModalOpen(true);
   };
 
   const handleContactSingleProperty = (property) => {
-    // 1. Calculamos el agente correcto (usando la zona de la propiedad específica)
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    
-    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
-    
-    // 2. Lo guardamos en el payload
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: 1,
         filteredProperties: [property],
         currentFilters: filters,
-        targetAgentNumber: targetAgentNumber // ¡DATO CLAVE!
+        targetAgentNumber: targetAgentNumber
     });
     setIsModalOpen(true);
   };
@@ -304,6 +298,7 @@ export default function EmbedSearchPage() {
           minMts: '', maxMts: '',
         };
       }
+      
       if (name === 'selectedPeriod' && value !== '') {
         newState.startDate = null;
         newState.endDate = null;
@@ -311,6 +306,7 @@ export default function EmbedSearchPage() {
         setShowOtherDates(false);
         setDateRange([null, null]);
       }
+
       return newState;
     });
   };
@@ -320,9 +316,18 @@ export default function EmbedSearchPage() {
     setFilters(prev => ({ ...prev, barrios: barrioValues }));
   };
 
+  // FIX DE ESTABILIDAD: Handler de Fechas Seguro
   const handleDateChange = (dates) => {
+    // react-datepicker puede enviar null si se limpia
+    if (!dates) {
+        setDateRange([null, null]);
+        setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
+        return;
+    }
+
     const [start, end] = dates;
     setDateRange(dates);
+    
     if (start && end) {
       setFilters(prev => ({
         ...prev,
@@ -333,7 +338,8 @@ export default function EmbedSearchPage() {
       }));
       if (!showOtherDates) setShowOtherDates(true);
     } else {
-      setFilters(prev => ({ ...prev, startDate: null, endDate: null, showOtherDates: false }));
+      // Si falta alguna fecha, solo actualizamos el estado local de dateRange
+      setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
     }
   };
 
@@ -386,7 +392,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO ---
+  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -461,6 +467,8 @@ export default function EmbedSearchPage() {
 
     const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
+    
+    const isCommercialType = ['lote', 'local', 'deposito'].includes(filters.tipo);
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
@@ -512,7 +520,7 @@ export default function EmbedSearchPage() {
 
         <div className="grid grid-cols-4 gap-4 mb-4">
           
-          <div className={filters.tipo !== 'lote' && filters.tipo !== 'local' && filters.tipo !== 'deposito' ? 'col-span-1' : 'hidden'}>
+          <div className={!isCommercialType ? 'col-span-1' : 'hidden'}>
             <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
             <input
               type="number" id="bedrooms" name="bedrooms" min="0"
@@ -532,7 +540,7 @@ export default function EmbedSearchPage() {
             </label>
           </div>
 
-          {filters.operacion !== 'venta' && filters.tipo !== 'local' && filters.tipo !== 'deposito' && (
+          {filters.operacion !== 'venta' && !isCommercialType && (
             <div className="col-span-1">
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
@@ -554,7 +562,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
           
-          <div className={(filters.operacion === 'venta' && (filters.tipo === 'lote' || filters.tipo === 'local' || filters.tipo === 'deposito')) ? 'col-span-2' : 'col-span-1'}>
+          <div className={(filters.operacion === 'venta' && isCommercialType) ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
@@ -563,7 +571,7 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
-          <div className={(filters.operacion === 'venta' && (filters.tipo === 'lote' || filters.tipo === 'local' || filters.tipo === 'deposito')) ? 'col-span-2' : 'col-span-1'}>
+          <div className={(filters.operacion === 'venta' && isCommercialType) ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
             <input 
               type="number" id="maxPrice" name="maxPrice"
@@ -618,7 +626,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
 
-          {filters.tipo !== 'lote' && filters.tipo !== 'local' && filters.tipo !== 'deposito' && (
+          {!isCommercialType && (
             <div className="flex flex-row gap-4 pt-2 pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -756,7 +764,6 @@ export default function EmbedSearchPage() {
         propertyCount={contactPayload.propertyCount}
         filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
-        targetAgentNumber={contactPayload.targetAgentNumber} // Pasamos el Agente al Modal
       />
 
       <PetAlertModal />
