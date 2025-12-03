@@ -119,26 +119,23 @@ export default function ChatPage() {
                         return null; 
                     }
                     
+                    // Si hay propiedades, las mostramos. Si no, no mostramos NADA (dejamos que el texto hable).
+                    if (properties.length === 0) return null;
+
                     return (
                       <div key={toolCallId} className="mt-4 grid gap-4">
-                         {properties.length > 0 ? (
-                             properties.map(prop => {
-                                if (!prop || !prop.property_id) return null;
-                                return (
-                                    <PropertyCard 
-                                        key={prop.property_id} 
-                                        property={prop} 
-                                        filters={result?.appliedFilters || {}} 
-                                        onContact={handleContactSingleProperty}
-                                        small 
-                                    />
-                                );
-                             })
-                         ) : (
-                             <div className="text-sm italic text-gray-500 p-2 bg-gray-50 rounded border border-gray-200">
-                                (Sin resultados exactos para mostrar en tarjetas)
-                             </div>
-                         )}
+                         {properties.map(prop => {
+                            if (!prop || !prop.property_id) return null;
+                            return (
+                                <PropertyCard 
+                                    key={prop.property_id} 
+                                    property={prop} 
+                                    filters={result?.appliedFilters || {}} 
+                                    onContact={handleContactSingleProperty}
+                                    small 
+                                />
+                            );
+                         })}
                       </div>
                     );
                   }

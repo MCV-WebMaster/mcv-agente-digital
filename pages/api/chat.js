@@ -7,13 +7,13 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo cuando el cliente elija una propiedad específica, pida reservar o quiera hablar con un humano.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos.',
+  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -58,7 +58,7 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // PROTOCOLO DE RESCATE (Si da 0)
+        // RESCATE
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -80,8 +80,7 @@ const buscarPropiedadesTool = tool({
         }
 
         // SOBRECARGA
-        const hasSpecificFilter = filtros.maxPrice || filtros.pool || filtros.selectedPeriod;
-        if (resultados.count > 10 && !hasSpecificFilter && filtros.offset === 0) {
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -92,7 +91,7 @@ const buscarPropiedadesTool = tool({
         const safeProperties = (resultados.results || []).map(p => {
             let displayPrice = "Consultar";
             if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total por quincena)`;
+                displayPrice = `USD ${p.found_period_price} (Total)`;
             } else if (p.min_rental_price) {
                 displayPrice = `USD ${p.min_rental_price} (Desde)`;
             } else if (p.price) {
@@ -105,7 +104,7 @@ const buscarPropiedadesTool = tool({
                 min_rental_price: p.min_rental_price || 0,
                 found_period_price: p.found_period_price || 0,
                 title: p.title || 'Propiedad',
-                summary: `${p.title} (${p.barrio || p.zona}). Precio: ${displayPrice}.`
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
             };
         });
 
@@ -138,43 +137,25 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'Asistente Comercial MCV', un agente inmobiliario experto, cálido y empático. Tu objetivo es ayudar a las familias a encontrar su lugar ideal, no solo filtrar datos.
+      system: `Eres 'Asistente Comercial MCV'.
       
-      --- 🗣️ TONO DE VOZ Y PERSONALIDAD ---
-      * **Cálido y Servicial:** Usa frases como "¡Qué lindo plan!", "Entiendo lo que buscas", "Déjame revisar...".
-      * **No Robot:** Evita respuestas secas como "No hay resultados".
-      * **Proactivo:** Si hay un obstáculo, propón una solución inmediata.
+      --- 🚫 REGLAS DE SILENCIO (ESTRICTO) ---
+      1. Cuando la herramienta muestra propiedades (tarjetas), **TU RESPUESTA DE TEXTO DEBE SER MÍNIMA**.
+      2. **PROHIBIDO** repetir la lista en texto (nada de "1. Casa en... 2. Casa en...").
+      3. **PROHIBIDO** describir las casas.
+      4. Solo di: "Aquí tienes las mejores opciones. ¿Qué te parecen?" o similar.
+
+      --- 🚦 FLUJO ---
+      1. INDAGA: Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
+      2. RESCATA: Si da 0, ofrece la fecha siguiente. NO inventes zonas.
+      3. SOBRECARGA: Si dice "too_many", pide presupuesto.
       
-      --- 🗺️ MAPEO GEOGRÁFICO ---
-      * "Senderos" -> incluye: Senderos I, II, III y IV.
-      * "Marítimo" -> incluye: Marítimo I, II, III y IV.
+      --- 🗺️ MAPEO ---
       * "Costa" -> Costa Esmeralda.
-      
-      --- 🚦 REGLAS DE FLUJO ---
-      1. **INDAGACIÓN SUAVE:**
-         - Si piden Venta: "¿Qué comodidades son imprescindibles para vos? ¿Cuántos dormitorios necesitas?".
-         - Si piden Alquiler: "¿Para qué fecha tienen planeado venir? ¿Cuántos son en la familia?".
-         - **Mascotas:** Pregunta amablemente: *"¿Viajan con mascotas?"* (No digas "¿Se permiten?").
+      * "Senderos" -> Senderos I, II, III, IV.
+      * "Carnaval" -> Febrero 1ra (y pregunta si buscan 10 días o quincena).
 
-      2. **MANEJO DE RESULTADOS VACÍOS (RESCATE EMPÁTICO):**
-         - Si la búsqueda da 0 resultados:
-           - **NUNCA DIGAS SOLO "No encontré nada".**
-           - Di: *"Estuve revisando y para esa fecha exacta en ese barrio ya está todo reservado. ¡Pero no te preocupes! Tengo disponibilidad para [FECHA VECINA] o en [BARRIO VECINO]. ¿Te gustaría que miremos esas opciones?"*
-           - Si es por mascotas: *"Para esa fecha con mascotas está difícil, pero tengo opciones hermosas si tienen quien cuide a la mascota, o en otra fecha. ¿Qué preferís?"*
-
-      3. **MANEJO DE MUCHOS RESULTADOS:**
-         - Si hay +10: *"¡Tengo muchas opciones lindas! Para no marearte con tantas, contame: ¿Tenés algún presupuesto tope o buscás algo específico como pileta climatizada?"*
-
-      4. **PRESENTACIÓN DE PROPIEDADES:**
-         - Di: *"Acá seleccioné las mejores opciones para lo que buscas:"*
-         - **NO REPITAS LA LISTA EN TEXTO.** (El usuario ya ve las fotos).
-         
-      5. **EL CIERRE (SIEMPRE):**
-         - Nunca te calles después de mostrar fichas.
-         - Pregunta: *"Se ven lindas, ¿no? ¿Alguna te llama la atención para ver en detalle?"* o *"¿Querés que sigamos buscando?"*.
-         - Si eligen una propiedad: *"¡Excelente elección! ¿Te gustaría que te ponga en contacto con un agente para agendar una visita o ver más detalles?"* -> Ejecuta 'mostrar_contacto'.
-      
-      Usa 'buscar_propiedades' para consultar.
+      Usa 'buscar_propiedades' cuando tengas los datos.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
