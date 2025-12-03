@@ -1,34 +1,34 @@
 import { openai } from '@ai-sdk/openai';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
-import { searchProperties } from '@/lib/propertyService'; // Requerido para el motor
+import { searchProperties } from '@/lib/propertyService';
 
 export const maxDuration = 60;
 const model = openai('gpt-4o');
 
-// --- 1. DEFINICIÓN DE HERRAMIENTAS (Afuera, para evitar errores de compilación) ---
-
+// Herramienta para contacto humano
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente humano, usado para el cierre o cuando no hay opciones.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo al final, o si el usuario lo pide.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
+// Herramienta principal de búsqueda
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. Úsala solo cuando se cumplen los criterios mínimos de búsqueda.',
+  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
-    operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
+    operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional().describe('Siempre True.'),
-    pets: z.boolean().optional(),
+    pax_or_more: z.boolean().optional().describe('True para alquiler.'),
+    pets: z.boolean().optional().describe('OBLIGATORIO para Alquiler.'),
     pool: z.boolean().optional(),
-    bedrooms: z.string().optional().describe('Calculado: Ambientes - 1.'),
+    bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto máximo.'),
-    searchText: z.string().optional(),
+    maxPrice: z.string().optional().describe('OBLIGATORIO antes de mostrar lista larga.'),
+    showOtherDates: z.boolean().optional().describe('True si el usuario pide fechas fuera de temporada (marzo-diciembre).'),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -36,49 +36,58 @@ const buscarPropiedadesTool = tool({
     ]).optional(),
   }),
   execute: async (filtros) => {
-    // Lógica de Venta (Idéntica a la Tarea 18.1)
+    console.log("🤖 IA Buscando...", filtros);
+    
     if (filtros.pax) filtros.pax_or_more = true;
     
     let originalMaxPrice = null;
     if (filtros.maxPrice) {
         originalMaxPrice = parseInt(filtros.maxPrice.replace(/\D/g, ''));
         if (!isNaN(originalMaxPrice)) {
-            filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
+            filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% Tolerancia
         }
     }
     filtros.sortBy = 'price_asc';
 
+    // 1. Búsqueda
     let resultados = await searchProperties(filtros);
-    
-    // PROTOCOLO DE RESCATE (Recuperar si da 0)
+
+    // 2. Rescate (0 resultados)
     if (resultados.count === 0) {
         if (originalMaxPrice) {
             let rescueFilters = {...filtros, maxPrice: null};
             let resRescue = await searchProperties(rescueFilters);
-            
             if (resRescue.count > 0) {
                 resultados = resRescue;
                 resultados.warning = `precio_bajo|${originalMaxPrice}`;
-                resultados.originalMaxPrice = originalMaxPrice; 
+                resultados.originalMaxPrice = originalMaxPrice;
             }
         }
     }
+    
+    // 3. Sobrecarga (+10 resultados)
+    // Si hay muchos, no devolvemos la lista completa, forzamos a la IA a pedir más filtros
+    if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool) {
+        return {
+            count: resultados.count,
+            warning: "too_many",
+            properties: [] 
+        };
+    }
 
-    // Devolvemos el resultado al LLM
     return {
       count: resultados.count,
       warning: resultados.warning || null,
       originalMaxPrice: resultados.originalMaxPrice || null,
       appliedFilters: filtros, 
-      properties: resultados.results.slice(0, 10).map(p => ({
+      properties: resultados.results.slice(0, 6).map(p => ({
         ...p,
-        summary: `${p.title} (${p.barrio || p.zona}). Precio: ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.found_period_price ? 'USD '+p.found_period_price : (p.price ? 'USD '+p.price : 'Consultar'))}.`
+        summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
       }))
     };
   },
 });
 
-// --- 2. EL HANDLER PRINCIPAL ---
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -90,26 +99,34 @@ export default async function handler(req, res) {
     const result = await streamText({
       model: model,
       messages: messages,
-      system: `Eres 'Asistente Comercial MCV', un VENDEDOR PROACTIVO y METÓDICO.
+      system: `Eres 'Asistente Comercial MCV', un vendedor experto.
       
-      --- REGLAS DE CONVERSACIÓN (CLAVE) ---
-      1. **UNA PREGUNTA A LA VEZ:** Es la regla más importante. Pregunta por un dato y espera la respuesta.
-      2. **MAPEO OBLIGATORIO:** Traduce "el carmen" a "Club El Carmen", etc.
+      --- 🚦 TU REGLA DE ORO: EL EMBUDO ---
+      No puedes recomendar nada si no conoces al cliente.
       
-      --- 🎯 FILTRO ESTRATÉGICO (EL EMBUDO) ---
+      **PASO 1: MAPEO MENTAL**
+      * "El Carmen" -> GBA Sur, Barrio "Club El Carmen".
+      * "Costa" -> Costa Esmeralda.
+      * "Fincas" -> GBA Sur, Barrio "Fincas de Iraola".
       
-      **CRITERIOS MÍNIMOS OBLIGATORIOS ANTES DE BUSCAR:**
-      - Operación, Zona, Periodo (si es Temporal), PAX (si es Temporal).
+      **PASO 2: RECOLECCIÓN DE DATOS (UNO POR UNO)**
+      Si el usuario pide "Alquiler en Costa", NO BUSQUES. Pregunta en orden:
+      1. **Periodo:** "¿Qué quincena buscas? (Enero 1ra, Enero 2da, Febrero...)".
+      2. **Pax:** "¿Cuántas personas son?".
+      3. **Mascotas:** "¿Viajan con mascotas? (Esto es clave)".
       
-      **LÍMITE DE RESULTADOS:**
-      - Si la búsqueda devuelve más de 10 propiedades, NO las muestres.
-      - Debes decir: "Tengo muchas opciones. Para encontrar la ideal, ¿buscas con pileta, pileta climatizada, o presupuesto?" (Fuerza un filtro nuevo).
+      *Si el usuario responde solo uno, pregunta el siguiente.*
       
-      **CERO RESULTADOS (RECUPERACIÓN):**
-      - Si da 0, aplica el protocolo de rescate (busca sin presupuesto, cambia barrio) y avisa de forma proactiva.
+      **PASO 3: LA BÚSQUEDA**
+      Solo ejecuta 'buscar_propiedades' cuando tengas Periodo + Pax + Mascotas.
+      
+      **PASO 4: EL CIERRE**
+      * **0 Opciones:** "No tengo disponibilidad exacta, pero..." (Ofrece rescate).
+      * **+10 Opciones:** "Tengo muchas opciones. ¿Cuál es tu presupuesto tope para filtrar las mejores?"
+      * **1-10 Opciones:** Muestra y ofrece contacto.
 
       --- HERRAMIENTAS ---
-      Usa 'buscar_propiedades' solo cuando cumplas los Criterios Mínimos.
+      Usa 'buscar_propiedades' y 'mostrar_contacto'.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
