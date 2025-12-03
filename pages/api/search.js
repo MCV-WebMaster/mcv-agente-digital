@@ -8,7 +8,6 @@ const CATEGORY_IDS = {
   ALQUILER_ANUAL_AMUEBLADO: 193,
 };
 
-// IDs confirmados + Placeholders para nuevos tipos
 const TYPE_IDS = {
   CASA: 162,
   DEPARTAMENTO: 163,
@@ -45,7 +44,7 @@ export default async function handler(req, res) {
       selectedPeriod, 
       sortBy = 'default',
       searchText,
-      showOtherDates // Recibimos el estado del checkbox
+      showOtherDates
     } = req.body;
 
     let query = supabase.from('properties').select('*');
@@ -58,7 +57,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // --- FILTRO DE TIPO (IDs REALES) ---
+    // --- FILTRO DE TIPO ---
     if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
     if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
     if (tipo === 'lote') query = query.contains('type_ids', [TYPE_IDS.LOTE]);
@@ -70,13 +69,12 @@ export default async function handler(req, res) {
     // --- ALQUILER TEMPORAL ---
     if (operacion === 'alquiler_temporal') {
       
-      // LÓGICA A (CORREGIDA): Separación Estricta de Categorías
+      // LÓGICA A: Separación Estricta de Categorías
       if (showOtherDates) {
-        // Caso 1: Usuario marcó "Otras fechas" -> SOLO Categoría 196
+        // Caso 1: "Otras fechas" (Fuera de temporada) -> SOLO Cat 196
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
       } else {
-        // Caso 2: Por defecto (Inicio) o Temporada -> SOLO Categoría 197 (Verano)
-        // Esto asegura que veamos las 89 propiedades, no las 107 sumadas.
+        // Caso 2: Por defecto (Inicio) o Temporada -> SOLO Cat 197 (Verano)
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
       }
 
@@ -86,7 +84,6 @@ export default async function handler(req, res) {
       if (pool === true) query = query.eq('tiene_piscina', true);
       if (pets === true) query = query.eq('acepta_mascota', true);
       
-      // LÓGICA C: Dormitorios
       if (bedrooms) {
         const bedroomsNum = parseInt(bedrooms, 10);
         if (bedrooms_or_more === true) {
@@ -107,7 +104,7 @@ export default async function handler(req, res) {
       const propertyIds = propertiesData.map(p => p.property_id);
       if (propertyIds.length === 0) return res.status(200).json({ status: 'OK', count: 0, results: [] });
 
-      // Buscar Precios y Disponibilidad en tabla 'periods'
+      // Buscar Precios
       const { data: allPeriodsData, error: allPeriodsError } = await supabase
         .from('periods')
         .select('property_id, price')
@@ -128,14 +125,14 @@ export default async function handler(req, res) {
         }
       }
       
-      // Lógica de Disponibilidad Específica
+      // Lógica de Disponibilidad
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
 
       const userSelectedPeriod = selectedPeriod;
       const userSelectedDates = startDate && endDate;
       
-      // Solo chequeamos disponibilidad estricta si NO estamos en "Otras Fechas"
+      // Si NO estamos en "Otras Fechas", aplicamos filtro de disponibilidad estricto
       const shouldCheckAvailability = !showOtherDates;
 
       if (shouldCheckAvailability) {
@@ -185,9 +182,7 @@ export default async function handler(req, res) {
           found_period_name: periodDetailsMap.get(p.property_id)?.name || null
         }))
         .filter(p => { 
-            // Si estamos en Otras Fechas, no filtramos por precio específico (es consultar)
             if (showOtherDates) return true;
-            
             const priceToFilter = userSelectedPeriod ? p.found_period_price : p.min_rental_price;
             
             if (!minPrice && !maxPrice) return true;

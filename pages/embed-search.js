@@ -56,7 +56,6 @@ export default function EmbedSearchPage() {
     searchText: '',
   });
 
-  // FIX: Inicializar siempre como array para evitar fallos en render
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,7 +66,8 @@ export default function EmbedSearchPage() {
     adminEmailHtml: '',
     propertyCount: 0,
     filteredProperties: [],
-    currentFilters: {}
+    currentFilters: {},
+    targetAgentNumber: ''
   });
 
   const [results, setResults] = useState([]);
@@ -211,7 +211,7 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Handler de Mascotas ---
+  // --- Handlers ---
   const handleMascotasChange = () => {
     if (!filters.pets) {
         setShowPetAlert(true);
@@ -219,7 +219,6 @@ export default function EmbedSearchPage() {
     handleCheckboxChange('pets');
   };
 
-  // --- Contacto ---
   const getAgentNumber = (op, zona) => {
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
@@ -234,13 +233,13 @@ export default function EmbedSearchPage() {
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
+      whatsappMessage = `Hola...! Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
     } else if (results.length > 10) {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
     } else {
-      whatsappMessage = `Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
+      whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion?`;
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
@@ -257,7 +256,7 @@ export default function EmbedSearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
+    const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
         whatsappMessage, 
@@ -270,7 +269,6 @@ export default function EmbedSearchPage() {
     setIsModalOpen(true);
   };
   
-  // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -295,6 +293,7 @@ export default function EmbedSearchPage() {
         };
       }
       
+      // Si selecciono un periodo, desactivo "Otras fechas"
       if (name === 'selectedPeriod' && value !== '') {
         newState.startDate = null;
         newState.endDate = null;
@@ -312,10 +311,8 @@ export default function EmbedSearchPage() {
     setFilters(prev => ({ ...prev, barrios: barrioValues }));
   };
 
-  // FIX: Handler de Fechas Blindado contra null
   const handleDateChange = (dates) => {
     if (!dates) {
-        // Si se limpia el datepicker, reseteamos a nulo
         setDateRange([null, null]);
         setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
         return;
@@ -346,21 +343,21 @@ export default function EmbedSearchPage() {
     }));
   };
   
+  // FIX DE ESTABILIDAD Y UX: handleToggleOtherDates separado
   const handleToggleOtherDates = () => {
-    const newState = !showOtherDates;
-    setShowOtherDates(newState);
-    
+    const nextState = !showOtherDates;
+    setShowOtherDates(nextState);
+    setDateRange([null, null]); // Reset visual range
+
     setFilters(prev => {
-        const newFilters = { ...prev, showOtherDates: newState };
-        if (newState) {
+        const newFilters = { ...prev };
+        if (nextState) {
             newFilters.selectedPeriod = '';
             newFilters.startDate = null;
             newFilters.endDate = null;
-            setDateRange([null, null]);
         } else {
              newFilters.startDate = null;
              newFilters.endDate = null;
-             setDateRange([null, null]);
         }
         return newFilters;
     });
@@ -387,7 +384,6 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
