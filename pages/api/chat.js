@@ -7,13 +7,13 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, o cuando el cliente pide fechas fuera de temporada (fines de semana, marzo-diciembre).',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada (marzo-diciembre).',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS (Especialmente la FECHA en alquileres).',
+  description: 'Busca propiedades en la base de datos. ÚSALA CUANDO TENGAS LOS DATOS REQUERIDOS (Venta: Dorms/Zona | Alquiler: Periodo/Pax/Mascotas).',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -25,7 +25,7 @@ const buscarPropiedadesTool = tool({
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto.'),
+    maxPrice: z.string().optional().describe('Presupuesto Tope.'),
     searchText: z.string().optional(),
     limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
     offset: z.number().optional().describe('Desde dónde mostrar.'),
@@ -49,17 +49,19 @@ const buscarPropiedadesTool = tool({
             originalMaxPrice = parseInt(cleanPrice);
             if (!isNaN(originalMaxPrice)) {
                 if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
-                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
+                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% Tolerancia
             } else {
                 delete filtros.maxPrice;
             }
         }
         filtros.sortBy = 'price_asc';
 
+        // 1. EJECUTAR BÚSQUEDA PRINCIPAL
         let resultados = await searchProperties(filtros);
 
-        // PROTOCOLO DE RESCATE
+        // 2. PROTOCOLO DE RESCATE (Si da 0 resultados)
         if (resultados.count === 0) {
+            // Intento A: Si tenía precio, probamos sin precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -68,7 +70,9 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = `precio_bajo|${originalMaxPrice}`;
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
-            } else if (filtros.barrios && filtros.barrios.length > 0) {
+            }
+            // Intento B: Si tenía barrio específico, probamos en toda la zona
+            else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
@@ -79,24 +83,45 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // Sobrecarga
-        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
-            return {
-                count: resultados.count,
-                warning: "too_many",
-                properties: [] 
-            };
+        // 3. PROTOCOLO DE SOBRECARGA (El Vendedor Experto)
+        // Si hay más de 10 resultados en la primera página...
+        if (resultados.count > 10 && filtros.offset === 0) {
+            // ... Y la búsqueda es muy genérica (Sin fecha específica Y sin precio tope)
+            // ENTONCES frenamos y pedimos refinar.
+            const isSpecificSearch = filtros.selectedPeriod || filtros.maxPrice;
+            
+            if (!isSpecificSearch) {
+                return {
+                    count: resultados.count,
+                    warning: "too_many",
+                    properties: [] // No mandamos nada para obligar a la IA a preguntar
+                };
+            }
+            // Si la búsqueda ES específica (ej. "2da Febrero"), mostramos los resultados aunque sean 100.
         }
 
-        const safeProperties = (resultados.results || []).map(p => ({
-            ...p,
-            price: p.price || 0, 
-            min_rental_price: p.min_rental_price || 0,
-            found_period_price: p.found_period_price || 0,
-            title: p.title || 'Propiedad',
-            // Summary para uso interno de la IA, no para mostrar
-            summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
-        }));
+        // 4. PREPARAR DATOS PARA LA IA (Resumen de texto)
+        const safeProperties = (resultados.results || []).map(p => {
+            let displayPrice = "Consultar";
+            if (p.found_period_price) {
+                displayPrice = `USD ${p.found_period_price} (Total)`;
+            } else if (p.min_rental_price) {
+                displayPrice = `USD ${p.min_rental_price} (Desde)`;
+            } else if (p.price) {
+                 displayPrice = `USD ${p.price}`;
+            }
+
+            return {
+                ...p,
+                // Datos crudos para el frontend
+                price: p.price || 0, 
+                min_rental_price: p.min_rental_price || 0,
+                found_period_price: p.found_period_price || 0,
+                title: p.title || 'Propiedad',
+                // Resumen semántico para que la IA entienda qué encontró
+                summary: `${p.title} en ${p.barrio || p.zona}. ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
+            };
+        });
 
         return {
           count: resultados.count || 0,
@@ -127,33 +152,36 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente comercial de MCV Propiedades.
+      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
       
-      --- 📅 MAPEO DE FECHAS (CRÍTICO) ---
-      * **"Carnaval"** -> DEBES interpretarlo como **selectedPeriod: "Febrero 1ra Quincena"** (o "Febrero 2da" según calendario, pero SIEMPRE dentro de la temporada). NO lo mandes a contacto manual.
-      * **"Enero" / "Febrero"** -> Pregunta: "¿1ra o 2da quincena?".
+      --- 👩‍💼 TU IDENTIDAD ---
+      * Nombre: MaCA.
+      * Tono: Cálido, profesional, resolutivo. Nunca robótico.
       
-      --- 🚦 REGLAS DE FLUJO ---
-      1. **ORDEN DE ALQUILER:** - Si el usuario dice "Alquiler en Costa", **NO BUSQUES TODAVÍA**.
-         - Pregunta primero: **"¿Para qué fecha/quincena exacta?"**.
-         - Luego: Pax y Mascotas.
-         - Recién ahí ejecuta la búsqueda.
+      --- 🗺️ CONOCIMIENTO DE ZONA ---
+      * "Costa" = Costa Esmeralda.
+      * Barrios Costa: Senderos, Marítimo, Golf, Residencial, Ecuestre, Deportiva, Bosque.
+      * Barrios GBA Sur: El Carmen, Fincas de Iraola, Abril.
       
-      2. **FRASEO:** - Di siempre: **"¿Llevan mascotas?"**.
+      --- 🚦 FLUJO DE VENTA (EMBUDO) ---
+      1. **Calificación:**
+         - Venta: "¿Qué buscas (Casa/Lote)?", "¿Dormitorios?", "¿Presupuesto?".
+         - Alquiler: "¿Para qué fecha exacta?", "¿Cuántas personas?", **"¿Llevan mascotas?"**.
+      
+      2. **Búsqueda:** Solo busca cuando tengas los datos mínimos.
+      
+      3. **Manejo de Resultados:**
+         - **Caso "too_many":** "¡Tengo [count] opciones! Para filtrar las mejores, ¿cuál es tu presupuesto tope o buscás con pileta?".
+         - **Caso "barrio_ampliado":** "En ese barrio no encontré, pero mirá estas opciones en la misma zona:".
+         - **Caso "precio_bajo":** "Por ese valor no hay nada disponible, pero si estiramos un poco el presupuesto, mirá estas oportunidades:".
+         - **Caso Éxito:** "Acá tenés las mejores opciones. ¿Qué te parecen?".
 
-      3. **MANEJO DE "TOO_MANY" (Muchos resultados):**
-         - Si la herramienta dice "too_many", di: *"¡Tengo [count] opciones! Para filtrar las mejores, ¿cuál es tu presupuesto tope o buscás con pileta?"*.
+      --- 🚫 REGLAS DE SALIDA ---
+      * **NO repitas** la lista de propiedades en texto (el usuario ve las tarjetas).
+      * **NO inventes** disponibilidades.
+      * **SIEMPRE** termina con una pregunta de cierre ("¿Vemos más?", "¿Te contacto?").
       
-      --- 🚫 REGLA DE ORO VISUAL ---
-      * Cuando la herramienta muestre las tarjetas de propiedades:
-      * **ESTRICTAMENTE PROHIBIDO** escribir una lista de texto repitiendo los nombres o precios.
-      * Tu respuesta debe ser **SOLO** una frase de cierre.
-      * Ejemplo CORRECTO: *"Acá te muestro las mejores opciones disponibles. ¿Te gustaría ver el detalle de alguna?"*.
-      * Ejemplo INCORRECTO: *"Aquí hay opciones: 1. Casa en Golf ($1200)..."*. (ESTO NO).
-      
-      --- 🗺️ MAPEO ---
-      * "Costa" -> Costa Esmeralda.
-      * "Senderos" -> Senderos I, II, III, IV.
+      Usa las herramientas con inteligencia.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
