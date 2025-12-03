@@ -27,7 +27,8 @@ const customStyles = {
   },
 };
 
-export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, adminEmailHtml, propertyCount, filteredProperties, currentFilters }) {
+// RECIBE targetAgentNumber
+export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, adminEmailHtml, propertyCount, filteredProperties, currentFilters, targetAgentNumber }) {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -75,12 +76,13 @@ export default function ContactModal({ isOpen, onRequestClose, whatsappMessage, 
       body: JSON.stringify(contactData),
     }).catch(err => console.error("Error envío silencioso:", err));
 
-    // --- ¡CORRECCIÓN FINAL DEL LINK Y NÚMERO! ---
     const finalWhatsappMessage = encodeURIComponent(
-        `Hola, soy ${formData.name}. ${whatsappMessage}`
+        `Hola, soy ${formData.name}. ${whatsappMessage.replace('Hola...!', '')}`
     );
-    // Usamos el nombre de variable que el código está esperando
-    const whatsappLink = `https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER}?text=${finalWhatsappMessage}`;
+    
+    // USA targetAgentNumber O EL DEFAULT
+    const agentNumber = targetAgentNumber || process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
+    const whatsappLink = `https://wa.me/${agentNumber}?text=${finalWhatsappMessage}`;
 
     window.open(whatsappLink, '_blank');
     

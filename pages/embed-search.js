@@ -67,7 +67,8 @@ export default function EmbedSearchPage() {
     adminEmailHtml: '',
     propertyCount: 0,
     filteredProperties: [],
-    currentFilters: {}
+    currentFilters: {},
+    targetAgentNumber: '' // Guardamos aquí el número correcto
   });
 
   const [results, setResults] = useState([]);
@@ -219,16 +220,20 @@ export default function EmbedSearchPage() {
     handleCheckboxChange('pets');
   };
 
-  // --- Contacto ---
+  // --- Contacto & Routing ---
   const getAgentNumber = (op, zona) => {
+    // Si es VENTA y COSTA ESMERALDA -> Agente 2
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
+    // Todo lo demás -> Agente 1 (Default)
     return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
   const generateContactMessages = () => {
+    // 1. Calculamos el agente correcto
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
+    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
@@ -244,28 +249,33 @@ export default function EmbedSearchPage() {
       adminEmailHtml = `<p>El cliente hizo una consulta general (sin propiedades específicas en el filtro).</p>`;
     }
     
+    // 2. Lo guardamos en el payload
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: results.length,
         filteredProperties: results,
         currentFilters: filters,
-        targetAgentNumber: targetAgentNumber 
+        targetAgentNumber: targetAgentNumber // ¡DATO CLAVE!
     });
     setIsModalOpen(true);
   };
 
   const handleContactSingleProperty = (property) => {
+    // 1. Calculamos el agente correcto (usando la zona de la propiedad específica)
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
+    
     const whatsappMessage = `Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
+    
+    // 2. Lo guardamos en el payload
     setContactPayload({ 
         whatsappMessage, 
         adminEmailHtml, 
         propertyCount: 1,
         filteredProperties: [property],
         currentFilters: filters,
-        targetAgentNumber: targetAgentNumber
+        targetAgentNumber: targetAgentNumber // ¡DATO CLAVE!
     });
     setIsModalOpen(true);
   };
@@ -294,7 +304,6 @@ export default function EmbedSearchPage() {
           minMts: '', maxMts: '',
         };
       }
-      
       if (name === 'selectedPeriod' && value !== '') {
         newState.startDate = null;
         newState.endDate = null;
@@ -302,7 +311,6 @@ export default function EmbedSearchPage() {
         setShowOtherDates(false);
         setDateRange([null, null]);
       }
-
       return newState;
     });
   };
@@ -378,7 +386,7 @@ export default function EmbedSearchPage() {
     }
   };
 
-  // --- RENDERIZADO DEL ASISTENTE ---
+  // --- RENDERIZADO ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -453,8 +461,6 @@ export default function EmbedSearchPage() {
 
     const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
-    
-    const isCommercialType = ['lote', 'local', 'deposito'].includes(filters.tipo);
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
@@ -506,7 +512,7 @@ export default function EmbedSearchPage() {
 
         <div className="grid grid-cols-4 gap-4 mb-4">
           
-          <div className={!isCommercialType ? 'col-span-1' : 'hidden'}>
+          <div className={filters.tipo !== 'lote' && filters.tipo !== 'local' && filters.tipo !== 'deposito' ? 'col-span-1' : 'hidden'}>
             <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
             <input
               type="number" id="bedrooms" name="bedrooms" min="0"
@@ -526,7 +532,7 @@ export default function EmbedSearchPage() {
             </label>
           </div>
 
-          {filters.operacion !== 'venta' && !isCommercialType && (
+          {filters.operacion !== 'venta' && filters.tipo !== 'local' && filters.tipo !== 'deposito' && (
             <div className="col-span-1">
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
@@ -548,7 +554,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
           
-          <div className={(filters.operacion === 'venta' && isCommercialType) ? 'col-span-2' : 'col-span-1'}>
+          <div className={(filters.operacion === 'venta' && (filters.tipo === 'lote' || filters.tipo === 'local' || filters.tipo === 'deposito')) ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
@@ -557,7 +563,7 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
-          <div className={(filters.operacion === 'venta' && isCommercialType) ? 'col-span-2' : 'col-span-1'}>
+          <div className={(filters.operacion === 'venta' && (filters.tipo === 'lote' || filters.tipo === 'local' || filters.tipo === 'deposito')) ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
             <input 
               type="number" id="maxPrice" name="maxPrice"
@@ -612,7 +618,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
 
-          {!isCommercialType && (
+          {filters.tipo !== 'lote' && filters.tipo !== 'local' && filters.tipo !== 'deposito' && (
             <div className="flex flex-row gap-4 pt-2 pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -720,17 +726,14 @@ export default function EmbedSearchPage() {
         <div className="fixed inset-0 bg-black/60 z-[2000] flex items-start justify-center pt-20 p-4">
             <div className="bg-white p-6 rounded-lg shadow-2xl max-w-md text-center border-l-4 border-yellow-400 relative animate-fade-in-down">
                 <div className="flex justify-center mb-4">
-                    {/* Icono Amarillo */}
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                 </div>
-                {/* Título Amarillo */}
                 <h3 className="text-xl font-bold text-yellow-600 mb-2">Política de Mascotas</h3>
                 <p className="text-gray-700 mb-6 text-sm leading-relaxed font-medium">
                     {ALERT_MASCOTAS_TEXT}
                 </p>
-                {/* Botón Amarillo */}
                 <button
                     onClick={() => setShowPetAlert(false)}
                     className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors font-bold w-full"
@@ -753,6 +756,7 @@ export default function EmbedSearchPage() {
         propertyCount={contactPayload.propertyCount}
         filteredProperties={contactPayload.filteredProperties} 
         currentFilters={contactPayload.currentFilters}
+        targetAgentNumber={contactPayload.targetAgentNumber} // Pasamos el Agente al Modal
       />
 
       <PetAlertModal />
