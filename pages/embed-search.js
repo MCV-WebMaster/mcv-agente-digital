@@ -60,8 +60,6 @@ export default function EmbedSearchPage() {
   const [dateRange, setDateRange] = useState([null, null]);
   const [showOtherDates, setShowOtherDates] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  // Estado para el Popup Personalizado de Mascotas
   const [showPetAlert, setShowPetAlert] = useState(false);
   
   const [contactPayload, setContactPayload] = useState({
@@ -213,7 +211,7 @@ export default function EmbedSearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC E: Handler de Mascotas con Popup Personalizado ---
+  // --- Handler de Mascotas ---
   const handleMascotasChange = () => {
     if (!filters.pets) {
         setShowPetAlert(true);
@@ -455,6 +453,8 @@ export default function EmbedSearchPage() {
 
     const barrioOptions = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
+    
+    const isCommercialType = ['lote', 'local', 'deposito'].includes(filters.tipo);
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
@@ -480,6 +480,13 @@ export default function EmbedSearchPage() {
                     <option value="casa">Casa</option>
                     <option value="departamento">Departamento</option>
                     {filters.operacion === 'venta' && <option value="lote">Lote</option>}
+                    {filters.operacion === 'venta' && filters.zona === 'Costa Esmeralda' && <option value="local">Local</option>}
+                    {filters.operacion === 'venta' && filters.zona === 'GBA Sur' && (
+                        <>
+                            <option value="local">Local</option>
+                            <option value="deposito">Depósito</option>
+                        </>
+                    )}
                 </select>
             </div>
           </div>
@@ -499,7 +506,7 @@ export default function EmbedSearchPage() {
 
         <div className="grid grid-cols-4 gap-4 mb-4">
           
-          <div className={filters.tipo !== 'lote' ? 'col-span-1' : 'hidden'}>
+          <div className={!isCommercialType ? 'col-span-1' : 'hidden'}>
             <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
             <input
               type="number" id="bedrooms" name="bedrooms" min="0"
@@ -519,7 +526,7 @@ export default function EmbedSearchPage() {
             </label>
           </div>
 
-          {filters.operacion !== 'venta' && (
+          {filters.operacion !== 'venta' && !isCommercialType && (
             <div className="col-span-1">
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
@@ -541,7 +548,7 @@ export default function EmbedSearchPage() {
             </div>
           )}
           
-          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
+          <div className={(filters.operacion === 'venta' && isCommercialType) ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
             <input 
               type="number" id="minPrice" name="minPrice"
@@ -550,7 +557,7 @@ export default function EmbedSearchPage() {
               className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
             />
           </div>
-          <div className={filters.operacion !== 'venta' ? 'col-span-1' : 'col-span-2'}>
+          <div className={(filters.operacion === 'venta' && isCommercialType) ? 'col-span-2' : 'col-span-1'}>
             <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
             <input 
               type="number" id="maxPrice" name="maxPrice"
@@ -569,7 +576,7 @@ export default function EmbedSearchPage() {
                   id="selectedPeriod" name="selectedPeriod"
                   value={filters.selectedPeriod}
                   onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates}
+                  disabled={showOtherDates} 
                   className={`w-full p-2 rounded-md bg-white border border-gray-300 text-sm ${showOtherDates ? 'bg-gray-200 cursor-not-allowed' : ''}`}
                 >
                   <option value="">Todas (Temporada 2026)</option>
@@ -595,25 +602,17 @@ export default function EmbedSearchPage() {
                 <div className="col-span-4">
                   <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas Específico</label>
                   <DatePicker
-                    id="dateRange"
-                    selectsRange={true}
-                    startDate={dateRange[0]}
-                    endDate={dateRange[1]}
-                    onChange={handleDateChange}
-                    locale="es"
-                    dateFormat="dd/MM/yyyy"
-                    placeholderText="Seleccione un rango"
-                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                    isClearable={true}
-                    minDate={new Date()}
-                    excludeDateIntervals={EXCLUDE_DATES}
+                    id="dateRange" selectsRange={true} startDate={dateRange[0]} endDate={dateRange[1]}
+                    onChange={handleDateChange} locale="es" dateFormat="dd/MM/yyyy"
+                    placeholderText="Seleccione un rango" className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                    isClearable={true} minDate={new Date()} excludeDateIntervals={EXCLUDE_DATES}
                   />
                 </div>
               )}
             </div>
           )}
 
-          {filters.tipo !== 'lote' && (
+          {!isCommercialType && (
             <div className="flex flex-row gap-4 pt-2 pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -714,27 +713,29 @@ export default function EmbedSearchPage() {
     return null;
   };
 
-  // --- MODAL DE MASCOTAS PERSONALIZADO ---
   const PetAlertModal = () => {
       if (!showPetAlert) return null;
       
       return (
         <div className="fixed inset-0 bg-black/60 z-[2000] flex items-start justify-center pt-20 p-4">
-            <div className="bg-white p-6 rounded-lg shadow-2xl max-w-md text-center border-l-4 border-red-500 relative animate-fade-in-down">
+            <div className="bg-white p-6 rounded-lg shadow-2xl max-w-md text-center border-l-4 border-yellow-400 relative animate-fade-in-down">
                 <div className="flex justify-center mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    {/* Icono Amarillo */}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                 </div>
-                <h3 className="text-xl font-bold text-red-600 mb-2">Política de Mascotas</h3>
+                {/* Título Amarillo */}
+                <h3 className="text-xl font-bold text-yellow-600 mb-2">Política de Mascotas</h3>
                 <p className="text-gray-700 mb-6 text-sm leading-relaxed font-medium">
                     {ALERT_MASCOTAS_TEXT}
                 </p>
+                {/* Botón Amarillo */}
                 <button
                     onClick={() => setShowPetAlert(false)}
-                    className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-bold w-full"
+                    className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors font-bold w-full"
                 >
-                    Entendido, acepto
+                    🐾 Entiendo 🐾
                 </button>
             </div>
         </div>
@@ -754,19 +755,14 @@ export default function EmbedSearchPage() {
         currentFilters={contactPayload.currentFilters}
       />
 
-      {/* Render del Modal de Mascotas */}
       <PetAlertModal />
       
       <div ref={contentRef} className="max-w-7xl mx-auto">
-        
         <main>
-          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
-          
         </main>
-
       </div>
     </div>
   );

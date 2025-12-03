@@ -2,16 +2,24 @@ import { supabase } from '@/lib/supabaseClient';
 
 const CATEGORY_IDS = {
   VENTA: 198,
-  ALQUILER_TEMPORAL: 196,     // General / Fuera de Temporada (~52)
-  ALQUILER_TEMPORAL_VERANO: 197, // Verano / Alta Temporada (~89)
+  ALQUILER_TEMPORAL: 196,     
+  ALQUILER_TEMPORAL_VERANO: 197, 
   ALQUILER_ANUAL: 194,
   ALQUILER_ANUAL_AMUEBLADO: 193,
 };
+
+// --- IDs OFICIALES DE WORDPRESS ---
 const TYPE_IDS = {
   CASA: 162,
   DEPARTAMENTO: 163,
+  DEPOSITO: 164,
+  DUPLEX: 165,
+  HOTEL: 348,
+  LOCAL: 166,
   LOTE: 167,
+  PH: 269
 };
+
 const STATUS_ID_ACTIVA = 158;
 
 const SEASON_START_DATE = '2025-12-19';
@@ -50,6 +58,15 @@ export default async function handler(req, res) {
       }
     }
 
+    // --- FILTRO DE TIPO (IDs REALES) ---
+    if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
+    if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
+    if (tipo === 'lote') query = query.contains('type_ids', [TYPE_IDS.LOTE]);
+    if (tipo === 'local') query = query.contains('type_ids', [TYPE_IDS.LOCAL]);
+    if (tipo === 'deposito') query = query.contains('type_ids', [TYPE_IDS.DEPOSITO]);
+    if (tipo === 'duplex') query = query.contains('type_ids', [TYPE_IDS.DUPLEX]);
+    if (tipo === 'ph') query = query.contains('type_ids', [TYPE_IDS.PH]);
+
     // --- ALQUILER TEMPORAL ---
     if (operacion === 'alquiler_temporal') {
       
@@ -58,17 +75,15 @@ export default async function handler(req, res) {
 
       // LÓGICA A: Mapeo de Categorías
       if (showOtherDates) {
-        // Opción 1: Vista de "Otras fechas" (Fuera de temporada) -> Buscamos General (196)
         query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL]);
       } else if (isSearchingInHighSeason || !hasDateSelected) {
-        // Opción 2: Vista Inicial o Temporada Alta -> Buscamos Verano (197)
-        query = query.contains('category_ids', [CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO]);
+        // Por defecto o Temporada Alta: Verano (197) y/o General (196)
+        // (Usamos OR para cubrir casos bordes, pero prioriza verano visualmente en frontend)
+        query = query.or(`category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL}}, category_ids.cs.{${CATEGORY_IDS.ALQUILER_TEMPORAL_VERANO}}`);
       }
 
       if (zona) query = query.eq('zona', zona);
       if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
-      if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
-      if (tipo === 'departamento') query = query.contains('type_ids', [TYPE_IDS.DEPARTAMENTO]);
       
       if (pool === true) query = query.eq('tiene_piscina', true);
       if (pets === true) query = query.eq('acepta_mascota', true);
@@ -94,7 +109,7 @@ export default async function handler(req, res) {
       const propertyIds = propertiesData.map(p => p.property_id);
       if (propertyIds.length === 0) return res.status(200).json({ status: 'OK', count: 0, results: [] });
 
-      // Buscar TODOS los períodos (Para tener precios "desde")
+      // Buscar Precios
       const { data: allPeriodsData, error: allPeriodsError } = await supabase
         .from('periods')
         .select('property_id, price')
@@ -115,16 +130,12 @@ export default async function handler(req, res) {
         }
       }
       
-      // Lógica de Disponibilidad Específica
+      // Lógica de Disponibilidad
       let availablePropertyIds = new Set(propertyIds); 
       const periodDetailsMap = new Map();
-      
+
       const userSelectedPeriod = selectedPeriod;
       const userSelectedDates = startDate && endDate;
-      
-      // ¡CORRECCIÓN CRÍTICA!
-      // Solo filtramos por disponibilidad estricta si NO estamos en "Otras fechas".
-      // Si estamos en "Otras fechas", asumimos que es "A consultar" y mostramos todo.
       const shouldCheckAvailability = !showOtherDates;
 
       if (shouldCheckAvailability) {
@@ -174,9 +185,7 @@ export default async function handler(req, res) {
           found_period_name: periodDetailsMap.get(p.property_id)?.name || null
         }))
         .filter(p => { 
-            // Si estamos en Otras Fechas, no filtramos por precio específico (es consultar)
             if (showOtherDates) return true;
-
             const priceToFilter = userSelectedPeriod ? p.found_period_price : p.min_rental_price;
             
             if (!minPrice && !maxPrice) return true;
@@ -219,7 +228,6 @@ export default async function handler(req, res) {
       
       if (zona) query = query.eq('zona', zona);
       if (barrios && barrios.length > 0) query = query.in('barrio', barrios);
-      if (tipo === 'casa') query = query.contains('type_ids', [TYPE_IDS.CASA]);
       
       if (pool === true) query = query.eq('tiene_piscina', true);
       
