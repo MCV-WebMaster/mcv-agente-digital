@@ -7,28 +7,28 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
+  description: 'Busca propiedades.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional().describe('Siempre True.'),
+    pax_or_more: z.boolean().optional().describe('True'),
     pets: z.boolean().optional(),
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto.'),
+    maxPrice: z.string().optional(),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
-    offset: z.number().optional().describe('Desde dónde mostrar.'),
+    limit: z.number().optional(),
+    offset: z.number().optional(),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -38,98 +38,69 @@ const buscarPropiedadesTool = tool({
   execute: async (filtros) => {
     try {
         console.log("🤖 MaCA Input:", filtros);
-        
         if (filtros.pax) filtros.pax_or_more = true;
         if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
         let originalMaxPrice = null;
         if (filtros.maxPrice) {
-            const cleanPrice = filtros.maxPrice.replace(/[\.,kK$USD\s]/g, '');
-            originalMaxPrice = parseInt(cleanPrice);
-            if (!isNaN(originalMaxPrice)) {
-                if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
-                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
-            } else {
-                delete filtros.maxPrice;
-            }
+            const clean = parseInt(filtros.maxPrice.replace(/\D/g, ''));
+            if (!isNaN(clean)) filtros.maxPrice = (clean < 1000 ? clean * 1000 : clean).toString();
         }
         filtros.sortBy = 'price_asc';
 
         let resultados = await searchProperties(filtros);
 
-        // PROTOCOLO DE RESCATE
+        // Rescate
         if (resultados.count === 0) {
             if (originalMaxPrice) {
-                let rescueFilters = {...filtros, maxPrice: null, offset: 0};
-                let resRescue = await searchProperties(rescueFilters);
+                let resRescue = await searchProperties({...filtros, maxPrice: null});
                 if (resRescue.count > 0) {
                     resultados = resRescue;
-                    resultados.warning = `precio_bajo|${originalMaxPrice}`;
-                    resultados.originalMaxPrice = originalMaxPrice;
+                    resultados.warning = "precio_bajo";
                 }
-            } else if (filtros.barrios && filtros.barrios.length > 0) {
-                let rescueFilters = {...filtros, offset: 0};
-                delete rescueFilters.barrios; 
-                let resRescue = await searchProperties(rescueFilters);
-                if (resRescue.count > 0) {
+            } else if (filtros.barrios) {
+                 let resRescue = await searchProperties({...filtros, barrios: undefined});
+                 if (resRescue.count > 0) {
                     resultados = resRescue;
                     resultados.warning = "barrio_ampliado";
-                }
+                 }
             }
         }
 
-        // Sobrecarga
-        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
-            return {
-                count: resultados.count,
-                warning: "too_many",
-                properties: [] 
-            };
+        // Sobrecarga (Si > 10 y es página 1 y no hay filtro fuerte)
+        const hasFilter = filtros.maxPrice || filtros.pool || filtros.selectedPeriod;
+        if (resultados.count > 10 && !hasFilter && filtros.offset === 0) {
+             return { count: resultados.count, warning: "too_many", properties: [] };
         }
 
-        const safeProperties = (resultados.results || []).map(p => {
-            let displayPrice = "Consultar";
-            if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total)`;
-            } else if (p.min_rental_price) {
-                displayPrice = `USD ${p.min_rental_price} (Desde)`;
-            } else if (p.price) {
-                 displayPrice = `USD ${p.price}`;
-            }
-
-            return {
-                ...p,
-                price: p.price || 0, 
-                min_rental_price: p.min_rental_price || 0,
-                found_period_price: p.found_period_price || 0,
-                title: p.title || 'Propiedad',
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
-            };
-        });
+        const safeProperties = (resultados.results || []).map(p => ({
+            ...p,
+            price: p.price || 0, 
+            min_rental_price: p.min_rental_price || 0,
+            found_period_price: p.found_period_price || 0,
+            title: p.title,
+            // Summary mínimo para que la IA no se tiente a describir
+            summary: `ID: ${p.property_id}` 
+        }));
 
         return {
           count: resultados.count || 0,
           showing: safeProperties.length,
           nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
-          originalMaxPrice: resultados.originalMaxPrice || null,
           appliedFilters: filtros, 
           properties: safeProperties 
         };
 
     } catch (error) {
-        console.error("Error en tool buscar_propiedades:", error);
         return { count: 0, properties: [], error: "Error interno." };
     }
   },
 });
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   const { messages } = req.body;
 
   try {
@@ -137,49 +108,39 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
+      system: `Eres MaCA, asistente de MCV Propiedades.
       
-      --- 👩‍💼 IDENTIDAD ---
-      * Nombre: MaCA.
-      * Tono: Cálido, profesional, resolutivo.
+      --- 🛑 REGLAS DE SALIDA ESTRICTAS 🛑 ---
       
-      --- 🚦 REGLAS DE ORO ---
-      1. **NO REPITAS LISTAS:** Si la herramienta muestra tarjetas, TU NO ESCRIBAS LA LISTA EN TEXTO.
-      2. **FRASEO:** Pregunta SIEMPRE: **"¿Llevan mascotas?"**.
-      3. **MEMORIA:** Si el usuario refina la búsqueda, MANTÉN los filtros anteriores.
-      
-      --- ⚡ REGLA DE CIERRE SUPREMA (CRÍTICO) ---
-      * **JAMÁS termines un mensaje con una afirmación plana.**
-      * **SIEMPRE** debes terminar con una pregunta o invitación a la acción, sin importar el contexto (sea búsqueda inicial, paginación "ver más" o detalle de propiedad).
-      * Ejemplos obligatorios al final:
-        - "¿Te gustaría contactar a un agente?"
-        - "¿Querés ver más opciones?"
-        - "¿Te interesa visitar esta propiedad?"
-      
-      --- ✅ FORMATO DE RESPUESTA (RESULTADOS) ---
-      Usa siempre esta estructura:
-      "Estas son **[showing]** opciones disponibles de **[count]** encontradas para [Criterio].
-      ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+      1. **SI LA HERRAMIENTA MUESTRA PROPIEDADES:**
+         - TU RESPUESTA DEBE SER EXACTAMENTE ESTA PLANTILLA (NO AGREGUES NADA MÁS):
+         "Estas son **[showing]** opciones de **[count]** encontradas para [Criterio].
+         ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+         
+         - **PROHIBIDO:** Listar las casas, repetir precios, describir características. ¡YA SE VEN EN LAS TARJETAS!
 
-      --- 🔍 DETALLES DE PROPIEDAD ---
-      Si describes una propiedad en detalle, CIERRA ASÍ:
-      "Si te interesa esta opción, ¿te gustaría que te ponga en contacto con un agente ahora mismo?" -> Ejecuta 'mostrar_contacto'.
+      2. **SI LA HERRAMIENTA DICE "too_many":**
+         - Di: "¡Tengo [count] opciones! Para filtrar las mejores, ¿cuál es tu presupuesto tope o buscás con pileta?".
 
+      3. **SI LA HERRAMIENTA DICE 0 (Cero):**
+         - Di: "Para esa fecha exacta no encontré, pero tengo opciones en la quincena siguiente (o barrios vecinos). ¿Las miramos?".
+
+      --- 🚦 FLUJO ---
+      - **ALQUILER:** 1. Fecha Exacta -> 2. Pax -> 3. "¿Llevan mascotas?".
+      - **VENTA:** 1. "¿Dormitorios?" -> 2. "¿Presupuesto?".
+      
       --- 🗺️ MAPEO ---
-      * "Costa" -> Costa Esmeralda.
-      * "Senderos" -> Senderos I, II, III, IV.
-      * "Carnaval" -> Febrero 1ra.
+      - "Costa" = Costa Esmeralda.
+      - "Senderos" = Senderos I, II, III, IV.
+      - "Carnaval" = Febrero 1ra.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
         mostrar_contacto: mostrarContactoTool,
       },
     });
-
     result.pipeDataStreamToResponse(res);
-
   } catch (error) {
-    console.error('Error en Chat API:', error);
     res.status(500).json({ error: error.message });
   }
 }
