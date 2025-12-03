@@ -6,20 +6,18 @@ import { searchProperties } from '@/lib/propertyService';
 export const maxDuration = 60;
 const model = openai('gpt-4o');
 
-// Herramienta para contacto humano
 const mostrarContactoTool = tool({
   description: 'Muestra el botón para contactar a un agente.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
-// Herramienta principal de búsqueda
 const buscarPropiedadesTool = tool({
   description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
-    barrios: z.array(z.string()).optional().describe('Nombre OFICIAL del barrio.'),
+    barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
     pax_or_more: z.boolean().optional().describe('Siempre True.'),
@@ -50,41 +48,55 @@ const buscarPropiedadesTool = tool({
         }
         filtros.sortBy = 'price_asc';
 
-        // 1. BÚSQUEDA INICIAL
         let resultados = await searchProperties(filtros);
 
-        // 2. PROTOCOLO DE RESCATE (Si da 0)
-        // Intento A: Si tiene precio, quitamos el precio.
-        if (resultados.count === 0 && originalMaxPrice) {
-            let rescueFilters = {...filtros, maxPrice: null};
-            let resRescue = await searchProperties(rescueFilters);
-            if (resRescue.count > 0) {
-                resultados = resRescue;
-                resultados.warning = `precio_bajo|${originalMaxPrice}`;
-            }
-        }
-        
-        // Intento B: Si tiene barrio específico y dio 0, buscamos en toda la zona (Lógica "Cualquiera")
-        if (resultados.count === 0 && filtros.barrios && filtros.barrios.length > 0) {
-            let rescueFilters = {...filtros};
-            delete rescueFilters.barrios; // Quitamos el barrio
-            let resRescue = await searchProperties(rescueFilters);
-            if (resRescue.count > 0) {
-                resultados = resRescue;
-                resultados.warning = "barrio_ampliado"; // Aviso interno
+        // Protocolo de Rescate (Si da 0)
+        if (resultados.count === 0) {
+            if (originalMaxPrice) {
+                // Intento A: Quitar precio
+                let rescueFilters = {...filtros, maxPrice: null};
+                let resRescue = await searchProperties(rescueFilters);
+                if (resRescue.count > 0) {
+                    resultados = resRescue;
+                    resultados.warning = `precio_bajo|${originalMaxPrice}`;
+                    resultados.originalMaxPrice = originalMaxPrice;
+                }
+            } else if (filtros.barrios && filtros.barrios.length > 0) {
+                // Intento B: Quitar barrio (buscar en toda la zona)
+                let rescueFilters = {...filtros};
+                delete rescueFilters.barrios; 
+                let resRescue = await searchProperties(rescueFilters);
+                if (resRescue.count > 0) {
+                    resultados = resRescue;
+                    resultados.warning = "barrio_ampliado";
+                }
             }
         }
 
-        // Mapeo seguro (Evita crash del frontend)
+        // 3. Sobrecarga (+10 resultados)
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool) {
+            return {
+                count: resultados.count,
+                warning: "too_many",
+                properties: [] 
+            };
+        }
+
+        // SANITIZACIÓN DE DATOS (CRÍTICO PARA EVITAR CRASH)
         const safeProperties = (resultados.results || []).slice(0, 6).map(p => ({
             ...p,
+            // Aseguramos que los campos numéricos existan para evitar crashes en toLocaleString
+            price: p.price || 0, 
+            min_rental_price: p.min_rental_price || 0,
+            title: p.title || 'Propiedad sin título',
+            // Resumen para la IA
             summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
         }));
 
         return {
           count: resultados.count || 0,
           warning: resultados.warning || null,
-          originalMaxPrice: originalMaxPrice,
+          originalMaxPrice: resultados.originalMaxPrice || null,
           appliedFilters: filtros, 
           properties: safeProperties 
         };
@@ -109,26 +121,18 @@ export default async function handler(req, res) {
       messages: messages,
       system: `Eres 'Asistente Comercial MCV'.
       
-      --- 🌍 MAPEO GEOGRÁFICO INTELIGENTE ---
-      Si el usuario menciona un barrio genérico, DEBES mapearlo a todos sus sub-barrios:
+      --- MAPEO GEOGRÁFICO ---
       * **"Senderos"** -> barrios: ["Senderos I", "Senderos II", "Senderos III", "Senderos IV"]
       * **"Marítimo"** -> barrios: ["Marítimo I", "Marítimo II", "Marítimo III", "Marítimo IV"]
       * **"Golf"** -> barrios: ["Golf I", "Golf II"]
       * **"Residencial"** -> barrios: ["Residencial I", "Residencial II"]
       * **"El Carmen"** -> barrios: ["Club El Carmen"]
-      * **"Fincas"** -> barrios: ["Fincas de Iraola", "Fincas de Iraola II"]
       
-      --- 🚦 REGLAS DE FLUJO ---
-      1. **UNA COSA A LA VEZ:** Pregunta dato por dato.
-      2. **"CUALQUIERA":** Si el usuario dice "cualquiera" o "otro barrio", busca sin filtro de barrio en la misma zona.
-      
-      --- EMBUDO DE ALQUILER (Orden Estricto) ---
-      1. Periodo Exacto (Si dicen "febrero", pregunta "¿1ra o 2da quincena?").
-      2. Pax (Cantidad).
-      3. Mascotas (Si/No).
-      
-      --- MANEJO DE RESULTADOS ---
-      * Si la herramienta devuelve 'barrio_ampliado', di: "En Senderos no encontré disponibilidad, pero mirá estas opciones en barrios vecinos dentro de Costa Esmeralda:".
+      --- REGLAS ---
+      1. UNA PREGUNTA A LA VEZ.
+      2. Si piden ALQUILER, pregunta: Periodo -> Pax -> Mascotas -> Presupuesto.
+      3. Si dicen "Cualquiera", busca sin filtro de barrio.
+      4. Si hay resultados, muéstralos y pregunta si quieren contactar.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,

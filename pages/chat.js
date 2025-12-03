@@ -26,12 +26,12 @@ export default function ChatPage() {
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Scroll suave al último mensaje
+  // Scroll suave
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Foco al input al terminar
+  // Foco
   useEffect(() => {
     if (!isLoading) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -42,7 +42,6 @@ export default function ChatPage() {
     const whatsappMessage = `Hola...! Vengo del chat y me interesa esta propiedad: ${property.title} (${property.url})`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     
-    // Lógica simple de agente para el chat
     let targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
     if (property.zona === 'Costa Esmeralda' && (!property.min_rental_price)) { 
          targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
@@ -116,24 +115,29 @@ export default function ChatPage() {
                   const { toolName, toolCallId, state, result } = toolInvocation;
 
                   if (state === 'result' && toolName === 'buscar_propiedades') {
-                    // RENDERIZADO BLINDADO: ?. para evitar crashes
-                    const properties = result?.properties || [];
+                    // GUARD: Verificación de seguridad antes de renderizar
+                    const properties = Array.isArray(result?.properties) ? result.properties : [];
                     
                     if (result?.warning === 'too_many') {
-                        return null; // La IA manejará el mensaje de texto
+                        return null; 
                     }
                     
                     return (
                       <div key={toolCallId} className="mt-4 grid gap-4">
                          {properties.length > 0 ? (
-                             properties.map(prop => (
-                                <PropertyCard 
-                                    key={prop.property_id} 
-                                    property={prop} 
-                                    onContact={handleContactSingleProperty}
-                                    small 
-                                />
-                             ))
+                             properties.map(prop => {
+                                // FIX ANTI-CRASH: Si la propiedad viene rota, no la renderizamos
+                                if (!prop || !prop.property_id) return null;
+                                
+                                return (
+                                    <PropertyCard 
+                                        key={prop.property_id} 
+                                        property={prop} 
+                                        onContact={handleContactSingleProperty}
+                                        small 
+                                    />
+                                );
+                             })
                          ) : (
                              <div className="text-sm italic opacity-80 p-2 bg-gray-100 rounded">
                                 No se encontraron resultados exactos.
