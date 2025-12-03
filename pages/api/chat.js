@@ -41,19 +41,27 @@ const buscarPropiedadesTool = tool({
         
         let originalMaxPrice = null;
         if (filtros.maxPrice) {
-            originalMaxPrice = parseInt(filtros.maxPrice.replace(/\D/g, ''));
+            // Limpieza robusta de precio (quita puntos, comas, k, $, USD)
+            const cleanPrice = filtros.maxPrice.replace(/[\.,kK$USD\s]/g, '');
+            originalMaxPrice = parseInt(cleanPrice);
             if (!isNaN(originalMaxPrice)) {
+                // Si el usuario puso '200' (pensando en miles), lo multiplicamos
+                if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
+                
                 filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
+            } else {
+                delete filtros.maxPrice; // Si no es numero, lo ignoramos
             }
         }
         filtros.sortBy = 'price_asc';
 
+        // 1. BÚSQUEDA INICIAL
         let resultados = await searchProperties(filtros);
 
-        // Protocolo de Rescate (Si da 0)
+        // 2. PROTOCOLO DE RESCATE
         if (resultados.count === 0) {
+            // Intento A: Quitar precio
             if (originalMaxPrice) {
-                // Intento A: Quitar precio
                 let rescueFilters = {...filtros, maxPrice: null};
                 let resRescue = await searchProperties(rescueFilters);
                 if (resRescue.count > 0) {
@@ -61,8 +69,9 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = `precio_bajo|${originalMaxPrice}`;
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
-            } else if (filtros.barrios && filtros.barrios.length > 0) {
-                // Intento B: Quitar barrio (buscar en toda la zona)
+            }
+            // Intento B: Quitar barrio (si no funcionó el precio)
+            if (resultados.count === 0 && filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros};
                 delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
@@ -82,14 +91,12 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        // SANITIZACIÓN DE DATOS (CRÍTICO PARA EVITAR CRASH)
+        // Mapeo seguro para frontend
         const safeProperties = (resultados.results || []).slice(0, 6).map(p => ({
             ...p,
-            // Aseguramos que los campos numéricos existan para evitar crashes en toLocaleString
             price: p.price || 0, 
             min_rental_price: p.min_rental_price || 0,
-            title: p.title || 'Propiedad sin título',
-            // Resumen para la IA
+            title: p.title || 'Propiedad',
             summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
         }));
 
@@ -121,18 +128,20 @@ export default async function handler(req, res) {
       messages: messages,
       system: `Eres 'Asistente Comercial MCV'.
       
-      --- MAPEO GEOGRÁFICO ---
-      * **"Senderos"** -> barrios: ["Senderos I", "Senderos II", "Senderos III", "Senderos IV"]
-      * **"Marítimo"** -> barrios: ["Marítimo I", "Marítimo II", "Marítimo III", "Marítimo IV"]
-      * **"Golf"** -> barrios: ["Golf I", "Golf II"]
-      * **"Residencial"** -> barrios: ["Residencial I", "Residencial II"]
-      * **"El Carmen"** -> barrios: ["Club El Carmen"]
+      --- 🌍 MAPEO GEOGRÁFICO ---
+      * "Senderos" -> barrios: ["Senderos I", "Senderos II", "Senderos III", "Senderos IV"]
+      * "Marítimo" -> barrios: ["Marítimo I", "Marítimo II", "Marítimo III", "Marítimo IV"]
+      * "Golf" -> barrios: ["Golf I", "Golf II"]
+      * "Residencial" -> barrios: ["Residencial I", "Residencial II"]
+      * "El Carmen" -> barrios: ["Club El Carmen"]
       
       --- REGLAS ---
-      1. UNA PREGUNTA A LA VEZ.
-      2. Si piden ALQUILER, pregunta: Periodo -> Pax -> Mascotas -> Presupuesto.
-      3. Si dicen "Cualquiera", busca sin filtro de barrio.
-      4. Si hay resultados, muéstralos y pregunta si quieren contactar.
+      1. Si el usuario pide ALQUILER, pregunta en orden: Periodo -> Pax -> Mascotas.
+      2. Si el usuario dice "Cualquiera" (barrio), busca sin filtro de barrio.
+      3. Si el resultado tiene "warning: too_many", pregunta presupuesto.
+      4. Si el resultado tiene "warning: precio_bajo", avisa que son más caras y muéstralas.
+      
+      Usa 'buscar_propiedades' cuando tengas los datos necesarios.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
