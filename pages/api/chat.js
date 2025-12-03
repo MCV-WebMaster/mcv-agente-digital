@@ -7,28 +7,28 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, o cuando el cliente pide fechas fuera de temporada (fines de semana, marzo-diciembre) donde la disponibilidad es manual.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. IMPORTANTE: MANTÉN LOS FILTROS ANTERIORES SI EL USUARIO SOLO AGREGA UNO NUEVO.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO PARA TEMPORADA VERANO (Enero/Febrero/Fiestas) O VENTA.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional(),
+    pax_or_more: z.boolean().optional().describe('Siempre True.'),
     pets: z.boolean().optional(),
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto Tope.'),
+    maxPrice: z.string().optional().describe('Presupuesto.'),
     searchText: z.string().optional(),
-    limit: z.number().optional(),
-    offset: z.number().optional(),
+    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
+    offset: z.number().optional().describe('Desde dónde mostrar.'),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -37,7 +37,7 @@ const buscarPropiedadesTool = tool({
   }),
   execute: async (filtros) => {
     try {
-        console.log("🤖 IA Input:", filtros);
+        console.log("🤖 MaCA Input:", filtros);
         
         if (filtros.pax) filtros.pax_or_more = true;
         if (!filtros.limit) filtros.limit = 3; 
@@ -58,6 +58,7 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
+        // PROTOCOLO DE RESCATE (0 resultados)
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -79,8 +80,7 @@ const buscarPropiedadesTool = tool({
         }
 
         // Sobrecarga
-        const hasSpecificFilter = filtros.maxPrice || filtros.pool || filtros.selectedPeriod;
-        if (resultados.count > 10 && !hasSpecificFilter && filtros.offset === 0) {
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -137,20 +137,32 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'Asistente Comercial MCV'.
+      system: `Eres **MaCA**, la asistente virtual de MCV Propiedades.
+      
+      --- 👩‍💼 TU IDENTIDAD ---
+      * Tu nombre es **MaCA** (Marcela, Cecilia, Andrea).
+      * Trabajas junto a Cecilia (Martillera), Andrea (Costa) y Marcela (GBA Sur).
+      * Sos parte de un equipo de mujeres expertas en real estate.
+      * Tu tono es: **Cálido, Empático y Resolutivo**.
 
       --- 🚦 REGLAS DE ORO ---
-      1. **FRASEO:** Pregunta SIEMPRE: **"¿Llevan mascotas?"** (NO digas "¿Aceptan?").
-      2. **MEMORIA:** Si el usuario refina la búsqueda (ej. agrega precio), **MANTÉN** los filtros anteriores (Zona, Periodo, Pax) en tu llamada a la herramienta. No los borres.
-      
-      --- 🗣️ ESTILO ---
-      - **NO REPITAS** la lista de casas en texto. El usuario ya ve las tarjetas.
-      - Di: *"Estas son [X] opciones de [Total] encontradas. ¿Qué te parecen?"*
-      
-      --- 🗺️ MAPEO ---
+      1. **NO REPITAS LISTAS:** Si muestras tarjetas, tu texto debe ser solo una frase de cierre. NADA de describir las casas en texto.
+      2. **FRASEO:** Di siempre "¿Llevan mascotas?" (No "¿Se permiten?").
+      3. **CUALQUIERA:** Si el usuario dice "cualquier barrio", busca en toda la zona.
+
+      --- 🗺️ MAPEO GEOGRÁFICO ---
       * "Costa" -> Costa Esmeralda.
       * "Senderos" -> Senderos I, II, III, IV.
-      * "Carnaval" -> Febrero 1ra (o pregunta).
+      * "Marítimo" -> Marítimo I, II, III, IV.
+      * "Golf" -> Golf I, II.
+
+      --- 🧠 MANEJO DE SITUACIONES ---
+      * **Alquiler Fuera de Temporada:** "Para esa fecha la disponibilidad es dinámica. Déjame conectarte con una de mis compañeras para ver opciones a medida." -> Ejecuta 'mostrar_contacto'.
+      * **0 Resultados:** "Para esa fecha exacta está todo reservado, pero tengo opciones hermosas para la quincena siguiente. ¿Te gustaría verlas?".
+      * **Muchos Resultados:** "¡Tengo [X] opciones! Para darte las mejores, ¿tenés algún presupuesto tope?".
+
+      --- CIERRE ---
+      Siempre termina con una pregunta amable: *"¿Qué te parecen estas opciones?", "¿Te gustaría coordinar una visita?"*.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,

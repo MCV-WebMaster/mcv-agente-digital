@@ -37,7 +37,7 @@ export default function ChatPage() {
   }, [isLoading]);
 
   const handleContactSingleProperty = (property) => {
-    const whatsappMessage = `Hola...! Vengo del chat y me interesa esta propiedad: ${property.title} (${property.url})`;
+    const whatsappMessage = `Hola MaCA! Vengo del chat y me interesa esta propiedad: ${property.title} (${property.url})`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     
     let targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
@@ -56,8 +56,8 @@ export default function ChatPage() {
   };
   
   const handleGeneralContact = () => {
-      const whatsappMessage = `Hola...! Necesito asesoramiento personalizado.`;
-      const adminEmailHtml = `<p>Contacto general desde el Chat.</p>`;
+      const whatsappMessage = `Hola MaCA! Necesito asesoramiento personalizado.`;
+      const adminEmailHtml = `<p>Contacto general desde el Chat con MaCA.</p>`;
       setContactPayload({ 
           whatsappMessage, 
           adminEmailHtml, 
@@ -82,7 +82,7 @@ export default function ChatPage() {
 
       <header className="bg-white border-b border-gray-200 p-4 shadow-sm flex-none z-10">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
-           <span className="text-mcv-azul font-bold text-lg">Asistente MCV</span>
+           <span className="text-mcv-azul font-bold text-lg">MaCA - MCV Propiedades</span>
         </div>
       </header>
 
@@ -90,10 +90,10 @@ export default function ChatPage() {
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.length === 0 && (
             <div className="bg-white p-6 rounded-lg shadow text-center mt-10">
-              <h2 className="text-2xl font-bold text-mcv-azul mb-2">¡Hola! Soy tu Asistente.</h2>
+              <h2 className="text-2xl font-bold text-mcv-azul mb-2">¡Hola! Soy MaCA.</h2>
               <p className="text-gray-600">
-                Puedo ayudarte a buscar propiedades. <br/>
-                Prueba decir: <em>"Busco alquiler en Costa Esmeralda"</em> o <em>"Quiero comprar en El Carmen"</em>.
+                Soy tu asistente virtual. Trabajo junto a Cecilia, Marcela y Andrea.<br/>
+                ¿En qué puedo ayudarte hoy?
               </p>
             </div>
           )}
@@ -119,7 +119,7 @@ export default function ChatPage() {
                         return null; 
                     }
                     
-                    // Si hay propiedades, las mostramos. Si no, no mostramos NADA (dejamos que el texto hable).
+                    // Si hay propiedades, las mostramos. Si no, dejamos que el texto de MaCA explique.
                     if (properties.length === 0) return null;
 
                     return (
@@ -147,7 +147,7 @@ export default function ChatPage() {
                                 onClick={handleGeneralContact}
                                 className="w-full bg-green-600 text-white py-2 px-4 rounded font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                             >
-                                <span>💬</span> Contactar por WhatsApp
+                                <span>💬</span> Hablar con una Agente
                             </button>
                           </div>
                       );
