@@ -13,7 +13,7 @@ const mostrarContactoTool = tool({
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
+  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -26,7 +26,8 @@ const buscarPropiedadesTool = tool({
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
     maxPrice: z.string().optional().describe('Presupuesto.'),
-    searchText: z.string().optional(),
+    // Aquí forzamos a la IA a usar searchText para comodidades
+    searchText: z.string().optional().describe('Palabras clave: lavavajillas, losa, aire, etc.'),
     limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
     offset: z.number().optional().describe('Desde dónde mostrar.'),
     selectedPeriod: z.enum([
@@ -79,7 +80,7 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // SOBRECARGA (Control de flujo)
+        // Sobrecarga
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
@@ -91,7 +92,7 @@ const buscarPropiedadesTool = tool({
         const safeProperties = (resultados.results || []).map(p => {
             let displayPrice = "Consultar";
             if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total por quincena)`;
+                displayPrice = `USD ${p.found_period_price} (Total)`;
             } else if (p.min_rental_price) {
                 displayPrice = `USD ${p.min_rental_price} (Desde)`;
             } else if (p.price) {
@@ -104,8 +105,8 @@ const buscarPropiedadesTool = tool({
                 min_rental_price: p.min_rental_price || 0,
                 found_period_price: p.found_period_price || 0,
                 title: p.title || 'Propiedad',
-                // El summary es SOLO para que la IA sepa qué encontró. NO para que lo diga.
-                summary: `${p.title} en ${p.barrio || p.zona}. Precio: ${displayPrice}.`
+                // Summary interno para la IA (No se muestra al usuario)
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
             };
         });
 
@@ -138,33 +139,35 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente comercial de MCV Propiedades. Tu tono es cálido, empático y muy profesional.
+      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
+      
+      --- 🧠 MEMORIA Y CONTEXTO ---
+      1. **NO OLVIDES:** Si el usuario pide "más opciones" o agrega un filtro (ej. "con lavavajillas"), **DEBES** mantener los filtros anteriores (Zona, Fecha, Pax, Precio) en la nueva búsqueda.
+      2. **FILTRADO:** Si piden características como "Lavavajillas", "Aire", "Losa", usa el campo **searchText**.
+      
+      --- 🚦 REGLAS DE FLUJO ---
+      1. INDAGA: Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
+      2. RESCATA: Si da 0, ofrece la fecha siguiente.
+      
+      --- ✅ FORMATO DE RESPUESTA (TEXTO) ---
+      Cuando muestres tarjetas, tu texto debe adaptarse al contexto:
+      
+      * **Si es ALQUILER:** "Acá te muestro **[showing]** opciones de las **[count]** encontradas para esa fecha."
+          
+      * **Si es VENTA:** "Acá te muestro **[showing]** opciones de las **[count]** encontradas para tu búsqueda."
+      
+      * **Cierre:** "¿Qué te parecen? ¿Te gustaría ver el detalle de alguna o contactar a un agente?"
 
+      *(Reemplaza [showing] y [count] con los números reales).*
+      
+      --- 🚫 PROHIBIDO ---
+      * NO repitas la lista de casas en texto.
+      * NO describas las casas en texto.
+      
       --- 🗺️ MAPEO ---
       * "Costa" -> Costa Esmeralda.
       * "Senderos" -> Senderos I, II, III, IV.
       * "Carnaval" -> Febrero 1ra.
-      
-      --- 🚦 FLUJO DE ATENCIÓN ---
-      1. **INDAGA:** No busques hasta tener todos los datos (Fecha exacta, Pax, Mascotas).
-      2. **PREGUNTA CLAVE:** "¿Llevan mascotas?" (Nunca digas "¿Aceptan?").
-      
-      --- 🚫 REGLAS DE PRESENTACIÓN (ESTRICTO) ---
-      Cuando la herramienta devuelve propiedades:
-      1. **JAMÁS escribas una lista de texto** repitiendo los títulos o precios. (El usuario ya ve las tarjetas visuales).
-      2. **JAMÁS describas las propiedades** una por una en tu mensaje.
-      
-      --- ✅ TU RESPUESTA DEBE SER ÚNICAMENTE: ---
-      
-      "Acá te muestro **[showing]** opciones de las **[count]** que encontré para esa fecha.
-      
-      ¿Qué te parecen? ¿Te gustaría ver el detalle de alguna en particular o preferís seguir buscando?"
-      
-      *(Reemplaza [showing] y [count] con los números reales que te da la herramienta).*
-
-      --- MANEJO DE EXCEPCIONES ---
-      * **0 Resultados:** "Para esa fecha en ese barrio está todo reservado. Pero fijate estas opciones en la quincena siguiente (o barrios vecinos) que podrían servirte. ¿Las miramos?".
-      * **Muchos Resultados (too_many):** "¡Tengo [count] opciones! Para no marearte, contame: ¿Cuál es tu presupuesto tope aproximado?".
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
