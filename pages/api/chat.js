@@ -7,13 +7,13 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, o cuando el cliente pide fechas fuera de temporada (fines de semana, marzo-diciembre) donde la disponibilidad es manual.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. ÚSALA CUANDO TENGAS LOS DATOS (Periodo/Pax/Mascotas o Venta/Dorms).',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO PARA TEMPORADA VERANO (Enero/Febrero/Fiestas) O VENTA.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -40,8 +40,7 @@ const buscarPropiedadesTool = tool({
         console.log("🤖 IA Input:", filtros);
         
         if (filtros.pax) filtros.pax_or_more = true;
-        // Límite estricto de 3 para no saturar el chat
-        filtros.limit = 3; 
+        if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
         let originalMaxPrice = null;
@@ -59,7 +58,7 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // Protocolo de Rescate (Si da 0)
+        // PROTOCOLO DE RESCATE (0 resultados)
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -69,8 +68,7 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = `precio_bajo|${originalMaxPrice}`;
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
-            }
-            else if (filtros.barrios && filtros.barrios.length > 0) {
+            } else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
@@ -81,29 +79,23 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // --- CAMBIO CLAVE: ELIMINADO EL BLOQUEO DE "TOO_MANY" ---
-        // Siempre devolvemos las primeras 3 propiedades encontradas.
-
-        const safeProperties = (resultados.results || []).map(p => {
-             // Lógica de Precio para el Resumen
-            let displayPrice = "Consultar";
-            if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total)`;
-            } else if (p.min_rental_price) {
-                displayPrice = `USD ${p.min_rental_price} (Desde)`;
-            } else if (p.price) {
-                 displayPrice = `USD ${p.price}`;
-            }
-
+        // Sobrecarga
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
-                ...p,
-                price: p.price || 0, 
-                min_rental_price: p.min_rental_price || 0,
-                found_period_price: p.found_period_price || 0, 
-                title: p.title || 'Propiedad',
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
+                count: resultados.count,
+                warning: "too_many",
+                properties: [] 
             };
-        });
+        }
+
+        const safeProperties = (resultados.results || []).map(p => ({
+            ...p,
+            price: p.price || 0, 
+            min_rental_price: p.min_rental_price || 0,
+            title: p.title || 'Propiedad',
+            // El summary es solo para uso interno de la IA
+            summary: `${p.title} (${p.barrio || p.zona}).` 
+        }));
 
         return {
           count: resultados.count || 0,
@@ -134,22 +126,45 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'Asistente Comercial MCV'.
+      system: `Eres 'Asistente Comercial MCV'. Tu objetivo es calificar al cliente y vender/alquilar.
+      
+      --- 🚦 REGLAS DE ORO (LÓGICA DE NEGOCIO) ---
+      
+      **1. ALQUILER TEMPORAL (CASOS ESPECIALES)**
+      Si el cliente pide:
+      - "Fin de semana largo"
+      - "Marzo", "Abril", "Octubre" (Fuera de temporada de verano)
+      - "Unos días" (sin fecha específica de quincena)
+      
+      **NO BUSQUES EN LA BASE DE DATOS.**
+      RESPUESTA AUTOMÁTICA: "Para fines de semana o fechas fuera de temporada, la disponibilidad es muy dinámica. Tengo excelentes opciones, pero necesito confirmarlas con un agente. ¿Te gustaría que te contactemos para pasarte propuestas a medida?"
+      -> Y EJECUTA 'mostrar_contacto'.
+
+      **2. ALQUILER TEMPORAL (VERANO)**
+      Solo busca si piden: Navidad, Año Nuevo, Enero, Febrero.
+      Pregunta en orden: 
+      A. "¿Qué quincena exacta?"
+      B. "¿Cuántas personas son?"
+      C. **"¿Llevarían mascotas?"** (Usa EXACTAMENTE esta frase).
+      
+      **3. COMPRA**
+      Pregunta: Dormitorios -> Zona -> Presupuesto.
+
+      --- 🚫 PROHIBICIONES DE TEXTO ---
+      - **NUNCA** repitas la lista de propiedades en el texto (ya se ven las tarjetas).
+      - **NUNCA** describas las casas una por una ("La primera es...").
+      
+      --- ✅ PLANTILLA DE RESPUESTA (CUANDO HAY RESULTADOS) ---
+      Usa ESTE formato exacto al final:
+      
+      "Estas son [showing] opciones disponibles de [count] encontradas para [Periodo/Zona].
+      ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+      
+      (Reemplaza [showing] y [count] con los números que te da la herramienta).
       
       --- 🗺️ MAPEO ---
+      * "Costa" -> Costa Esmeralda.
       * "Senderos" -> Senderos I, II, III, IV.
-      * "Marítimo" -> Marítimo I, II, III, IV.
-      * "Golf" -> Golf I, II.
-      * "Residencial" -> Residencial I, II.
-      * "El Carmen" -> Club El Carmen.
-      
-      --- 🚦 FLUJO ---
-      1. INDAGA: Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
-      2. RESCATA: Si no hay en fecha exacta, ofrece la siguiente.
-      3. MUESTRA: Si hay resultados, se mostrarán 3 tarjetas.
-      4. CIERRA: "¿Te gusta alguna de estas?", "¿Querés ver más?", "¿Contactamos?".
-
-      NO repitas los datos de las tarjetas en texto. Sé breve.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
