@@ -26,13 +26,14 @@ export default function ChatPage() {
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
+  // Scroll suave al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Foco al input al terminar
   useEffect(() => {
     if (!isLoading) {
-      // Pequeño delay para asegurar que el DOM esté listo antes del foco
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isLoading]);
@@ -115,11 +116,11 @@ export default function ChatPage() {
                   const { toolName, toolCallId, state, result } = toolInvocation;
 
                   if (state === 'result' && toolName === 'buscar_propiedades') {
-                    // RENDERIZADO SEGURO: Usamos ?. para evitar crashes si result es null
+                    // RENDERIZADO BLINDADO: ?. para evitar crashes
                     const properties = result?.properties || [];
                     
                     if (result?.warning === 'too_many') {
-                        return null; 
+                        return null; // La IA manejará el mensaje de texto
                     }
                     
                     return (
@@ -134,7 +135,9 @@ export default function ChatPage() {
                                 />
                              ))
                          ) : (
-                             <p className="text-sm italic opacity-80">No se encontraron resultados exactos.</p>
+                             <div className="text-sm italic opacity-80 p-2 bg-gray-100 rounded">
+                                No se encontraron resultados exactos.
+                             </div>
                          )}
                       </div>
                     );
