@@ -10,6 +10,9 @@ Modal.setAppElement('#__next');
 export default function ChatPage() {
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: '/api/chat',
+    onError: (error) => {
+      console.error("Error en el chat:", error);
+    }
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,15 +26,14 @@ export default function ChatPage() {
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Scroll suave al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Foco al input al terminar
   useEffect(() => {
     if (!isLoading) {
-      inputRef.current?.focus();
+      // Pequeño delay para asegurar que el DOM esté listo antes del foco
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isLoading]);
 
@@ -39,9 +41,9 @@ export default function ChatPage() {
     const whatsappMessage = `Hola...! Vengo del chat y me interesa esta propiedad: ${property.title} (${property.url})`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     
-    // Determinamos agente (simple logic for chat context)
+    // Lógica simple de agente para el chat
     let targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
-    if (property.zona === 'Costa Esmeralda' && (!property.min_rental_price)) { // Asumimos venta si no hay precio renta
+    if (property.zona === 'Costa Esmeralda' && (!property.min_rental_price)) { 
          targetAgent = process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
     }
 
@@ -54,6 +56,18 @@ export default function ChatPage() {
     });
     setIsModalOpen(true);
   };
+  
+  const handleGeneralContact = () => {
+      const whatsappMessage = `Hola...! Necesito asesoramiento personalizado.`;
+      const adminEmailHtml = `<p>Contacto general desde el Chat.</p>`;
+      setContactPayload({ 
+          whatsappMessage, 
+          adminEmailHtml, 
+          propertyCount: 0, 
+          targetAgentNumber: process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER
+      });
+      setIsModalOpen(true);
+  };
 
   return (
     <div id="__next" className="flex flex-col h-screen bg-gray-50">
@@ -65,6 +79,7 @@ export default function ChatPage() {
         adminEmailHtml={contactPayload.adminEmailHtml}
         propertyCount={contactPayload.propertyCount}
         filteredProperties={contactPayload.filteredProperties}
+        targetAgentNumber={contactPayload.targetAgentNumber}
       />
 
       <header className="bg-white border-b border-gray-200 p-4 shadow-sm flex-none z-10">
@@ -100,20 +115,27 @@ export default function ChatPage() {
                   const { toolName, toolCallId, state, result } = toolInvocation;
 
                   if (state === 'result' && toolName === 'buscar_propiedades') {
-                    if (result.warning === 'too_many') {
-                        return null; // La IA manejará el mensaje de texto
+                    // RENDERIZADO SEGURO: Usamos ?. para evitar crashes si result es null
+                    const properties = result?.properties || [];
+                    
+                    if (result?.warning === 'too_many') {
+                        return null; 
                     }
+                    
                     return (
                       <div key={toolCallId} className="mt-4 grid gap-4">
-                         {result.properties?.map(prop => (
-                            <PropertyCard 
-                                key={prop.property_id} 
-                                property={prop} 
-                                onContact={handleContactSingleProperty}
-                                small // Versión compacta para chat
-                            />
-                         ))}
-                         {result.count === 0 && <p className="text-sm italic">No encontré resultados exactos.</p>}
+                         {properties.length > 0 ? (
+                             properties.map(prop => (
+                                <PropertyCard 
+                                    key={prop.property_id} 
+                                    property={prop} 
+                                    onContact={handleContactSingleProperty}
+                                    small 
+                                />
+                             ))
+                         ) : (
+                             <p className="text-sm italic opacity-80">No se encontraron resultados exactos.</p>
+                         )}
                       </div>
                     );
                   }
@@ -121,14 +143,17 @@ export default function ChatPage() {
                   if (state === 'result' && toolName === 'mostrar_contacto') {
                       return (
                           <div key={toolCallId} className="mt-4">
-                            <button className="w-full bg-green-600 text-white py-2 px-4 rounded font-bold">
+                            <button 
+                                onClick={handleGeneralContact}
+                                className="w-full bg-green-600 text-white py-2 px-4 rounded font-bold hover:bg-green-700 transition-colors"
+                            >
                                 Contactar Agente
                             </button>
                           </div>
                       );
                   }
 
-                  return <div key={toolCallId} className="mt-2 italic text-gray-500"><Spinner /> Procesando...</div>;
+                  return <div key={toolCallId} className="mt-2 italic text-gray-500 text-sm flex items-center gap-2"><Spinner /> Buscando...</div>;
                 })}
               </div>
             </div>
@@ -141,7 +166,7 @@ export default function ChatPage() {
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2">
           <input
             ref={inputRef}
-            className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-mcv-azul"
+            className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-mcv-azul text-black"
             value={input}
             onChange={handleInputChange}
             placeholder="Escribí tu consulta..."
