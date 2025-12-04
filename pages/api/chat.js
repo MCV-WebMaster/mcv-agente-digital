@@ -43,14 +43,13 @@ const buscarPropiedadesTool = tool({
         if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
-        // Sanitización de precios (Ej. "200k" -> 200000)
         let originalMaxPrice = null;
         if (filtros.maxPrice) {
             const cleanPrice = filtros.maxPrice.replace(/[\.,kK$USD\s]/g, '');
             originalMaxPrice = parseInt(cleanPrice);
             if (!isNaN(originalMaxPrice)) {
                 if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
-                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); // +30% tolerancia interna
+                filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
             } else {
                 delete filtros.maxPrice;
             }
@@ -61,7 +60,6 @@ const buscarPropiedadesTool = tool({
 
         // PROTOCOLO DE RESCATE
         if (resultados.count === 0) {
-            // Intento A: Quitar precio
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
                 let resRescue = await searchProperties(rescueFilters);
@@ -70,9 +68,7 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = `precio_bajo|${originalMaxPrice}`;
                     resultados.originalMaxPrice = originalMaxPrice;
                 }
-            } 
-            // Intento B: Quitar barrio (si no fue precio)
-            else if (filtros.barrios && filtros.barrios.length > 0) {
+            } else if (filtros.barrios && filtros.barrios.length > 0) {
                 let rescueFilters = {...filtros, offset: 0};
                 delete rescueFilters.barrios; 
                 let resRescue = await searchProperties(rescueFilters);
@@ -83,17 +79,15 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // PROTOCOLO DE SOBRECARGA (El Vendedor Experto)
-        // Si hay > 6 resultados en la primera página y no es un rescate... bloqueamos.
-        if (resultados.count > 6 && !resultados.warning && filtros.offset === 0) {
+        // SOBRECARGA
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
-                properties: [] // No enviamos propiedades para forzar la pregunta
+                properties: [] 
             };
         }
 
-        // Mapeo seguro
         const safeProperties = (resultados.results || []).map(p => {
             let displayPrice = "Consultar";
             if (p.found_period_price) {
@@ -102,8 +96,6 @@ const buscarPropiedadesTool = tool({
                 displayPrice = `USD ${p.min_rental_price} (Desde)`;
             } else if (p.price) {
                  displayPrice = `USD ${p.price}`;
-            } else if (p.final_display_price) {
-                 displayPrice = `USD ${p.final_display_price}`; // GBA
             }
 
             return {
@@ -112,8 +104,7 @@ const buscarPropiedadesTool = tool({
                 min_rental_price: p.min_rental_price || 0,
                 found_period_price: p.found_period_price || 0,
                 title: p.title || 'Propiedad',
-                // Summary para uso INTERNO de la IA (no para mostrar)
-                summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` 
+                summary: `${p.title} (${p.barrio || p.zona}). ${p.bedrooms ? p.bedrooms + ' dorm. ' : ''}Precio: ${displayPrice}.`
             };
         });
 
@@ -128,7 +119,7 @@ const buscarPropiedadesTool = tool({
         };
 
     } catch (error) {
-        console.error("Error tool:", error);
+        console.error("Error en tool buscar_propiedades:", error);
         return { count: 0, properties: [], error: "Error interno." };
     }
   },
@@ -145,23 +136,28 @@ export default async function handler(req, res) {
       maxSteps: 5, 
       system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
       
-      --- 👩‍💼 IDENTIDAD ---
-      * Nombre: MaCA.
-      * Tono: Cálido, profesional, resolutivo.
+      --- 🚦 REGLAS DE FLUJO ---
+      1. **INDAGA:** Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
+      2. **RESCATA:** Si da 0, ofrece la fecha siguiente.
       
-      --- 🚦 REGLAS DE ORO (ESTRICTAS) ---
-      1. **NO REPITAS LISTAS:** Si la herramienta muestra tarjetas, TU NO ESCRIBAS LA LISTA EN TEXTO.
-         * MAL: "Aquí están: 1. Casa X..."
-         * BIEN: "Acá te muestro [showing] opciones de las [count] encontradas."
-      2. **FRASEO:** Pregunta SIEMPRE: **"¿Llevan mascotas?"**.
-      3. **MEMORIA:** Si el usuario refina la búsqueda, MANTÉN los filtros anteriores.
+      --- ✅ FORMATO DE RESPUESTA (CRÍTICO) ---
+      Cuando la herramienta 'buscar_propiedades' devuelva resultados, tu mensaje de texto debe seguir ESTRICTAMENTE esta estructura:
       
-      --- 🛠️ MANEJO DE SITUACIONES ---
-      * **Caso "too_many" (>6):** "¡Tengo [count] opciones! Para no marearte y mostrarte las mejores: ¿Cuál es tu presupuesto tope? ¿O buscás con pileta?".
-      * **Caso "precio_bajo" (Rescate):** "Por [originalMaxPrice] no hay nada disponible, pero si estiramos el presupuesto, mirá la opción más económica que encontré:".
-      * **Caso 0:** "Para esa fecha exacta está todo completo. ¿Te gustaría ver disponibilidad para la quincena siguiente?".
+      1. **Resumen:** "Estas son **[showing]** opciones de las **[count]** encontradas para [Criterio]."
+      
+      2. **Sugerencia de Valor (Solo si count > 5):** "Son muchas opciones. Si querés afinar la búsqueda, podemos filtrar por **'con lavavajillas'**, **'aire acondicionado'** o **'pileta climatizada'**."
+      
+      3. **Cierre:**
+         "¿Te gusta alguna de estas? ¿Querés ver 3 más o contactar a un agente?"
 
-      Usa 'buscar_propiedades' cuando tengas los datos.
+      --- 🚫 PROHIBIDO ---
+      * NO repitas la lista de propiedades en el texto.
+      * NO describas las casas.
+      
+      --- 🗺️ MAPEO ---
+      * "Costa" -> Costa Esmeralda.
+      * "Senderos" -> Senderos I, II, III, IV.
+      * "Carnaval" -> Febrero 1ra.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
@@ -172,6 +168,7 @@ export default async function handler(req, res) {
     result.pipeDataStreamToResponse(res);
 
   } catch (error) {
+    console.error('Error en Chat API:', error);
     res.status(500).json({ error: error.message });
   }
 }
