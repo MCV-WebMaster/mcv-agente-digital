@@ -9,7 +9,7 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import FloatingButton from '@/components/FloatingButton';
+import FloatingButton from '@/components/FloatingChatButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
 registerLocale('es', es);
