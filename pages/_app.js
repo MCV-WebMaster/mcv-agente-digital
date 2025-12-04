@@ -14,7 +14,7 @@ export default function App({ Component, pageProps }) {
       </Head>
       <Component {...pageProps} />
       {/* 2. Agregar el componente aquí abajo */}
-      <FloatingChatButton />
+     {/* 3. comentamos <FloatingChatButton /> */}
     </>
   );
 }
