@@ -2,18 +2,19 @@ import { openai } from '@ai-sdk/openai';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { searchProperties } from '@/lib/propertyService';
+import { getFaqString } from '@/lib/faqData'; // <--- IMPORTANTE
 
 export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -27,7 +28,7 @@ const buscarPropiedadesTool = tool({
     minPrice: z.string().optional(),
     maxPrice: z.string().optional().describe('Presupuesto.'),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Default 3.'),
+    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
     offset: z.number().optional().describe('Desde dónde mostrar.'),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
@@ -58,7 +59,6 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // PROTOCOLO DE RESCATE
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -79,9 +79,7 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // SOBRECARGA (> 6)
-        const hasFilters = filtros.maxPrice || filtros.pool || filtros.bedrooms;
-        if (resultados.count > 6 && !hasFilters && filtros.offset === 0) {
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -89,16 +87,25 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        // MAPEO "CIEGO" PARA LA IA (Para evitar que repita texto)
-        const safeProperties = (resultados.results || []).map(p => ({
-            ...p,
-            price: p.price || 0, 
-            min_rental_price: p.min_rental_price || 0,
-            found_period_price: p.found_period_price || 0,
-            title: p.title || 'Propiedad',
-            // ¡AQUÍ ESTÁ EL TRUCO!: Le ocultamos los detalles textuales a la IA
-            summary: `Propiedad ID: ${p.property_id}. (Detalles en tarjeta visual).` 
-        }));
+        const safeProperties = (resultados.results || []).map(p => {
+            let displayPrice = "Consultar";
+            if (p.found_period_price) {
+                displayPrice = `USD ${p.found_period_price} (Total)`;
+            } else if (p.min_rental_price) {
+                displayPrice = `USD ${p.min_rental_price} (Desde)`;
+            } else if (p.price) {
+                 displayPrice = `USD ${p.price}`;
+            }
+
+            return {
+                ...p,
+                price: p.price || 0, 
+                min_rental_price: p.min_rental_price || 0,
+                found_period_price: p.found_period_price || 0,
+                title: p.title || 'Propiedad',
+                summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` 
+            };
+        });
 
         return {
           count: resultados.count || 0,
@@ -121,32 +128,39 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   const { messages } = req.body;
 
+  // Cargamos el conocimiento general
+  const faqKnowledge = getFaqString();
+
   try {
     const result = await streamText({
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente de MCV Propiedades.
+      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
       
-      --- 🚦 FLUJO ---
-      1. **Indaga:** Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
-      2. **Maneja Resultados:**
-         - **0 Resultados:** Ofrece alternativas (fecha siguiente o barrio vecino).
-         - **Muchos (>6):** "Tengo [count] opciones. ¿Cuál es tu presupuesto tope?".
-         - **Éxito:** Solo di la frase de cierre.
-
-      --- 🚫 FORMATO DE SALIDA (ESTRICTO) ---
-      Cuando la herramienta devuelve propiedades, tu respuesta debe ser EXACTAMENTE así:
+      --- 📚 BASE DE CONOCIMIENTO (CONSULTAS GENERALES) ---
+      Usa esta información para responder dudas administrativas SIN buscar propiedades:
       
-      "Estas son **[showing]** opciones disponibles de **[count]** encontradas para tu búsqueda.
-      ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+      ${faqKnowledge}
       
-      **NO** agregues descripciones ni listas. Las propiedades ya se ven en pantalla.
+      --- 👩‍💼 IDENTIDAD ---
+      * Nombre: MaCA.
+      * Tono: Cálido, profesional, resolutivo.
+      
+      --- 🚦 REGLAS DE ORO ---
+      1. **PREGUNTAS ADMINISTRATIVAS:** Si preguntan por comisiones, depósitos, limpieza o pagos, responde DIRECTAMENTE usando la Base de Conocimiento. No uses herramientas.
+      
+      2. **BÚSQUEDA DE PROPIEDADES:**
+         - **Alquiler:** Periodo -> Pax -> Mascotas.
+         - **Venta:** Zona -> Dorms -> Precio.
+         
+      3. **FORMATO VISUAL:**
+         - **JAMÁS** escribas listas de propiedades.
+         - Tu respuesta al mostrar fichas es SOLO: "Acá te muestro [showing] opciones de las [count] encontradas. ¿Qué te parecen?".
 
       --- 🗺️ MAPEO ---
       * "Costa" -> Costa Esmeralda.
       * "Senderos" -> Senderos I, II, III, IV.
-      * "Carnaval" -> Febrero 1ra.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
