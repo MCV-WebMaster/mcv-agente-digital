@@ -51,11 +51,18 @@ export default function ChatPage() {
       setIsModalOpen(true);
   };
 
-  // Función para detectar URLs y convertirlas en links clickeables
+  // --- LIMPIADOR DE TEXTO ---
+  // 1. Elimina asteriscos (Markdown)
+  // 2. Convierte URLs en links
   const formatMessage = (text) => {
-    // Expresión regular para detectar URLs
+    if (!text) return '';
+    
+    // Paso 1: Eliminar asteriscos dobles o simples usados para negrita
+    let clean = text.replace(/\*\*/g, '').replace(/\*/g, ''); 
+
+    // Paso 2: Detectar links
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.split(urlRegex).map((part, i) => {
+    return clean.split(urlRegex).map((part, i) => {
         if (part.match(urlRegex)) {
             return (
                 <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">
@@ -91,16 +98,13 @@ export default function ChatPage() {
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[90%] md:max-w-[80%] rounded-lg p-4 shadow-sm ${m.role === 'user' ? 'bg-mcv-azul text-white' : 'bg-white text-gray-800 border'}`}>
-                {/* Usamos formatMessage para renderizar el texto */}
-                <div className="whitespace-pre-wrap">
-                    {formatMessage(m.content)}
-                </div>
+                
+                {/* Texto Formateado (Sin asteriscos, con links) */}
+                <div className="whitespace-pre-wrap">{formatMessage(m.content)}</div>
                 
                 {m.toolInvocations?.map((tool) => {
                   if (tool.state === 'result' && tool.toolName === 'buscar_propiedades') {
                     const props = tool.result?.properties || [];
-                    
-                    // Si hay warning "too_many_results", no mostramos nada (el bot hablará)
                     if (tool.result?.warning === 'too_many_results') return null;
                     if (props.length === 0) return null;
 
@@ -110,7 +114,6 @@ export default function ChatPage() {
                             <PropertyCard 
                                 key={p.property_id} 
                                 property={p} 
-                                // Pasamos los filtros aplicados para que la Card sepa la fecha y calcule precio
                                 filters={tool.result?.appliedFilters || {}} 
                                 onContact={handleContact} 
                                 small 

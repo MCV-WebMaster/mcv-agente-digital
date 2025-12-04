@@ -7,7 +7,7 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo SIEMPRE al final si el usuario duda o quiere más info.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo SIEMPRE si el usuario pide hablar con alguien, pregunta por una persona específica, o si la consulta es compleja.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
@@ -27,7 +27,7 @@ const buscarPropiedadesTool = tool({
     minPrice: z.string().optional(),
     maxPrice: z.string().optional(),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'), // AJUSTE A 3
+    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
     offset: z.number().optional(),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
@@ -40,7 +40,7 @@ const buscarPropiedadesTool = tool({
         console.log("🤖 MaCA Input:", filtros);
         
         if (filtros.pax) filtros.pax_or_more = true;
-        if (!filtros.limit) filtros.limit = 3; // FORZAMOS EL LÍMITE A 3
+        if (!filtros.limit) filtros.limit = 3; 
         if (!filtros.offset) filtros.offset = 0;
 
         let originalMaxPrice = null;
@@ -56,7 +56,6 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // Warning si hay muchas (>10) y no hay filtro de precio
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.minPrice && filtros.offset === 0) {
             return {
                 count: resultados.count,
@@ -65,7 +64,6 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        // Lógica de rescate
         if (resultados.count === 0 && originalMaxPrice) {
             let rescueFilters = {...filtros, maxPrice: null, offset: 0};
             let resRescue = await searchProperties(rescueFilters);
@@ -95,7 +93,6 @@ const buscarPropiedadesTool = tool({
         };
 
     } catch (error) {
-        console.error(error);
         return { count: 0, properties: [], error: "Error interno." };
     }
   },
@@ -105,19 +102,15 @@ function mapProperties(props) {
     return (props || []).map(p => {
         let displayPrice = "Consultar";
         let numericPrice = p.price;
-
         if (p.found_period_price) {
             displayPrice = `USD ${p.found_period_price} (Total)`;
             numericPrice = p.found_period_price;
-        }
-        else if (p.min_rental_price) {
+        } else if (p.min_rental_price) {
             displayPrice = `USD ${p.min_rental_price} (Desde)`;
             numericPrice = p.min_rental_price;
-        }
-        else if (p.price) {
+        } else if (p.price) {
             displayPrice = `USD ${p.price}`;
         }
-
         return { 
             ...p, 
             price: numericPrice || 0, 
@@ -138,33 +131,34 @@ export default async function handler(req, res) {
       maxSteps: 5, 
       system: `Eres 'MaCA', la asistente experta de MCV Propiedades.
       
-      --- 🎯 PROTOCOLO DE RECOLECCIÓN (ESTRICTO) ---
-      1. **FECHA:** (Ej: "Enero 2da Quincena"). Si dice solo "Enero", PREGUNTA quincena.
-      2. **PASAJEROS:** Cantidad.
-      3. **MASCOTAS:** Si no aclaró, PREGUNTA: "¿Vienen con mascotas?".
+      --- 👥 EQUIPO MCV (INFORMACIÓN DE AGENTES) ---
+      Si preguntan por alguien específico, da sus datos y MUESTRA EL BOTÓN DE CONTACTO.
+      * Maria Cecilia Vidal: Martillera Pública Col. Nº1172. (Reservas/Ventas).
+      * Andrea Diaz: Equipo Costa Esmeralda (Recepción y Ventas).
+      * Marcela Cacace: Equipo GBA Sur.
+      * Roxana Caputo: Equipo GBA Sur.
 
-      --- 🚫 FORMATO VISUAL (ANTIRROBOT) ---
-      1. **CERO ASTERISCOS/MARKDOWN.**
-      2. **CERO LISTAS DE TEXTO:** Si muestras fichas, NO escribas la lista.
-      3. **REGLA DE CIERRE OBLIGATORIA:**
-         Siempre di: "Acá te muestro [showing] de las [count] opciones encontradas."
-         Y remata con: "¿Querés ver más o contactar a un agente?" (Usa la tool mostrar_contacto si pide agente).
+      --- 🧠 BASE DE CONOCIMIENTO (REGLAS OBLIGATORIAS) ---
+      1. HORARIOS: Ingreso (Check-in): 16:00 hs | Salida (Check-out): 10:00 hs. (JAMÁS digas 15hs).
+      2. HONORARIOS: Alquiler Temporal: Inquilino NO paga. Venta: 3-4%.
+      3. LIMPIEZA: Obligatoria a cargo inquilino.
+      4. ROPA BLANCA: NO incluida. Hay alquiler externo para CONTINGENCIAS.
+      5. MASCOTAS: Se aceptan (Máx 3, NO cachorros).
+      6. DEPÓSITO: E-Cheq (Recomendado), Efectivo (ANTES de entrar) o Transferencia (gastos a cargo inquilino).
 
-      --- 🚨 MANEJO DE RESULTADOS ---
+      --- 🚫 REGLAS DE FORMATO (ANTIRROBOT) ---
+      1. **CERO ASTERISCOS:** Escribe texto plano. No uses **negritas**.
+      2. **CERO LISTAS DE PROPIEDADES:** Si usas la herramienta visual, NO repitas la lista en texto.
+      3. **CIERRE:** Siempre ofrece ayuda extra o contactar agente.
+
+      --- 🚨 MANEJO DE RESULTADOS DE BÚSQUEDA ---
       * Si warning "price_ignored":
         DILE: "No encontré nada por debajo de tu presupuesto. Lo más económico arranca en USD [minFoundPrice]. Te muestro [showing] de [count] opciones:"
-        CIERRE: "¿Querés que busquemos en otra fecha más económica?"
+        CIERRE: "¿Querés buscar en otra fecha más económica?"
       
       * Si warning "too_many_results":
         DILE: "Encontré [count] opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?"
 
-      --- 🧠 BASE DE CONOCIMIENTO ---
-      1. HONORARIOS: Alquiler Temporal: Inquilino NO paga. Venta: 3-4%.
-      2. LIMPIEZA: Obligatoria a cargo inquilino.
-      3. ROPA BLANCA: NO incluida. Hay alquiler externo para CONTINGENCIAS.
-      4. MASCOTAS: Se aceptan (Máx 3, NO cachorros).
-      5. DEPÓSITO: E-Cheq (Recomendado), Efectivo (ANTES de entrar) o Transferencia (gastos a cargo inquilino).
-      
       --- 🔗 FUENTE ---
       SOLO si preguntan reglas/gastos:
       👉 Fuente: https://mcv-agente-digital.vercel.app/faq
