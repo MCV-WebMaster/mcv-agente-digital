@@ -51,16 +51,13 @@ export default function ChatPage() {
       setIsModalOpen(true);
   };
 
-  // --- LIMPIADOR DE TEXTO ---
-  // 1. Elimina asteriscos (Markdown)
-  // 2. Convierte URLs en links
+  // --- LIMPIEZA DE FORMATO (DOBLE SEGURIDAD) ---
   const formatMessage = (text) => {
     if (!text) return '';
+    // 1. Eliminamos TODOS los asteriscos
+    let clean = text.replace(/\*\*/g, '').replace(/\*/g, '');
     
-    // Paso 1: Eliminar asteriscos dobles o simples usados para negrita
-    let clean = text.replace(/\*\*/g, '').replace(/\*/g, ''); 
-
-    // Paso 2: Detectar links
+    // 2. Links clicables
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     return clean.split(urlRegex).map((part, i) => {
         if (part.match(urlRegex)) {
@@ -99,7 +96,7 @@ export default function ChatPage() {
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[90%] md:max-w-[80%] rounded-lg p-4 shadow-sm ${m.role === 'user' ? 'bg-mcv-azul text-white' : 'bg-white text-gray-800 border'}`}>
                 
-                {/* Texto Formateado (Sin asteriscos, con links) */}
+                {/* Texto Formateado */}
                 <div className="whitespace-pre-wrap">{formatMessage(m.content)}</div>
                 
                 {m.toolInvocations?.map((tool) => {
