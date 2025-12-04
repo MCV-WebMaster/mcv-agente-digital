@@ -7,13 +7,13 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, si el usuario pide hablar con un humano, o si pide fechas fuera de temporada (Semana Santa, Marzo, etc).',
+  description: 'Muestra el botón para contactar a un agente.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO SI LA FECHA ES ENERO, FEBRERO, NAVIDAD O AÑO NUEVO.',
+  description: 'Busca propiedades. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -27,9 +27,8 @@ const buscarPropiedadesTool = tool({
     minPrice: z.string().optional(),
     maxPrice: z.string().optional().describe('Presupuesto.'),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
+    limit: z.number().optional().describe('Default 3.'),
     offset: z.number().optional().describe('Desde dónde mostrar.'),
-    // Validamos estrictamente los periodos que existen en DB para evitar errores
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -80,9 +79,9 @@ const buscarPropiedadesTool = tool({
             }
         }
 
-        // Sobrecarga
-        const hasSpecificFilter = filtros.maxPrice || filtros.pool || filtros.selectedPeriod;
-        if (resultados.count > 10 && !hasSpecificFilter && filtros.offset === 0) {
+        // SOBRECARGA (> 6)
+        const hasFilters = filtros.maxPrice || filtros.pool || filtros.bedrooms;
+        if (resultados.count > 6 && !hasFilters && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many",
@@ -90,25 +89,16 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        const safeProperties = (resultados.results || []).map(p => {
-            let displayPrice = "Consultar";
-            if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total)`;
-            } else if (p.min_rental_price) {
-                displayPrice = `USD ${p.min_rental_price} (Desde)`;
-            } else if (p.price) {
-                 displayPrice = `USD ${p.price}`;
-            }
-
-            return {
-                ...p,
-                price: p.price || 0, 
-                min_rental_price: p.min_rental_price || 0,
-                found_period_price: p.found_period_price || 0,
-                title: p.title || 'Propiedad',
-                summary: `${p.title} (${p.barrio || p.zona}). ${p.min_rental_price ? 'USD '+p.min_rental_price : (p.price ? 'USD '+p.price : 'Consultar')}.`
-            };
-        });
+        // MAPEO "CIEGO" PARA LA IA (Para evitar que repita texto)
+        const safeProperties = (resultados.results || []).map(p => ({
+            ...p,
+            price: p.price || 0, 
+            min_rental_price: p.min_rental_price || 0,
+            found_period_price: p.found_period_price || 0,
+            title: p.title || 'Propiedad',
+            // ¡AQUÍ ESTÁ EL TRUCO!: Le ocultamos los detalles textuales a la IA
+            summary: `Propiedad ID: ${p.property_id}. (Detalles en tarjeta visual).` 
+        }));
 
         return {
           count: resultados.count || 0,
@@ -121,17 +111,14 @@ const buscarPropiedadesTool = tool({
         };
 
     } catch (error) {
-        console.error("Error en tool buscar_propiedades:", error);
+        console.error("Error tool:", error);
         return { count: 0, properties: [], error: "Error interno." };
     }
   },
 });
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   const { messages } = req.body;
 
   try {
@@ -139,34 +126,27 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
+      system: `Eres 'MaCA', la asistente de MCV Propiedades.
       
-      --- 🚨 REGLA DE SEGURIDAD (FAIL-SAFE) ---
-      Si el usuario pide una fecha especial (Semana Santa, Fines de Semana, Marzo) o algo que NO está en tu lista de opciones de búsqueda:
-      **NO INTENTES BUSCAR.**
-      **RESPUESTA:** "Para esa fecha la disponibilidad es muy dinámica. Te conecto con una agente para ver opciones a medida."
-      **ACCIÓN:** Ejecuta inmediatamente \`mostrar_contacto\`.
-      
-      --- 📅 FECHAS VÁLIDAS PARA BUSCAR ---
-      Solo usa la herramienta 'buscar_propiedades' si piden:
-      * Navidad
-      * Año Nuevo
-      * Enero (1ra o 2da)
-      * Febrero (1ra o 2da) - (Nota: Carnaval = Febrero 1ra)
-      
-      --- 🚦 FLUJO DE ATENCIÓN ---
-      1. **INDAGA:** Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
-      2. **RESPONDE:** - Si hay resultados: "Acá te muestro **[showing]** opciones de las **[count]** encontradas. ¿Qué te parecen?".
-         - Si hay 0: Ofrece alternativa.
-      3. **CIERRA:** Siempre invita a contactar.
+      --- 🚦 FLUJO ---
+      1. **Indaga:** Venta (Dorms/$$), Alquiler (Periodo/Pax/Mascotas).
+      2. **Maneja Resultados:**
+         - **0 Resultados:** Ofrece alternativas (fecha siguiente o barrio vecino).
+         - **Muchos (>6):** "Tengo [count] opciones. ¿Cuál es tu presupuesto tope?".
+         - **Éxito:** Solo di la frase de cierre.
 
-      --- 🚫 PROHIBIDO ---
-      * **JAMÁS** te quedes en silencio. Si algo falla, ofrece contacto.
-      * **JAMÁS** escribas la lista de propiedades en texto.
+      --- 🚫 FORMATO DE SALIDA (ESTRICTO) ---
+      Cuando la herramienta devuelve propiedades, tu respuesta debe ser EXACTAMENTE así:
+      
+      "Estas son **[showing]** opciones disponibles de **[count]** encontradas para tu búsqueda.
+      ¿Te gusta alguna de estas opciones? ¿Te gustaría ver más o contactar a un agente?"
+      
+      **NO** agregues descripciones ni listas. Las propiedades ya se ven en pantalla.
 
       --- 🗺️ MAPEO ---
       * "Costa" -> Costa Esmeralda.
       * "Senderos" -> Senderos I, II, III, IV.
+      * "Carnaval" -> Febrero 1ra.
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,
@@ -177,7 +157,6 @@ export default async function handler(req, res) {
     result.pipeDataStreamToResponse(res);
 
   } catch (error) {
-    console.error('Error en Chat API:', error);
     res.status(500).json({ error: error.message });
   }
 }

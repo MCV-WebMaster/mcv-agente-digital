@@ -58,17 +58,20 @@ export default function ChatPage() {
         onRequestClose={() => setIsModalOpen(false)}
         {...contactPayload}
       />
+
       <header className="bg-white border-b p-4 shadow-sm z-10 flex justify-between">
         <span className="text-mcv-azul font-bold text-lg">MaCA - MCV Propiedades</span>
       </header>
+
       <div className="flex-grow overflow-y-auto p-4 pb-24">
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.length === 0 && (
             <div className="bg-white p-6 rounded text-center mt-10">
               <h2 className="text-2xl font-bold text-mcv-azul">¡Hola! Soy MaCA.</h2>
-              <p className="text-gray-600">¿Buscas comprar o alquilar?</p>
+              <p className="text-gray-600">Soy parte del equipo de Cecilia, Marcela y Andrea.<br/>¿Buscas comprar o alquilar?</p>
             </div>
           )}
+
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[90%] md:max-w-[80%] rounded-lg p-4 shadow-sm ${m.role === 'user' ? 'bg-mcv-azul text-white' : 'bg-white text-gray-800 border'}`}>
@@ -76,16 +79,17 @@ export default function ChatPage() {
                 {m.toolInvocations?.map((tool) => {
                   if (tool.state === 'result' && tool.toolName === 'buscar_propiedades') {
                     const props = tool.result?.properties || [];
-                    // SI hay propiedades, las mostramos (aunque sea Rescate)
+                    // Si hay warning y no props, no mostramos nada (la IA hablará)
+                    if (tool.result?.warning === 'too_many') return null;
                     if (props.length === 0) return null;
-                    
+
                     return (
                       <div key={tool.toolCallId} className="mt-4 grid gap-4">
                          {props.map(p => (
                             <PropertyCard 
                                 key={p.property_id} 
                                 property={p} 
-                                filters={tool.result?.appliedFilters || {}} // Pasamos filtros para precio correcto
+                                filters={tool.result?.appliedFilters || {}} 
                                 onContact={handleContact} 
                                 small 
                             />
@@ -96,7 +100,9 @@ export default function ChatPage() {
                   if (tool.state === 'result' && tool.toolName === 'mostrar_contacto') {
                       return (
                           <div key={tool.toolCallId} className="mt-4">
-                            <button onClick={handleGeneralContact} className="w-full bg-green-600 text-white py-2 rounded font-bold">💬 Contactar Agente</button>
+                            <button onClick={handleGeneralContact} className="w-full bg-green-600 text-white py-2 rounded font-bold">
+                                💬 Contactar Agente
+                            </button>
                           </div>
                       );
                   }
@@ -108,6 +114,7 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
       </div>
+
       <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2">
           <input ref={inputRef} className="flex-grow p-3 border rounded-lg" value={input} onChange={handleInputChange} placeholder="Escribí tu consulta..." disabled={isLoading} />
