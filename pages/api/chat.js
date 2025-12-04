@@ -7,28 +7,28 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada.',
+  description: 'Muestra el botón para contactar a un agente.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
+  description: 'Busca propiedades en la base de datos.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
     tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
     pax: z.string().optional(),
-    pax_or_more: z.boolean().optional().describe('Siempre True.'),
+    pax_or_more: z.boolean().optional(),
     pets: z.boolean().optional(),
     pool: z.boolean().optional(),
     bedrooms: z.string().optional(),
     minPrice: z.string().optional(),
-    maxPrice: z.string().optional().describe('Presupuesto.'),
+    maxPrice: z.string().optional(),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
-    offset: z.number().optional().describe('Desde dónde mostrar.'),
+    limit: z.number().optional().describe('Cantidad a mostrar (Default 6).'),
+    offset: z.number().optional(),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -40,7 +40,7 @@ const buscarPropiedadesTool = tool({
         console.log("🤖 MaCA Input:", filtros);
         
         if (filtros.pax) filtros.pax_or_more = true;
-        if (!filtros.limit) filtros.limit = 3; 
+        if (!filtros.limit) filtros.limit = 6; 
         if (!filtros.offset) filtros.offset = 0;
 
         let originalMaxPrice = null;
@@ -50,79 +50,78 @@ const buscarPropiedadesTool = tool({
             if (!isNaN(originalMaxPrice)) {
                 if (originalMaxPrice < 1000) originalMaxPrice *= 1000; 
                 filtros.maxPrice = (originalMaxPrice * 1.30).toString(); 
-            } else {
-                delete filtros.maxPrice;
-            }
+            } else { delete filtros.maxPrice; }
         }
         filtros.sortBy = 'price_asc';
 
         let resultados = await searchProperties(filtros);
 
-        // --- LÓGICA DE FRENO SI HAY MUCHOS RESULTADOS ---
-        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
+        // Warning si hay muchas
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.minPrice && filtros.offset === 0) {
             return {
                 count: resultados.count,
-                warning: "too_many_results", // Señal para la IA
+                warning: "too_many_results",
                 properties: [] 
             };
         }
 
-        if (resultados.count === 0) {
-            if (originalMaxPrice) {
-                let rescueFilters = {...filtros, maxPrice: null, offset: 0};
-                let resRescue = await searchProperties(rescueFilters);
-                if (resRescue.count > 0) {
-                    resultados = resRescue;
-                    resultados.warning = `precio_bajo|${originalMaxPrice}`;
-                    resultados.originalMaxPrice = originalMaxPrice;
-                }
-            } else if (filtros.barrios && filtros.barrios.length > 0) {
-                let rescueFilters = {...filtros, offset: 0};
-                delete rescueFilters.barrios; 
-                let resRescue = await searchProperties(rescueFilters);
-                if (resRescue.count > 0) {
-                    resultados = resRescue;
-                    resultados.warning = "barrio_ampliado";
-                }
+        // Lógica de rescate (si no hay resultados por precio)
+        if (resultados.count === 0 && originalMaxPrice) {
+            let rescueFilters = {...filtros, maxPrice: null, offset: 0};
+            let resRescue = await searchProperties(rescueFilters);
+            if (resRescue.count > 0) {
+                // Devolvemos resultados PERO con aviso de que ignoramos el precio
+                // para que el bot sepa qué decir.
+                const safeRescue = mapProperties(resRescue.results);
+                return {
+                    count: resRescue.count,
+                    showing: safeRescue.length,
+                    warning: "price_ignored", // <--- SEÑAL CLAVE
+                    originalMaxPrice: originalMaxPrice,
+                    properties: safeRescue
+                };
             }
+        } else if (resultados.count === 0 && filtros.barrios && filtros.barrios.length > 0) {
+             let rescueFilters = {...filtros, offset: 0};
+             delete rescueFilters.barrios;
+             let resRescue = await searchProperties(rescueFilters);
+             if (resRescue.count > 0) {
+                 return {
+                     count: resRescue.count,
+                     showing: mapProperties(resRescue.results).length,
+                     warning: "barrio_ignored",
+                     properties: mapProperties(resRescue.results)
+                 };
+             }
         }
 
-        const safeProperties = (resultados.results || []).map(p => {
-            let displayPrice = "Consultar";
-            if (p.found_period_price) {
-                displayPrice = `USD ${p.found_period_price} (Total)`;
-            } else if (p.min_rental_price) {
-                displayPrice = `USD ${p.min_rental_price} (Desde)`;
-            } else if (p.price) {
-                 displayPrice = `USD ${p.price}`;
-            }
-
-            return {
-                ...p,
-                price: p.price || 0, 
-                min_rental_price: p.min_rental_price || 0,
-                found_period_price: p.found_period_price || 0,
-                title: p.title || 'Propiedad',
-                summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` 
-            };
-        });
+        const safeProperties = mapProperties(resultados.results);
 
         return {
           count: resultados.count || 0,
           showing: safeProperties.length,
           nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
-          originalMaxPrice: resultados.originalMaxPrice || null,
-          appliedFilters: filtros, 
           properties: safeProperties 
         };
 
     } catch (error) {
-        console.error("Error tool:", error);
+        console.error(error);
         return { count: 0, properties: [], error: "Error interno." };
     }
   },
 });
+
+// Helper para mapear propiedades
+function mapProperties(props) {
+    return (props || []).map(p => {
+        let displayPrice = "Consultar";
+        if (p.found_period_price) displayPrice = `USD ${p.found_period_price} (Total)`;
+        else if (p.min_rental_price) displayPrice = `USD ${p.min_rental_price} (Desde)`;
+        else if (p.price) displayPrice = `USD ${p.price}`;
+        return { ...p, price: p.price || 0, displayPrice, summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` };
+    });
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -133,45 +132,38 @@ export default async function handler(req, res) {
       model: model,
       messages: messages,
       maxSteps: 5, 
-      system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
+      system: `Eres 'MaCA', la asistente experta de MCV Propiedades.
       
-      --- 🧠 BASE DE CONOCIMIENTO (DATOS OBLIGATORIOS) ---
-      1. HONORARIOS:
-         - Alquiler Temporal: El inquilino NO paga honorarios. Los absorbe el propietario por Gestión Integral.
-      2. LIMPIEZA DE SALIDA:
-         - Es obligatoria y a cargo del inquilino.
-         - IMPORTANTE: El pago NO exime de dejar la parrilla limpia y la vajilla lavada.
-      3. ROPA BLANCA:
-         - NO está incluida (ni sábanas ni toallas).
-         - Hay servicio externo de alquiler de sábanas para CONTINGENCIAS (consultar disponibilidad).
-         - Disponemos de practicunas y cercos de pileta (consultar stock).
-      4. MASCOTAS:
-         - Se aceptan (Máx 3). NO cachorros (-2 años). Razas peligrosas prohibidas.
-         - Ver reglamento: https://costa-esmeralda.com.ar/reglamentos/
-      5. HORARIOS:
-         - Check-in: 16:00 hs | Check-out: 10:00 hs (ESTRICTO).
-         - El incumplimiento genera MULTAS SEVERAS (descontadas del depósito).
-      6. CONTINGENCIAS (Luz/Agua/Wifi):
-         - MCV gestiona inmediato, pero la solución depende de los tiempos de los técnicos de la zona (especialmente findes/feriados).
-      7. DEPÓSITO EN GARANTÍA:
-         - Opciones de pago: E-Cheq (Recomendado), Efectivo (Se coordina ANTES de ingresar) o Transferencia (Gastos bancarios/retenciones a cargo del INQUILINO).
-      
-      --- 📅 REGLAS DE FECHAS (CRÍTICO) ---
-      * Si el usuario dice solo "Enero" o "Febrero", **NO BUSQUES**. 
-      * PREGUNTA: "¿Buscás la 1ra quincena, la 2da quincena, o el mes completo?"
-      * SOLO busca cuando tengas la quincena definida o fechas exactas.
+      --- 🚫 REGLAS DE FORMATO (IMPORTANTE) ---
+      1. **NO USES ASTERISCOS (**) NI MARKDOWN**. Escribe texto plano limpio.
+      2. **NO describas las propiedades en texto** (ej: "Casa con 3 dorms..."). La ficha visual ya muestra esa info.
+      3. **Tu respuesta debe ser MUY BREVE**.
 
-      --- 🛑 REGLAS DE ORO (VISUALIZACIÓN) ---
-      1. **PROHIBIDO DESCRIBIR LISTAS EN TEXTO**: Si usas la herramienta 'buscar_propiedades', TU RESPUESTA DEBE SER ÚNICAMENTE:
-         "Acá te muestro [showing] opciones de las [count] encontradas. ¿Querés ver alguna ficha?"
-         (NO repitas precios ni descripciones, la ficha visual ya lo dice).
+      --- 🚨 MANEJO DE RESULTADOS ---
+      * Si la herramienta devuelve **warning: "price_ignored"**:
+        DILE AL USUARIO: "No encontré nada por debajo de [precio_usuario]. Lo más económico disponible para esa fecha arranca en estos valores:" (y muestra las fichas).
+        Sugiérele buscar en otra fecha (ej: Febrero o Navidad) para mejores precios.
       
-      2. **DEMASIADOS RESULTADOS**: Si la herramienta devuelve warning "too_many_results", NO digas "aquí están". DILE:
-         "Encontré muchas opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?"
+      * Si devuelve **warning: "too_many_results"**:
+        DILE: "Encontré muchas opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?" (NO digas "aquí están").
 
-      --- 🔗 REGLA DE FUENTE (OBLIGATORIA) ---
-      Al final de CADA respuesta que brindes sobre reglas/dinero, debes agregar un salto de línea y:
+      --- 📅 REGLAS DE FECHAS ---
+      * Si el usuario dice solo "Enero" o "Febrero", **NO BUSQUES**. Pregunta qué quincena prefiere.
+
+      --- 🧠 BASE DE CONOCIMIENTO (Reglas) ---
+      1. HONORARIOS: Alquiler Temporal: Inquilino NO paga. Venta: 3-4%.
+      2. LIMPIEZA: Obligatoria a cargo inquilino.
+      3. ROPA BLANCA: NO incluida. Hay alquiler externo para CONTINGENCIAS.
+      4. MASCOTAS: Se aceptan (Máx 3, NO cachorros).
+      5. DEPÓSITO: E-Cheq (Recomendado), Efectivo (ANTES de entrar) o Transferencia (gastos a cargo inquilino).
+      
+      --- 🔗 FUENTE ---
+      SOLO si el usuario pregunta explícitamente por reglas, gastos o condiciones legales, agrega al final:
       👉 Fuente: https://mcv-agente-digital.vercel.app/faq
+      (NO lo agregues en búsquedas de propiedades).
+      
+      --- CIERRE ---
+      Si no hay resultados o el precio es alto, ofrece contactar a un agente (usa la herramienta mostrar_contacto).
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,

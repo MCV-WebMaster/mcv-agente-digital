@@ -51,6 +51,19 @@ export default function ChatPage() {
       setIsModalOpen(true);
   };
 
+  // Función simple para detectar links y hacerlos clicables
+  const formatMessage = (text) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) => 
+        urlRegex.test(part) ? (
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">
+                {part}
+            </a>
+        ) : part
+    );
+  };
+
   return (
     <div id="__next" className="flex flex-col h-screen bg-gray-50">
       <ContactModal
@@ -75,11 +88,13 @@ export default function ChatPage() {
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[90%] md:max-w-[80%] rounded-lg p-4 shadow-sm ${m.role === 'user' ? 'bg-mcv-azul text-white' : 'bg-white text-gray-800 border'}`}>
-                <div className="whitespace-pre-wrap">{m.content}</div>
+                {/* Usamos el formateador aquí */}
+                <div className="whitespace-pre-wrap">{formatMessage(m.content)}</div>
+                
                 {m.toolInvocations?.map((tool) => {
                   if (tool.state === 'result' && tool.toolName === 'buscar_propiedades') {
                     const props = tool.result?.properties || [];
-                    // Si hay warning y no props, no mostramos nada (la IA hablará)
+                    // Si el warning es too_many_results, no mostramos nada (la IA hablará)
                     if (tool.result?.warning === 'too_many_results') return null;
                     if (props.length === 0) return null;
 
@@ -100,8 +115,8 @@ export default function ChatPage() {
                   if (tool.state === 'result' && tool.toolName === 'mostrar_contacto') {
                       return (
                           <div key={tool.toolCallId} className="mt-4">
-                            <button onClick={handleGeneralContact} className="w-full bg-green-600 text-white py-2 rounded font-bold">
-                                💬 Contactar Agente
+                            <button onClick={handleGeneralContact} className="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 transition">
+                                💬 Contactar Agente por WhatsApp
                             </button>
                           </div>
                       );
@@ -117,8 +132,8 @@ export default function ChatPage() {
 
       <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2">
-          <input ref={inputRef} className="flex-grow p-3 border rounded-lg" value={input} onChange={handleInputChange} placeholder="Escribí tu consulta..." disabled={isLoading} />
-          <button type="submit" disabled={isLoading || !input.trim()} className="bg-mcv-azul text-white px-6 py-3 rounded-lg font-bold">Enviar</button>
+          <input ref={inputRef} className="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-mcv-azul" value={input} onChange={handleInputChange} placeholder="Escribí tu consulta..." disabled={isLoading} />
+          <button type="submit" disabled={isLoading || !input.trim()} className="bg-mcv-azul text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-800 transition">Enviar</button>
         </form>
       </div>
     </div>
