@@ -38,34 +38,21 @@ export default function FAQ() {
           </div>
           
           <div className="space-y-5 text-slate-600 leading-relaxed">
-            <div>
-                <h4 className="font-bold text-slate-800 text-lg">Operaciones de Compraventa</h4>
-                <p className="mt-1">
-                Según Ley Provincial N° 10.973 (y modif. Ley 14.085):
-                </p>
-                <ul className="list-disc list-inside pl-2 space-y-1 mt-1">
-                <li><strong className="text-slate-800">Porcentaje:</strong> del <strong className="text-slate-800">3% al 4%</strong> sobre el valor final.</li>
-                <li><strong className="text-slate-800">Partes:</strong> Abonado por ambas partes (compradora y vendedora).</li>
+            <h4 className="font-bold text-slate-800 text-lg">Alquileres Temporarios</h4>
+            <ul className="list-disc list-inside pl-2 mt-2 space-y-3">
+            <li>
+                <strong className="text-slate-800">Inquilinos:</strong> En MCV Propiedades, el inquilino <strong className="text-slate-800">no abona honorarios</strong>. El valor publicado es neto.
+            </li>
+            <li>
+                <strong className="text-slate-800">Propietarios:</strong> Los honorarios son absorbidos por el propietario en concepto de <strong className="text-slate-800">Gestión Integral</strong>, que incluye:
+                <ul className="list-circle pl-6 mt-1 text-sm text-slate-500 space-y-1">
+                    <li>• Difusión en redes (Instagram, Facebook, WhatsApp).</li>
+                    <li>• Gestión administrativa y confección de contratos.</li>
+                    <li>• Recepción y Check-in de inquilinos.</li>
+                    <li>• Coordinación de limpieza y gremios (técnicos) de ser necesario.</li>
                 </ul>
-            </div>
-
-            <div className="pt-5 border-t border-slate-100">
-              <h4 className="font-bold text-slate-800 text-lg">Alquileres Temporarios</h4>
-              <ul className="list-disc list-inside pl-2 mt-2 space-y-3">
-                <li>
-                    <strong className="text-slate-800">Inquilinos:</strong> En MCV Propiedades, el inquilino <strong className="text-slate-800">no abona honorarios</strong>. El valor publicado es neto.
-                </li>
-                <li>
-                    <strong className="text-slate-800">Propietarios:</strong> Los honorarios son absorbidos por el propietario en concepto de <strong className="text-slate-800">Gestión Integral</strong>, que incluye:
-                    <ul className="list-circle pl-6 mt-1 text-sm text-slate-500 space-y-1">
-                        <li>• Difusión en redes (Instagram, Facebook, WhatsApp).</li>
-                        <li>• Gestión administrativa y confección de contratos.</li>
-                        <li>• Recepción y Check-in de inquilinos.</li>
-                        <li>• Coordinación de limpieza y gremios (técnicos) de ser necesario.</li>
-                    </ul>
-                </li>
-              </ul>
-            </div>
+            </li>
+            </ul>
           </div>
         </section>
 
@@ -135,38 +122,39 @@ export default function FAQ() {
                     </li>
                 </ul>
             </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <h4 className="font-bold text-slate-800 text-sm uppercase mb-2">Filosofía de Resolución</h4>
-              <p className="text-sm">
-                Si existiera alguna rotura, faltante, multas o infracciones, los costos correspondientes serán descontados de este depósito al finalizar la estadía.
-              </p>
-            </div>
           </div>
         </section>
 
-        {/* 4. CONTINGENCIAS */}
+        {/* 4. ROPA BLANCA */}
         <section className="bg-white rounded-2xl shadow-sm p-6 md:p-8 border border-slate-100">
           <div className="flex items-center gap-3 mb-4">
-            <span className="bg-cyan-100 text-cyan-700 p-2 rounded-lg text-xl">🔧</span>
-            <h3 className="text-xl font-bold text-slate-900">4. Asistencia y Contingencias</h3>
+            <span className="bg-indigo-100 text-indigo-700 p-2 rounded-lg text-xl">🛏️</span>
+            <h3 className="text-xl font-bold text-slate-900">4. Ropa Blanca</h3>
           </div>
-          <div className="space-y-3 text-slate-600 leading-relaxed">
-            <p>
-              Durante la estadía, para resolver contingencias (plomería, electricidad, wifi) nos ocupamos de manera inmediata.
-            </p>
-            <p className="text-sm bg-cyan-50 text-cyan-800 p-3 rounded border border-cyan-100">
-              <strong className="block mb-1">Tiempos de Respuesta:</strong>
-              Gestionamos el reclamo al instante, pero la resolución efectiva depende de los tiempos de los técnicos de la zona, especialmente compleja durante fines de semana y feriados.
-            </p>
-          </div>
+          <p className="text-slate-600">
+             Las propiedades <strong>NO incluyen</strong> sábanas ni toallas. Hay servicios externos de alquiler de sábanas para <strong>contingencias</strong> (consultar disponibilidad).
+          </p>
         </section>
 
-        {/* 5. MASCOTAS */}
+        {/* 5. SERVICIOS EXTRA */}
+        <section className="bg-white rounded-2xl shadow-sm p-6 md:p-8 border border-slate-100">
+           <div className="flex items-center gap-3 mb-4">
+             <span className="bg-yellow-100 text-yellow-700 p-2 rounded-lg text-xl">🧸</span>
+             <h3 className="text-xl font-bold text-slate-900">5. Servicios Extra (Opcionales)</h3>
+           </div>
+           <p className="text-slate-600 mb-2">Disponemos de alquiler de:</p>
+           <ul className="list-disc list-inside text-slate-600">
+              <li>Practicunas para bebés.</li>
+              <li>Cerco de seguridad para piletas.</li>
+           </ul>
+           <p className="text-xs text-slate-500 mt-2 italic">* Consultar disponibilidad y stock con anticipación.</p>
+        </section>
+
+        {/* 6. MASCOTAS */}
         <section className="bg-white rounded-2xl shadow-sm p-6 md:p-8 border border-slate-100">
           <div className="flex items-center gap-3 mb-4">
             <span className="bg-orange-100 text-orange-700 p-2 rounded-lg text-xl">🐾</span>
-            <h3 className="text-xl font-bold text-slate-900">5. Política de Mascotas</h3>
+            <h3 className="text-xl font-bold text-slate-900">6. Política de Mascotas</h3>
           </div>
           <div className="space-y-3 text-slate-600 leading-relaxed">
             <p>Sujeto a reglamento y decisión del propietario.</p>
@@ -176,18 +164,10 @@ export default function FAQ() {
               <li>NO se aceptan cachorros (-2 años).</li>
               <li>Posible recargo en limpieza final.</li>
             </ul>
+            <a href="https://costa-esmeralda.com.ar/reglamentos/" target="_blank" className="text-orange-600 underline text-sm mt-2 block font-medium">
+                Ver Reglamento del Barrio &rarr;
+            </a>
           </div>
-        </section>
-
-        {/* 6. ROPA BLANCA */}
-        <section className="bg-white rounded-2xl shadow-sm p-6 md:p-8 border border-slate-100">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="bg-indigo-100 text-indigo-700 p-2 rounded-lg text-xl">🛏️</span>
-            <h3 className="text-xl font-bold text-slate-900">6. Ropa Blanca</h3>
-          </div>
-          <p className="text-slate-600">
-             Las propiedades <strong>NO incluyen</strong> sábanas ni toallas. Hay servicios externos de alquiler de sábanas para contingencias y también disponemos de practicunas.
-          </p>
         </section>
 
         {/* 7. HORARIOS */}

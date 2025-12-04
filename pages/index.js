@@ -12,6 +12,8 @@ import ContactModal from '@/components/ContactModal';
 import FloatingButton from '@/components/FloatingChatButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
+import Swal from 'sweetalert2'; // <--- IMPORT AGREGADO
+
 registerLocale('es', es);
 
 Modal.setAppElement('#__next');
@@ -31,12 +33,9 @@ const EXCLUDE_DATES = [
   { start: new Date('2025-12-19'), end: new Date('2026-03-01') }
 ];
 
-const ALERT_MASCOTAS = "Solo se podrán llevar razas permitidas según el reglamento. Las mascotas deberán ser mayores de 2 años de edad. Se podrán llevar un máximo de 3 mascotas por propiedad como aclara el reglamento.";
-
-
 export default function SearchPage() {
   const router = useRouter(); 
-  const contentRef = useRef(null); // ¡Devolvemos el useRef para que compile!
+  const contentRef = useRef(null);
   
   const [filters, setFilters] = useState({
     operacion: null,
@@ -186,14 +185,6 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC E: Handler de Mascotas con Alert ---
-  const handleMascotasChange = () => {
-    if (!filters.pets) {
-        alert(ALERT_MASCOTAS); 
-    }
-    handleCheckboxChange('pets');
-  };
-
   // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
@@ -303,7 +294,32 @@ export default function SearchPage() {
     }
   };
 
+  // --- AQUÍ ESTÁ EL CAMBIO IMPORTANTE: POPUP DE MASCOTAS ---
   const handleCheckboxChange = (name) => {
+    // Si el usuario está activando el filtro de mascotas, mostramos SweetAlert
+    if (name === 'pets' && !filters.pets) {
+        Swal.fire({
+            title: 'Política de Mascotas 🐾',
+            html: `
+                <div style="text-align: left; font-size: 0.95rem; color: #78350f;">
+                    <p style="margin-bottom: 10px; font-weight: 600;">¡Nos encantan las visitas de cuatro patas! Solo recordá:</p>
+                    <ul style="list-style-type: disc; padding-left: 20px; line-height: 1.6;">
+                        <li>Máximo <strong>3 mascotas</strong> por propiedad.</li>
+                        <li><strong>No se aceptan cachorros</strong> (menores de 2 años).</li>
+                        <li>Razas de guardia o peligrosas no permitidas.</li>
+                        <li>Puede haber un pequeño recargo en la limpieza final.</li>
+                    </ul>
+                </div>
+            `,
+            icon: 'warning',
+            iconColor: '#d97706',
+            background: '#fffbeb',
+            confirmButtonText: 'Entendido 🐾',
+            confirmButtonColor: '#d97706',
+            focusConfirm: false,
+        });
+    }
+
     setFilters(prev => ({
       ...prev,
       [name]: !prev[name],

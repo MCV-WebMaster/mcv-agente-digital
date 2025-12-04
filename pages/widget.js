@@ -14,10 +14,8 @@ export default function WidgetPage() {
   useEffect(() => { scrollToBottom(); }, [messages]);
 
   return (
-    // Fondo transparente para que parezca una app nativa
     <div className="h-screen w-full flex flex-col bg-white overflow-hidden font-sans">
       
-      {/* Encabezado del Widget */}
       <div className="bg-slate-900 p-3 flex items-center gap-3 shadow-md shrink-0">
         <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white/20">
           <span className="text-lg">🤖</span>
@@ -31,7 +29,6 @@ export default function WidgetPage() {
         </div>
       </div>
 
-      {/* Área de Chat */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
         {messages.length === 0 && (
           <div className="text-center mt-10 opacity-60">
@@ -48,7 +45,6 @@ export default function WidgetPage() {
                 : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none'
             }`}>
               <div className="whitespace-pre-wrap">{m.content}</div>
-              {/* Avisos de herramientas */}
               {m.toolInvocations?.map((tool) => (
                   <div key={tool.toolCallId} className="mt-2 text-xs bg-slate-100 p-2 rounded border border-slate-200 text-slate-500 italic">
                     {tool.toolName === 'buscar_propiedades' ? '🔍 Buscando...' : '⚡ Procesando...'}
@@ -72,7 +68,6 @@ export default function WidgetPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-slate-200 shrink-0">
         <div className="relative flex items-center">
           <input

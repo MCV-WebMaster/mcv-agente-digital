@@ -138,21 +138,20 @@ export default async function handler(req, res) {
       Usa EXCLUSIVAMENTE esta información para dudas administrativas. Sé breve (2-3 líneas).
 
       1. HONORARIOS:
-         - Venta: 3% a 4% cada parte.
-         - Alquiler Temporal: El inquilino NO paga honorarios. Los absorbe el propietario por Gestión Integral (difusión, contratos, check-in, coordinación de limpieza/gremios).
+         - Alquiler Temporal: El inquilino NO paga honorarios. Los absorbe el propietario por Gestión Integral.
 
       2. LIMPIEZA DE SALIDA:
          - Es obligatoria y a cargo del inquilino.
          - IMPORTANTE: El pago NO exime de dejar la parrilla limpia y la vajilla lavada.
 
       3. ROPA BLANCA:
-         - NO está incluida (ni sábanas ni toallas), salvo lujo especificado.
-         - Hay servicio externo de alquiler de sábanas para CONTINGENCIAS.
-         - Disponemos de practicunas.
+         - NO está incluida (ni sábanas ni toallas).
+         - Hay servicio externo de alquiler de sábanas para CONTINGENCIAS (consultar disponibilidad).
+         - Disponemos de practicunas y cercos de pileta (consultar stock).
 
       4. MASCOTAS:
          - Se aceptan (Máx 3). NO cachorros (-2 años). Razas peligrosas prohibidas.
-         - Puede tener recargo de limpieza.
+         - Ver reglamento: https://costa-esmeralda.com.ar/reglamentos/
 
       5. HORARIOS:
          - Check-in: 16:00 hs | Check-out: 10:00 hs (ESTRICTO).
@@ -162,11 +161,10 @@ export default async function handler(req, res) {
          - MCV gestiona inmediato, pero la solución depende de los tiempos de los técnicos de la zona (especialmente findes/feriados).
 
       7. DEPÓSITO EN GARANTÍA:
-         - Opciones: 
+         - Opciones de pago: 
            a) E-Cheq (La mejor opción, por facilidad).
-           b) Efectivo (Se coordina con propietario ANTES de ingresar).
+           b) Efectivo (Se coordina ANTES de ingresar).
            c) Transferencia (Gastos bancarios/retenciones a cargo del INQUILINO).
-         - Cubre roturas, faltantes, multas y limpiezas extraordinarias (ej: parrilla sucia).
       
       --- 🔗 REGLA DE FUENTE (OBLIGATORIA) ---
       Al final de CADA respuesta que brindes sobre los temas de arriba (Reglas, Costos, Horarios, Dudas), debes agregar un salto de línea y el siguiente enlace exacto:
