@@ -2,7 +2,6 @@ import { openai } from '@ai-sdk/openai';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { searchProperties } from '@/lib/propertyService';
-// import { getFaqString } from '@/lib/faqData'; // <--- Lo comentamos para usar la data actualizada directa en el prompt
 
 export const maxDuration = 60;
 const model = openai('gpt-4o');
@@ -140,7 +139,7 @@ export default async function handler(req, res) {
 
       1. HONORARIOS:
          - Venta: 3% a 4% cada parte.
-         - Alquiler Temporal: El inquilino NO paga honorarios (son a cargo del propietario).
+         - Alquiler Temporal: El inquilino NO paga honorarios. Los absorbe el propietario por Gestión Integral (difusión, contratos, check-in, coordinación de limpieza/gremios).
 
       2. LIMPIEZA DE SALIDA:
          - Es obligatoria y a cargo del inquilino.
@@ -155,16 +154,15 @@ export default async function handler(req, res) {
          - Puede tener recargo de limpieza.
 
       5. HORARIOS:
-         - Check-in: 16:00 hs.
-         - Check-out: 10:00 hs (ESTRICTO).
+         - Check-in: 16:00 hs | Check-out: 10:00 hs (ESTRICTO).
          - El incumplimiento genera MULTAS SEVERAS (descontadas del depósito).
 
       6. CONTINGENCIAS (Luz/Agua/Wifi):
-         - MCV gestiona el reclamo de inmediato.
-         - La solución depende de los tiempos de los técnicos de la zona (especialmente fines de semana y feriados).
+         - MCV gestiona inmediato, pero la solución depende de los tiempos de los técnicos de la zona (especialmente findes/feriados).
 
       7. DEPÓSITO EN GARANTÍA:
-         - Cubre roturas, faltantes, multas (ruidos/tránsito) y limpiezas extraordinarias (ej: parrilla sucia).
+         - Opciones de pago: E-Cheq (La mejor opción, por facilidad), Efectivo o Transferencia (ojo con gastos/retenciones).
+         - Cubre roturas, faltantes, multas y limpiezas extraordinarias (ej: parrilla sucia).
       
       --- 🔗 REGLA DE FUENTE (OBLIGATORIA) ---
       Al final de CADA respuesta que brindes sobre los temas de arriba (Reglas, Costos, Horarios, Dudas), debes agregar un salto de línea y el siguiente enlace exacto:
