@@ -185,19 +185,53 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
+  // --- HANDLERS ---
+  
+  const handleCheckboxChange = (name) => {
+    setFilters(prev => ({
+      ...prev,
+      [name]: !prev[name],
+      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
+    }));
+  };
+
+  // --- FIX: Handler de Mascotas con SweetAlert ---
+  const handleMascotasChange = () => {
+    if (!filters.pets) {
+        Swal.fire({
+            title: 'Política de Mascotas 🐾',
+            html: `
+                <div style="text-align: left; font-size: 0.95rem; color: #78350f;">
+                    <p style="margin-bottom: 10px; font-weight: 600;">¡Nos encantan las visitas de cuatro patas! Solo recordá:</p>
+                    <ul style="list-style-type: disc; padding-left: 20px; line-height: 1.6;">
+                        <li>Máximo <strong>3 mascotas</strong> por propiedad.</li>
+                        <li><strong>No se aceptan cachorros</strong> (menores de 2 años).</li>
+                        <li>Razas de guardia o peligrosas no permitidas.</li>
+                        <li>Puede haber un pequeño recargo en la limpieza final.</li>
+                    </ul>
+                </div>
+            `,
+            icon: 'warning',
+            iconColor: '#d97706',
+            background: '#fffbeb',
+            confirmButtonText: 'Entendido 🐾',
+            confirmButtonColor: '#d97706',
+            focusConfirm: false,
+        });
+    }
+    handleCheckboxChange('pets');
+  };
+
   // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
-    
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
       const propsListWsp = results.map(p => `${p.title}\n${p.url}\n`).join('\n');
       const propsListHtml = results.map(p => `<li><strong>${p.title}</strong><br><a href="${p.url}">${p.url}</a></li>`).join('');
-      
       whatsappMessage = `Te escribo porque vi estas propiedades que me interesan en https://mcvpropiedades.com.ar:\n\n${propsListWsp}`;
       adminEmailHtml = `<ul>${propsListHtml}</ul>`;
-      
     } else if (results.length > 10) {
       whatsappMessage = `Hola...! Te escribo porque vi una propiedad que me interesa en https://mcvpropiedades.com.ar, me podes dar mas informacion sobre mi búsqueda? (encontré ${propertyCount} propiedades).`;
       adminEmailHtml = `<p>El cliente realizó una búsqueda que arrojó ${propertyCount} propiedades.</p>`;
@@ -219,7 +253,6 @@ export default function SearchPage() {
 
   const handleContactSingleProperty = (property) => {
     const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
-    
     const whatsappMessage = `Hola...! Te escribo porque vi esta propiedad en el Asistente Digital y me interesa:\n\n${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
@@ -233,7 +266,6 @@ export default function SearchPage() {
     setIsModalOpen(true);
   };
   
-  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
   const getAgentNumber = (op, zona) => {
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
@@ -241,7 +273,6 @@ export default function SearchPage() {
     return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
-  // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -292,39 +323,6 @@ export default function SearchPage() {
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
     }
-  };
-
-  // --- AQUÍ ESTÁ EL CAMBIO IMPORTANTE: POPUP DE MASCOTAS ---
-  const handleCheckboxChange = (name) => {
-    // Si el usuario está activando el filtro de mascotas, mostramos SweetAlert
-    if (name === 'pets' && !filters.pets) {
-        Swal.fire({
-            title: 'Política de Mascotas 🐾',
-            html: `
-                <div style="text-align: left; font-size: 0.95rem; color: #78350f;">
-                    <p style="margin-bottom: 10px; font-weight: 600;">¡Nos encantan las visitas de cuatro patas! Solo recordá:</p>
-                    <ul style="list-style-type: disc; padding-left: 20px; line-height: 1.6;">
-                        <li>Máximo <strong>3 mascotas</strong> por propiedad.</li>
-                        <li><strong>No se aceptan cachorros</strong> (menores de 2 años).</li>
-                        <li>Razas de guardia o peligrosas no permitidas.</li>
-                        <li>Puede haber un pequeño recargo en la limpieza final.</li>
-                    </ul>
-                </div>
-            `,
-            icon: 'warning',
-            iconColor: '#d97706',
-            background: '#fffbeb',
-            confirmButtonText: 'Entendido 🐾',
-            confirmButtonColor: '#d97706',
-            focusConfirm: false,
-        });
-    }
-
-    setFilters(prev => ({
-      ...prev,
-      [name]: !prev[name],
-      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
-    }));
   };
   
   const handleShowOtherDates = () => {
@@ -616,7 +614,7 @@ export default function SearchPage() {
                   <input
                     type="checkbox" name="pets"
                     checked={filters.pets}
-                    onChange={() => handleCheckboxChange('pets')}
+                    onChange={handleMascotasChange}
                     className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
                   />
                   <span className="text-sm text-gray-700">Acepta Mascotas</span>

@@ -58,6 +58,15 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
+        // --- LÓGICA DE FRENO SI HAY MUCHOS RESULTADOS ---
+        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
+            return {
+                count: resultados.count,
+                warning: "too_many_results", // Señal para la IA
+                properties: [] 
+            };
+        }
+
         if (resultados.count === 0) {
             if (originalMaxPrice) {
                 let rescueFilters = {...filtros, maxPrice: null, offset: 0};
@@ -76,14 +85,6 @@ const buscarPropiedadesTool = tool({
                     resultados.warning = "barrio_ampliado";
                 }
             }
-        }
-
-        if (resultados.count > 10 && !filtros.maxPrice && !filtros.pool && !filtros.bedrooms && filtros.offset === 0) {
-            return {
-                count: resultados.count,
-                warning: "too_many",
-                properties: [] 
-            };
         }
 
         const safeProperties = (resultados.results || []).map(p => {
@@ -135,59 +136,42 @@ export default async function handler(req, res) {
       system: `Eres 'MaCA', la asistente comercial experta de MCV Propiedades.
       
       --- 🧠 BASE DE CONOCIMIENTO (DATOS OBLIGATORIOS) ---
-      Usa EXCLUSIVAMENTE esta información para dudas administrativas. Sé breve (2-3 líneas).
-
       1. HONORARIOS:
          - Alquiler Temporal: El inquilino NO paga honorarios. Los absorbe el propietario por Gestión Integral.
-
       2. LIMPIEZA DE SALIDA:
          - Es obligatoria y a cargo del inquilino.
          - IMPORTANTE: El pago NO exime de dejar la parrilla limpia y la vajilla lavada.
-
       3. ROPA BLANCA:
          - NO está incluida (ni sábanas ni toallas).
          - Hay servicio externo de alquiler de sábanas para CONTINGENCIAS (consultar disponibilidad).
          - Disponemos de practicunas y cercos de pileta (consultar stock).
-
       4. MASCOTAS:
          - Se aceptan (Máx 3). NO cachorros (-2 años). Razas peligrosas prohibidas.
          - Ver reglamento: https://costa-esmeralda.com.ar/reglamentos/
-
       5. HORARIOS:
          - Check-in: 16:00 hs | Check-out: 10:00 hs (ESTRICTO).
          - El incumplimiento genera MULTAS SEVERAS (descontadas del depósito).
-
       6. CONTINGENCIAS (Luz/Agua/Wifi):
          - MCV gestiona inmediato, pero la solución depende de los tiempos de los técnicos de la zona (especialmente findes/feriados).
-
       7. DEPÓSITO EN GARANTÍA:
-         - Opciones de pago: 
-           a) E-Cheq (La mejor opción, por facilidad).
-           b) Efectivo (Se coordina ANTES de ingresar).
-           c) Transferencia (Gastos bancarios/retenciones a cargo del INQUILINO).
+         - Opciones de pago: E-Cheq (Recomendado), Efectivo (Se coordina ANTES de ingresar) o Transferencia (Gastos bancarios/retenciones a cargo del INQUILINO).
       
-      --- 🔗 REGLA DE FUENTE (OBLIGATORIA) ---
-      Al final de CADA respuesta que brindes sobre los temas de arriba (Reglas, Costos, Horarios, Dudas), debes agregar un salto de línea y el siguiente enlace exacto:
-      👉 Fuente: https://mcv-agente-digital.vercel.app/faq
-      
-      --- 👩‍💼 IDENTIDAD ---
-      * Nombre: MaCA.
-      * Tono: Cálido, profesional, resolutivo.
-      
-      --- 🚦 REGLAS OPERATIVAS ---
-      1. **PREGUNTAS ADMINISTRATIVAS:** Si preguntan por comisiones, depósitos, limpieza o pagos, responde DIRECTAMENTE con la data de arriba + el Link de Fuente. No uses herramientas de búsqueda.
-      
-      2. **BÚSQUEDA DE PROPIEDADES:**
-         - **Alquiler:** Periodo -> Pax -> Mascotas.
-         - **Venta:** Zona -> Dorms -> Precio.
-         
-      3. **FORMATO VISUAL:**
-         - **JAMÁS** escribas listas de propiedades en texto. Usa la herramienta para mostrarlas.
-         - Tu respuesta al mostrar fichas es SOLO: "Acá te muestro [showing] opciones de las [count] encontradas. ¿Qué te parecen?".
+      --- 📅 REGLAS DE FECHAS (CRÍTICO) ---
+      * Si el usuario dice solo "Enero" o "Febrero", **NO BUSQUES**. 
+      * PREGUNTA: "¿Buscás la 1ra quincena, la 2da quincena, o el mes completo?"
+      * SOLO busca cuando tengas la quincena definida o fechas exactas.
 
-      --- 🗺️ MAPEO ---
-      * "Costa" -> Costa Esmeralda.
-      * "Senderos" -> Senderos I, II, III, IV.
+      --- 🛑 REGLAS DE ORO (VISUALIZACIÓN) ---
+      1. **PROHIBIDO DESCRIBIR LISTAS EN TEXTO**: Si usas la herramienta 'buscar_propiedades', TU RESPUESTA DEBE SER ÚNICAMENTE:
+         "Acá te muestro [showing] opciones de las [count] encontradas. ¿Querés ver alguna ficha?"
+         (NO repitas precios ni descripciones, la ficha visual ya lo dice).
+      
+      2. **DEMASIADOS RESULTADOS**: Si la herramienta devuelve warning "too_many_results", NO digas "aquí están". DILE:
+         "Encontré muchas opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?"
+
+      --- 🔗 REGLA DE FUENTE (OBLIGATORIA) ---
+      Al final de CADA respuesta que brindes sobre reglas/dinero, debes agregar un salto de línea y:
+      👉 Fuente: https://mcv-agente-digital.vercel.app/faq
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,

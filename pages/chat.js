@@ -80,7 +80,7 @@ export default function ChatPage() {
                   if (tool.state === 'result' && tool.toolName === 'buscar_propiedades') {
                     const props = tool.result?.properties || [];
                     // Si hay warning y no props, no mostramos nada (la IA hablará)
-                    if (tool.result?.warning === 'too_many') return null;
+                    if (tool.result?.warning === 'too_many_results') return null;
                     if (props.length === 0) return null;
 
                     return (
