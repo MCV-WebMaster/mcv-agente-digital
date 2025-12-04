@@ -29,6 +29,7 @@ const buscarPropiedadesTool = tool({
     searchText: z.string().optional(),
     limit: z.number().optional().describe('Cantidad a mostrar (Default 6).'),
     offset: z.number().optional(),
+    // IMPORTANTE: El bot debe elegir uno de estos valores exactos
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -56,43 +57,30 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // Warning si hay muchas
+        // Warning si hay muchas (>10) y no hay filtro de precio
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.minPrice && filtros.offset === 0) {
             return {
                 count: resultados.count,
                 warning: "too_many_results",
-                properties: [] 
+                properties: [] // No mandamos nada para no saturar
             };
         }
 
         // Lógica de rescate (si no hay resultados por precio)
         if (resultados.count === 0 && originalMaxPrice) {
+            // Quitamos el precio pero MANTENEMOS el periodo para que la ficha calcule bien el total
             let rescueFilters = {...filtros, maxPrice: null, offset: 0};
             let resRescue = await searchProperties(rescueFilters);
             if (resRescue.count > 0) {
-                // Devolvemos resultados PERO con aviso de que ignoramos el precio
-                // para que el bot sepa qué decir.
                 const safeRescue = mapProperties(resRescue.results);
                 return {
                     count: resRescue.count,
                     showing: safeRescue.length,
-                    warning: "price_ignored", // <--- SEÑAL CLAVE
-                    originalMaxPrice: originalMaxPrice,
+                    warning: "price_ignored", 
+                    appliedFilters: rescueFilters, // IMPORTANTE: Pasar el filtro usado (con periodo)
                     properties: safeRescue
                 };
             }
-        } else if (resultados.count === 0 && filtros.barrios && filtros.barrios.length > 0) {
-             let rescueFilters = {...filtros, offset: 0};
-             delete rescueFilters.barrios;
-             let resRescue = await searchProperties(rescueFilters);
-             if (resRescue.count > 0) {
-                 return {
-                     count: resRescue.count,
-                     showing: mapProperties(resRescue.results).length,
-                     warning: "barrio_ignored",
-                     properties: mapProperties(resRescue.results)
-                 };
-             }
         }
 
         const safeProperties = mapProperties(resultados.results);
@@ -102,6 +90,7 @@ const buscarPropiedadesTool = tool({
           showing: safeProperties.length,
           nextOffset: filtros.offset + safeProperties.length,
           warning: resultados.warning || null,
+          appliedFilters: filtros, 
           properties: safeProperties 
         };
 
@@ -112,7 +101,6 @@ const buscarPropiedadesTool = tool({
   },
 });
 
-// Helper para mapear propiedades
 function mapProperties(props) {
     return (props || []).map(p => {
         let displayPrice = "Consultar";
@@ -134,23 +122,25 @@ export default async function handler(req, res) {
       maxSteps: 5, 
       system: `Eres 'MaCA', la asistente experta de MCV Propiedades.
       
-      --- 🚫 REGLAS DE FORMATO (IMPORTANTE) ---
-      1. **NO USES ASTERISCOS (**) NI MARKDOWN**. Escribe texto plano limpio.
-      2. **NO describas las propiedades en texto** (ej: "Casa con 3 dorms..."). La ficha visual ya muestra esa info.
-      3. **Tu respuesta debe ser MUY BREVE**.
+      --- 🎯 REGLAS DE MAPEO (IMPORTANTE) ---
+      1. **FECHAS:** Si el usuario dice "2da de enero" o similar, DEBES usar el valor exacto: "Enero 2da Quincena". 
+         Si dice "1ra de febrero", usa: "Febrero 1ra Quincena".
+         (Esto es vital para que se muestre el precio correcto).
+      
+      --- 🚫 REGLAS DE FORMATO ---
+      1. **NO USES ASTERISCOS (**)**. Escribe texto plano limpio.
+      2. **NO repitas la lista de casas en texto**. Si ya se muestran las fichas visuales, NO las describas de nuevo.
+      3. **Tu respuesta debe ser CORTA**.
 
       --- 🚨 MANEJO DE RESULTADOS ---
       * Si la herramienta devuelve **warning: "price_ignored"**:
-        DILE AL USUARIO: "No encontré nada por debajo de [precio_usuario]. Lo más económico disponible para esa fecha arranca en estos valores:" (y muestra las fichas).
-        Sugiérele buscar en otra fecha (ej: Febrero o Navidad) para mejores precios.
+        DILE: "No encontré nada por debajo de tu presupuesto en esa fecha (temporada alta). Estas son las opciones disponibles:"
+        (Muestra las fichas y luego REMATA con): "¿Querés que te muestre las tres más económicas o buscamos en otra fecha?"
       
       * Si devuelve **warning: "too_many_results"**:
-        DILE: "Encontré muchas opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?" (NO digas "aquí están").
+        DILE: "Encontré [count] opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?"
 
-      --- 📅 REGLAS DE FECHAS ---
-      * Si el usuario dice solo "Enero" o "Febrero", **NO BUSQUES**. Pregunta qué quincena prefiere.
-
-      --- 🧠 BASE DE CONOCIMIENTO (Reglas) ---
+      --- 🧠 BASE DE CONOCIMIENTO ---
       1. HONORARIOS: Alquiler Temporal: Inquilino NO paga. Venta: 3-4%.
       2. LIMPIEZA: Obligatoria a cargo inquilino.
       3. ROPA BLANCA: NO incluida. Hay alquiler externo para CONTINGENCIAS.
@@ -158,12 +148,8 @@ export default async function handler(req, res) {
       5. DEPÓSITO: E-Cheq (Recomendado), Efectivo (ANTES de entrar) o Transferencia (gastos a cargo inquilino).
       
       --- 🔗 FUENTE ---
-      SOLO si el usuario pregunta explícitamente por reglas, gastos o condiciones legales, agrega al final:
+      SOLO si preguntan por reglas/gastos:
       👉 Fuente: https://mcv-agente-digital.vercel.app/faq
-      (NO lo agregues en búsquedas de propiedades).
-      
-      --- CIERRE ---
-      Si no hay resultados o el precio es alto, ofrece contactar a un agente (usa la herramienta mostrar_contacto).
       `,
       tools: {
         buscar_propiedades: buscarPropiedadesTool,

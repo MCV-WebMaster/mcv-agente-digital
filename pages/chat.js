@@ -51,17 +51,20 @@ export default function ChatPage() {
       setIsModalOpen(true);
   };
 
-  // Función simple para detectar links y hacerlos clicables
+  // Función para detectar URLs y convertirlas en links clickeables
   const formatMessage = (text) => {
+    // Expresión regular para detectar URLs
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = text.split(urlRegex);
-    return parts.map((part, i) => 
-        urlRegex.test(part) ? (
-            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">
-                {part}
-            </a>
-        ) : part
-    );
+    return text.split(urlRegex).map((part, i) => {
+        if (part.match(urlRegex)) {
+            return (
+                <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">
+                    {part}
+                </a>
+            );
+        }
+        return part;
+    });
   };
 
   return (
@@ -88,13 +91,16 @@ export default function ChatPage() {
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[90%] md:max-w-[80%] rounded-lg p-4 shadow-sm ${m.role === 'user' ? 'bg-mcv-azul text-white' : 'bg-white text-gray-800 border'}`}>
-                {/* Usamos el formateador aquí */}
-                <div className="whitespace-pre-wrap">{formatMessage(m.content)}</div>
+                {/* Usamos formatMessage para renderizar el texto */}
+                <div className="whitespace-pre-wrap">
+                    {formatMessage(m.content)}
+                </div>
                 
                 {m.toolInvocations?.map((tool) => {
                   if (tool.state === 'result' && tool.toolName === 'buscar_propiedades') {
                     const props = tool.result?.properties || [];
-                    // Si el warning es too_many_results, no mostramos nada (la IA hablará)
+                    
+                    // Si hay warning "too_many_results", no mostramos nada (el bot hablará)
                     if (tool.result?.warning === 'too_many_results') return null;
                     if (props.length === 0) return null;
 
@@ -104,6 +110,7 @@ export default function ChatPage() {
                             <PropertyCard 
                                 key={p.property_id} 
                                 property={p} 
+                                // Pasamos los filtros aplicados para que la Card sepa la fecha y calcule precio
                                 filters={tool.result?.appliedFilters || {}} 
                                 onContact={handleContact} 
                                 small 
@@ -116,7 +123,7 @@ export default function ChatPage() {
                       return (
                           <div key={tool.toolCallId} className="mt-4">
                             <button onClick={handleGeneralContact} className="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 transition">
-                                💬 Contactar Agente por WhatsApp
+                                💬 Contactar Agente
                             </button>
                           </div>
                       );
