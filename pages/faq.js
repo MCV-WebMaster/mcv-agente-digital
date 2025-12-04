@@ -115,22 +115,22 @@ export default function FAQ() {
                     <li className="flex items-start gap-2">
                         <span className="text-lg">⭐</span>
                         <div>
-                            <strong className="text-slate-900 block">Cheque Electrónico (E-Cheq) - Opción Recomendada</strong>
-                            <span className="text-slate-600">Es la mejor opción por su facilidad y agilidad en la devolución (no se deposita salvo novedades).</span>
+                            <strong className="text-slate-900 block">Cheque Electrónico (E-Cheq) - Recomendado</strong>
+                            <span className="text-slate-600">Es la mejor opción por su facilidad y agilidad en la devolución.</span>
                         </div>
                     </li>
                     <li className="flex items-start gap-2">
                         <span className="text-lg">💵</span>
                         <div>
                             <strong className="text-slate-900 block">Efectivo</strong>
-                            <span className="text-slate-600">Se entrega directamente al propietario al ingresar.</span>
+                            <span className="text-slate-600">Se coordina la entrega con el propietario <strong>antes de ingresar</strong>.</span>
                         </div>
                     </li>
                     <li className="flex items-start gap-2">
                         <span className="text-lg">🏦</span>
                         <div>
                             <strong className="text-slate-900 block">Transferencia Bancaria</strong>
-                            <span className="text-slate-600">A cuenta del propietario. (Atención: Puede estar sujeta a gastos bancarios o retenciones impositivas).</span>
+                            <span className="text-slate-600">A cuenta del propietario. <strong className="text-indigo-900">Atención:</strong> Los gastos bancarios o retenciones corren exclusivamente por cuenta del inquilino.</span>
                         </div>
                     </li>
                 </ul>
@@ -186,7 +186,7 @@ export default function FAQ() {
             <h3 className="text-xl font-bold text-slate-900">6. Ropa Blanca</h3>
           </div>
           <p className="text-slate-600">
-             Las propiedades <strong>NO incluyen</strong> sábanas ni toallas. Hay servicios externos de alquiler para emergencias y practicunas.
+             Las propiedades <strong>NO incluyen</strong> sábanas ni toallas. Hay servicios externos de alquiler de sábanas para contingencias y también disponemos de practicunas.
           </p>
         </section>
 

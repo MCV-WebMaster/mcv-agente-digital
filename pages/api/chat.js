@@ -147,7 +147,8 @@ export default async function handler(req, res) {
 
       3. ROPA BLANCA:
          - NO está incluida (ni sábanas ni toallas), salvo lujo especificado.
-         - Hay servicio de alquiler opcional (de emergencia).
+         - Hay servicio externo de alquiler de sábanas para CONTINGENCIAS.
+         - Disponemos de practicunas.
 
       4. MASCOTAS:
          - Se aceptan (Máx 3). NO cachorros (-2 años). Razas peligrosas prohibidas.
@@ -161,7 +162,10 @@ export default async function handler(req, res) {
          - MCV gestiona inmediato, pero la solución depende de los tiempos de los técnicos de la zona (especialmente findes/feriados).
 
       7. DEPÓSITO EN GARANTÍA:
-         - Opciones de pago: E-Cheq (La mejor opción, por facilidad), Efectivo o Transferencia (ojo con gastos/retenciones).
+         - Opciones: 
+           a) E-Cheq (La mejor opción, por facilidad).
+           b) Efectivo (Se coordina con propietario ANTES de ingresar).
+           c) Transferencia (Gastos bancarios/retenciones a cargo del INQUILINO).
          - Cubre roturas, faltantes, multas y limpiezas extraordinarias (ej: parrilla sucia).
       
       --- 🔗 REGLA DE FUENTE (OBLIGATORIA) ---
