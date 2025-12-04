@@ -7,13 +7,13 @@ export const maxDuration = 60;
 const model = openai('gpt-4o');
 
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo para cerrar la venta, cuando el cliente elija una propiedad, o si pide fechas fuera de temporada.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
 const buscarPropiedadesTool = tool({
-  description: 'Busca propiedades en la base de datos.',
+  description: 'Busca propiedades en la base de datos. ÚSALA SOLO CUANDO TENGAS TODOS LOS DATOS REQUERIDOS.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
@@ -29,7 +29,6 @@ const buscarPropiedadesTool = tool({
     searchText: z.string().optional(),
     limit: z.number().optional().describe('Cantidad a mostrar (Default 6).'),
     offset: z.number().optional(),
-    // IMPORTANTE: El bot debe elegir uno de estos valores exactos
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
       'Enero 1ra Quincena', 'Enero 2da Quincena', 
@@ -62,22 +61,27 @@ const buscarPropiedadesTool = tool({
             return {
                 count: resultados.count,
                 warning: "too_many_results",
-                properties: [] // No mandamos nada para no saturar
+                properties: [] 
             };
         }
 
         // Lógica de rescate (si no hay resultados por precio)
         if (resultados.count === 0 && originalMaxPrice) {
-            // Quitamos el precio pero MANTENEMOS el periodo para que la ficha calcule bien el total
             let rescueFilters = {...filtros, maxPrice: null, offset: 0};
             let resRescue = await searchProperties(rescueFilters);
             if (resRescue.count > 0) {
+                // Mapeamos las propiedades de rescate
                 const safeRescue = mapProperties(resRescue.results);
+                
+                // Calculamos el precio mínimo real encontrado para decírselo al usuario
+                const minFound = Math.min(...safeRescue.map(p => p.price)); // Usamos el precio numérico limpio
+
                 return {
                     count: resRescue.count,
                     showing: safeRescue.length,
                     warning: "price_ignored", 
-                    appliedFilters: rescueFilters, // IMPORTANTE: Pasar el filtro usado (con periodo)
+                    minFoundPrice: minFound, // Le pasamos este dato al bot
+                    appliedFilters: rescueFilters,
                     properties: safeRescue
                 };
             }
@@ -104,10 +108,26 @@ const buscarPropiedadesTool = tool({
 function mapProperties(props) {
     return (props || []).map(p => {
         let displayPrice = "Consultar";
-        if (p.found_period_price) displayPrice = `USD ${p.found_period_price} (Total)`;
-        else if (p.min_rental_price) displayPrice = `USD ${p.min_rental_price} (Desde)`;
-        else if (p.price) displayPrice = `USD ${p.price}`;
-        return { ...p, price: p.price || 0, displayPrice, summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` };
+        let numericPrice = p.price; // Valor por defecto
+
+        if (p.found_period_price) {
+            displayPrice = `USD ${p.found_period_price} (Total)`;
+            numericPrice = p.found_period_price;
+        }
+        else if (p.min_rental_price) {
+            displayPrice = `USD ${p.min_rental_price} (Desde)`;
+            numericPrice = p.min_rental_price;
+        }
+        else if (p.price) {
+            displayPrice = `USD ${p.price}`;
+        }
+
+        return { 
+            ...p, 
+            price: numericPrice || 0, // Precio numérico para lógica
+            displayPrice, // String para mostrar
+            summary: `ID: ${p.property_id}. ${p.barrio || p.zona}.` 
+        };
     });
 }
 
@@ -122,25 +142,28 @@ export default async function handler(req, res) {
       maxSteps: 5, 
       system: `Eres 'MaCA', la asistente experta de MCV Propiedades.
       
-      --- 🎯 REGLAS DE MAPEO (IMPORTANTE) ---
-      1. **FECHAS:** Si el usuario dice "2da de enero" o similar, DEBES usar el valor exacto: "Enero 2da Quincena". 
-         Si dice "1ra de febrero", usa: "Febrero 1ra Quincena".
-         (Esto es vital para que se muestre el precio correcto).
-      
-      --- 🚫 REGLAS DE FORMATO ---
-      1. **NO USES ASTERISCOS (**)**. Escribe texto plano limpio.
-      2. **NO repitas la lista de casas en texto**. Si ya se muestran las fichas visuales, NO las describas de nuevo.
-      3. **Tu respuesta debe ser CORTA**.
+      --- 🎯 PROTOCOLO DE RECOLECCIÓN DE DATOS (ESTRICTO) ---
+      Antes de ejecutar la búsqueda 'buscar_propiedades', DEBES tener confirmados:
+      1. **FECHA/PERIODO:** (Ej: "Enero 2da Quincena"). Si dice solo "Enero", PREGUNTA qué quincena.
+      2. **PASAJEROS:** Cantidad de personas.
+      3. **MASCOTAS:** Si el usuario NO mencionó si trae mascotas, **PREGUNTA: "¿Vienen con mascotas?"**.
+         *Solo busca sin preguntar mascotas si el usuario ya lo aclaró.*
+
+      --- 🚫 REGLAS DE FORMATO (ANTIRROBOT) ---
+      1. **CERO ASTERISCOS:** No uses negritas (**texto**). Escribe plano.
+      2. **CERO LISTAS DE TEXTO:** Si muestras fichas visuales (tool result), **TU BOCA SE CIERRA**. 
+         NO escribas "1. Casa tal - $Precio". NO repitas la info.
+         Solo di: "Te dejo arriba las opciones. ¿Qué te parecen?"
 
       --- 🚨 MANEJO DE RESULTADOS ---
-      * Si la herramienta devuelve **warning: "price_ignored"**:
-        DILE: "No encontré nada por debajo de tu presupuesto en esa fecha (temporada alta). Estas son las opciones disponibles:"
-        (Muestra las fichas y luego REMATA con): "¿Querés que te muestre las tres más económicas o buscamos en otra fecha?"
+      * Si tool devuelve **warning: "price_ignored"**:
+        DILE: "No encontré nada por debajo de tu presupuesto (es temporada alta). Te muestro opciones disponibles desde USD [minFoundPrice]."
+        CIERRE: "¿Querés que busquemos en otra fecha más económica (como Febrero o Navidad)?"
       
-      * Si devuelve **warning: "too_many_results"**:
+      * Si tool devuelve **warning: "too_many_results"**:
         DILE: "Encontré [count] opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?"
 
-      --- 🧠 BASE DE CONOCIMIENTO ---
+      --- 🧠 BASE DE CONOCIMIENTO (Reglas) ---
       1. HONORARIOS: Alquiler Temporal: Inquilino NO paga. Venta: 3-4%.
       2. LIMPIEZA: Obligatoria a cargo inquilino.
       3. ROPA BLANCA: NO incluida. Hay alquiler externo para CONTINGENCIAS.
