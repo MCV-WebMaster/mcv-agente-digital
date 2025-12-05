@@ -12,7 +12,7 @@ import ContactModal from '@/components/ContactModal';
 import FloatingButton from '@/components/FloatingChatButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
-import Swal from 'sweetalert2'; // <--- IMPORT AGREGADO
+import Swal from 'sweetalert2'; // Importamos SweetAlert
 
 registerLocale('es', es);
 
@@ -25,7 +25,7 @@ const PERIOD_OPTIONS_2026 = [
   { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
-  { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
+  { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' }, // Incluye Carnaval (16/17 Feb)
   { value: 'Febrero 2da Quincena', label: 'Febrero 2da Quincena (18/02 al 01/03)' },
 ];
 
@@ -85,7 +85,6 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
-  // --- 0. LEER URL AL INICIO (Deep Linking) ---
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
       const { query } = router;
@@ -108,7 +107,6 @@ export default function SearchPage() {
     }
   }, [router.isReady, hasHydrated, router]);
 
-  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     if (!filters.operacion) return;
     
@@ -136,7 +134,6 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
-  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -185,19 +182,10 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- HANDLERS ---
-  
+  // --- LOGIC: Handler de Checkbox + Popup Mascotas (SweetAlert) ---
   const handleCheckboxChange = (name) => {
-    setFilters(prev => ({
-      ...prev,
-      [name]: !prev[name],
-      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
-    }));
-  };
-
-  // --- FIX: Handler de Mascotas con SweetAlert ---
-  const handleMascotasChange = () => {
-    if (!filters.pets) {
+    // Si el usuario activa Mascotas, mostramos el aviso
+    if (name === 'pets' && !filters.pets) {
         Swal.fire({
             title: 'Política de Mascotas 🐾',
             html: `
@@ -219,10 +207,14 @@ export default function SearchPage() {
             focusConfirm: false,
         });
     }
-    handleCheckboxChange('pets');
+
+    setFilters(prev => ({
+      ...prev,
+      [name]: !prev[name],
+      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
+    }));
   };
 
-  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
     let whatsappMessage, adminEmailHtml;
@@ -357,7 +349,6 @@ export default function SearchPage() {
     }
   };
 
-  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -390,9 +381,7 @@ export default function SearchPage() {
       );
     }
     
-    if (isLoadingFilters) {
-      return <Spinner />;
-    }
+    if (isLoadingFilters) return <Spinner />;
     
     if (error && !listas.zonas.length) {
        return (
@@ -437,18 +426,40 @@ export default function SearchPage() {
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
-          <div className="w-full md:w-1/2 mt-2 md:mt-0">
-            <input
-              type="text"
-              name="searchText"
-              value={filters.searchText}
-              onChange={(e) => handleFilterChange('searchText', e.target.value)}
-              placeholder="Buscar por palabra clave (ej. quincho, polo)"
-              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            />
-          </div>
         </div>
         
+        {/* --- FILA 1: BÚSQUEDA POR TEXTO Y TIPO --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Palabra Clave</label>
+                <input
+                    type="text"
+                    name="searchText"
+                    value={filters.searchText}
+                    onChange={(e) => handleFilterChange('searchText', e.target.value)}
+                    placeholder="Ej. quincho, polo, lote 34"
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                />
+            </div>
+            <div>
+                <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Propiedad</label>
+                <select
+                    id="tipo" name="tipo"
+                    value={filters.tipo || ''}
+                    onChange={(e) => handleFilterChange('tipo', e.target.value)}
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                >
+                    <option value="">Cualquiera</option>
+                    <option value="casa">Casa</option>
+                    <option value="departamento">Departamento</option>
+                    <option value="lote">Lote</option>
+                    <option value="local">Local Comercial</option>
+                    <option value="deposito">Depósito</option>
+                </select>
+            </div>
+        </div>
+        
+        {/* --- FILA 2: BARRIOS (Solo si hay disponibles) --- */}
         {barrioOptions.length > 0 && (
           <div className="mb-4">
             <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -458,32 +469,17 @@ export default function SearchPage() {
               options={barrioOptions}
               value={selectedBarrios}
               onChange={handleMultiBarrioChange}
-              placeholder="Todos los barrios seleccionados, seleccionar uno o varios barrios para mejorar la búsqueda"
+              placeholder="Seleccionar barrios..."
               className="text-sm"
               isMulti
             />
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          
-          <div>
-            <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-            <select
-              id="tipo" name="tipo"
-              value={filters.tipo || ''}
-              onChange={(e) => handleFilterChange('tipo', e.target.value)}
-              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            >
-              <option value="">Cualquiera</option>
-              <option value="casa">Casa</option>
-              <option value="departamento">Departamento</option>
-              {filters.operacion === 'venta' && <option value="lote">Lote</option>}
-            </select>
-          </div>
-
-          {filters.tipo !== 'lote' && (
-            <div className='col-span-2 md:col-span-1'>
+        {/* --- FILA 3: CARACTERÍSTICAS Y PRECIO --- */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {/* Dormitorios */}
+            <div>
               <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
               <input
                 type="number" id="bedrooms" name="bedrooms" min="0"
@@ -492,20 +488,10 @@ export default function SearchPage() {
                 placeholder="Ej: 3"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
               />
-              <label className="flex items-center gap-1 cursor-pointer mt-1">
-                <input
-                  type="checkbox" name="bedrooms_or_more"
-                  checked={filters.bedrooms_or_more}
-                  onChange={() => handleCheckboxChange('bedrooms_or_more')}
-                  className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                />
-                <span className="text-xs text-gray-600">o más</span>
-              </label>
             </div>
-          )}
 
-          {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
-            <div className="col-span-2 md:col-span-1">
+            {/* Pax */}
+            <div>
               <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
               <input
                 type="number" id="pax" name="pax" min="0"
@@ -514,116 +500,104 @@ export default function SearchPage() {
                 placeholder="Ej: 6"
                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
               />
-              <label className="flex items-center gap-1 cursor-pointer mt-1">
-                <input
-                  type="checkbox" name="pax_or_more"
-                  checked={filters.pax_or_more}
-                  onChange={() => handleCheckboxChange('pax_or_more')}
-                  className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                />
-                <span className="text-xs text-gray-600">o más</span>
-              </label>
             </div>
-          )}
           
-          <div>
-            <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
-            <input 
-              type="number" id="minPrice" name="minPrice"
-              placeholder={pricePlaceholder[filters.operacion] || 'Ej: 1000'}
-              value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
-              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
-            <input 
-              type="number" id="maxPrice" name="maxPrice"
-              placeholder="Sin límite"
-              value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
-              className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-            />
-          </div>
-
-          {filters.operacion === 'alquiler_temporal' && (
-            <>
-              <div className="col-span-2">
-                <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
-                <select
-                  id="selectedPeriod" name="selectedPeriod"
-                  value={filters.selectedPeriod}
-                  onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
-                  disabled={showOtherDates}
-                  className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                >
-                  <option value="">Todas (Temporada 2026)</option>
-                  {PERIOD_OPTIONS_2026.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-span-2 flex items-end pb-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox" name="showOtherDates"
-                    checked={showOtherDates}
-                    onChange={() => handleCheckboxChange('showOtherDates')}
-                    className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                  />
-                  <span className="text-sm text-gray-700">Otras fechas (Fuera de temporada)</span>
-                </label>
-              </div>
-
-              {showOtherDates && (
-                <div className="col-span-2">
-                  <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">Rango de Fechas</label>
-                  <DatePicker
-                    id="dateRange"
-                    selectsRange={true}
-                    startDate={dateRange[0]}
-                    endDate={dateRange[1]}
-                    onChange={handleDateChange}
-                    locale="es"
-                    dateFormat="dd/MM/yyyy"
-                    placeholderText="Seleccione un rango"
-                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                    isClearable={true}
-                    minDate={new Date()}
-                    excludeDateIntervals={EXCLUDE_DATES}
-                  />
-                </div>
-              )}
-            </>
-          )}
-
-          {filters.tipo !== 'lote' && (
-            <div className="col-span-2 flex flex-row gap-4 pt-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox" name="pool"
-                  checked={filters.pool}
-                  onChange={() => handleCheckboxChange('pool')}
-                  className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+            {/* Precios */}
+            <div>
+                <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
+                <input 
+                type="number" id="minPrice" name="minPrice"
+                placeholder={pricePlaceholder[filters.operacion] || 'Ej: 1000'}
+                value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                 />
-                <span className="text-sm text-gray-700">Con Pileta</span>
-              </label>
-              
-              {filters.operacion !== 'venta' && (
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox" name="pets"
-                    checked={filters.pets}
-                    onChange={handleMascotasChange}
-                    className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-                  />
-                  <span className="text-sm text-gray-700">Acepta Mascotas</span>
-                </label>
-              )}
             </div>
-          )}
-
+            <div>
+                <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
+                <input 
+                type="number" id="maxPrice" name="maxPrice"
+                placeholder="Sin límite"
+                value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                />
+            </div>
         </div>
+
+        {/* --- FILA 4: FECHAS (Solo Alquiler Temporal) --- */}
+        {filters.operacion === 'alquiler_temporal' && (
+            <div className="mb-4 bg-white p-3 rounded border border-slate-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <div>
+                        <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
+                        <select
+                        id="selectedPeriod" name="selectedPeriod"
+                        value={filters.selectedPeriod}
+                        onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)}
+                        disabled={showOtherDates}
+                        className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm disabled:opacity-50"
+                        >
+                        <option value="">Todas (Temporada 2026)</option>
+                        {PERIOD_OPTIONS_2026.map(p => (
+                            <option key={p.value} value={p.value}>{p.label}</option>
+                        ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col justify-end h-full">
+                        <label className="flex items-center gap-2 cursor-pointer mb-2">
+                            <input
+                                type="checkbox" name="showOtherDates"
+                                checked={showOtherDates}
+                                onChange={() => handleShowOtherDates()}
+                                className="h-4 w-4 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                            />
+                            <span className="text-sm font-bold text-gray-700">Otras fechas (Fuera de temporada)</span>
+                        </label>
+                        
+                        {showOtherDates && (
+                            <DatePicker
+                                id="dateRange"
+                                selectsRange={true}
+                                startDate={dateRange[0]}
+                                endDate={dateRange[1]}
+                                onChange={handleDateChange}
+                                locale="es"
+                                dateFormat="dd/MM/yyyy"
+                                placeholderText="Seleccione rango de fechas"
+                                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                                isClearable={true}
+                                minDate={new Date()}
+                                excludeDateIntervals={EXCLUDE_DATES}
+                            />
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- FILA 5: EXTRAS (Pileta y Mascotas) --- */}
+        <div className="flex flex-row gap-6 pt-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+            <input
+                type="checkbox" name="pool"
+                checked={filters.pool}
+                onChange={() => handleCheckboxChange('pool')}
+                className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+            />
+            <span className="text-sm font-medium text-gray-700">Con Pileta</span>
+            </label>
+            
+            <label className="flex items-center gap-2 cursor-pointer">
+            <input
+                type="checkbox" name="pets"
+                checked={filters.pets}
+                onChange={() => handleCheckboxChange('pets')}
+                className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+            />
+            <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
+            </label>
+        </div>
+
       </div>
     );
   };

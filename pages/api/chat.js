@@ -6,19 +6,21 @@ import { searchProperties } from '@/lib/propertyService';
 export const maxDuration = 60;
 const model = openai('gpt-4o');
 
+// Herramienta para mostrar botón de contacto
 const mostrarContactoTool = tool({
-  description: 'Muestra el botón para contactar a un agente. Úsalo SIEMPRE al final si el usuario duda, si la búsqueda falla, o si pide hablar con un humano.',
+  description: 'Muestra el botón para contactar a un agente. Úsalo SIEMPRE si el usuario pide hablar con alguien, pregunta por una persona específica (Cecilia, Andrea, Marcela, Roxana), o si la consulta requiere atención humana.',
   parameters: z.object({ motivo: z.string().optional() }),
   execute: async ({ motivo }) => ({ showButton: true, motivo }),
 });
 
+// Herramienta de búsqueda
 const buscarPropiedadesTool = tool({
   description: 'Busca propiedades en la base de datos.',
   parameters: z.object({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
-    tipo: z.enum(['casa', 'departamento', 'lote']).optional(),
+    tipo: z.enum(['casa', 'departamento', 'lote', 'local', 'deposito']).optional(), // Agregados tipos comerciales
     pax: z.string().optional(),
     pax_or_more: z.boolean().optional(),
     pets: z.boolean().optional(),
@@ -27,7 +29,7 @@ const buscarPropiedadesTool = tool({
     minPrice: z.string().optional(),
     maxPrice: z.string().optional(),
     searchText: z.string().optional(),
-    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'), // REGLA: Max 3
+    limit: z.number().optional().describe('Cantidad a mostrar (Default 3).'),
     offset: z.number().optional(),
     selectedPeriod: z.enum([
       'Navidad', 'Año Nuevo', 'Año Nuevo con 1ra Enero',
@@ -39,10 +41,12 @@ const buscarPropiedadesTool = tool({
     try {
         console.log("🤖 MaCA Input:", filtros);
         
+        // Ajustes por defecto
         if (filtros.pax) filtros.pax_or_more = true;
-        if (!filtros.limit) filtros.limit = 3; // FORZAMOS EL LÍMITE A 3
+        if (!filtros.limit) filtros.limit = 3; // Regla de 3 miniaturas máx
         if (!filtros.offset) filtros.offset = 0;
 
+        // Limpieza de precio (Puntos y Comas)
         let originalMaxPrice = null;
         if (filtros.maxPrice) {
             const cleanPrice = filtros.maxPrice.replace(/[\.,kK$USD\s]/g, '');
@@ -56,7 +60,7 @@ const buscarPropiedadesTool = tool({
 
         let resultados = await searchProperties(filtros);
 
-        // CASO 1: Demasiados resultados (>10) y sin precio definido
+        // Caso: Muchos resultados (>10) y sin precio -> Pedir filtro
         if (resultados.count > 10 && !filtros.maxPrice && !filtros.minPrice && filtros.offset === 0) {
             return {
                 count: resultados.count,
@@ -65,7 +69,7 @@ const buscarPropiedadesTool = tool({
             };
         }
 
-        // CASO 2: Sin resultados exactos -> Búsqueda de Rescate (ignorando precio)
+        // Caso: Sin resultados por precio -> Búsqueda de Rescate
         if (resultados.count === 0 && originalMaxPrice) {
             let rescueFilters = {...filtros, maxPrice: null, offset: 0};
             let resRescue = await searchProperties(rescueFilters);
@@ -100,6 +104,7 @@ const buscarPropiedadesTool = tool({
   },
 });
 
+// Helper de mapeo
 function mapProperties(props) {
     return (props || []).map(p => {
         let displayPrice = "Consultar";
@@ -133,37 +138,33 @@ export default async function handler(req, res) {
       maxSteps: 5, 
       system: `Eres 'MaCA', la asistente experta de MCV Propiedades.
       
-      --- 👥 INFORMACIÓN DEL EQUIPO (SI PREGUNTAN) ---
-      * Maria Cecilia Vidal: Martillera Pública.
-      * Andrea Diaz: Equipo Costa Esmeralda (Recepción/Ventas).
-      * Marcela Cacace: Equipo GBA Sur.
-      * Roxana Caputo: Equipo GBA Sur.
-      (Si preguntan por ellas, muestra el botón de contacto).
+      --- 👥 NUESTRO EQUIPO (DATOS DE CONTACTO) ---
+      Si el usuario pregunta por alguien, da el dato y MUESTRA EL BOTÓN DE CONTACTO.
+      * Cecilia Vidal: Martillera Pública (Col. 1172). Cel: +5491165517385.
+      * Andrea Diaz: Especialista Costa Esmeralda. Cel: +5491123868006.
+      * Marcela Cacace: Especialista GBA Sur. Cel: +5491154113729.
+      * Roxana Caputo: Especialista GBA Sur. Cel: +5491140395111.
 
-      --- 🧠 BASE DE CONOCIMIENTO (REGLAS OBLIGATORIAS) ---
-      1. HORARIOS: Ingreso 16:00 hs | Salida 10:00 hs (Estricto). (JAMÁS DIGAS 15HS).
-      2. HONORARIOS: Alquiler Temporal: Inquilino NO paga. Venta: 3-4%.
-      3. LIMPIEZA: Obligatoria a cargo inquilino.
-      4. ROPA BLANCA: NO incluida. Hay alquiler externo para CONTINGENCIAS.
-      5. MASCOTAS: Se aceptan (Máx 3, NO cachorros).
-      6. DEPÓSITO: E-Cheq (Recomendado), Efectivo (ANTES de entrar) o Transferencia (gastos a cargo inquilino).
-
-      --- 🎯 PROTOCOLO DE BÚSQUEDA ---
-      1. FECHAS: Si dice "Enero", PREGUNTA QUINCENA. No asumas.
-      2. MASCOTAS: Si no lo dijo, PREGUNTA antes de buscar.
-
-      --- 🚫 REGLAS DE FORMATO (ANTIRROBOT) ---
-      1. **CERO ASTERISCOS:** Escribe texto plano. No uses **negritas**.
-      2. **CERO LISTAS DE TEXTO:** Si muestras fichas visuales (tool result), **TU BOCA SE CIERRA**.
-         NO repitas "1. Casa tal...". Solo di: "Te dejo arriba las opciones."
+      --- 📅 REGLAS DE FECHAS (CRÍTICO) ---
+      1. **CARNAVAL 2026:** Cae 16 y 17 de Febrero. Si piden "Carnaval", busca en **Febrero 1ra Quincena** (o Febrero completo).
+      2. **MESES:** Si dice "Enero" o "Febrero" a secas, **NO BUSQUES**. Pregunta la quincena.
       
+      --- 🧠 REGLAS DE NEGOCIO ---
+      1. **HORARIOS:** Check-in 16:00hs | Check-out 10:00hs.
+      2. **HONORARIOS:** - Alquiler Temporal: 0% para el inquilino.
+         - Venta: 3% a 4%.
+      3. **ROPA BLANCA:** NO incluida. Hay alquiler externo para CONTINGENCIAS.
+      4. **DEPÓSITO:** E-Cheq (Recomendado), Efectivo (ANTES de entrar), Transferencia (gastos a cargo inquilino).
+      5. **LOTES COMERCIALES:** Si piden alquiler de lote, busca sin restricciones de dormitorios.
+
+      --- 🚫 FORMATO VISUAL (ANTIRROBOT) ---
+      1. **CERO ASTERISCOS:** Escribe texto plano. No uses negritas (**).
+      2. **CERO LISTAS:** Si muestras fichas visuales, NO repitas la lista en texto.
+      3. **CIERRE:** Siempre di: "Acá te muestro [showing] de las [count] opciones encontradas." y ofrece contactar agente.
+
       --- 🚨 MANEJO DE RESULTADOS ---
-      * Si warning "price_ignored":
-        DILE: "No encontré nada por debajo de tu presupuesto. Lo más económico arranca en USD [minFoundPrice]. Te muestro [showing] opciones:"
-        CIERRE: "¿Querés que busquemos en otra fecha más económica?"
-      
-      * Si warning "too_many_results":
-        DILE: "Encontré [count] opciones. Para no marearte, ¿me decís tu presupuesto máximo aproximado?"
+      * Si warning "price_ignored": Avisa que no hay nada por ese precio, muestra lo más barato y sugiere cambiar fecha.
+      * Si warning "too_many_results": Pide presupuesto.
 
       --- 🔗 FUENTE ---
       SOLO si preguntan reglas/gastos:
