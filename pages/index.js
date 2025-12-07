@@ -9,9 +9,8 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-// import FloatingButton from '@/components/FloatingChatButton'; <--- ELIMINADO
 import WelcomeCarousel from '@/components/WelcomeCarousel';
-// import Footer from '@/components/Footer'; <--- ELIMINADO
+// Sin Footer ni FloatingButton
 import Swal from 'sweetalert2';
 
 registerLocale('es', es);
@@ -79,7 +78,6 @@ export default function SearchPage() {
   const [error, setError] = useState(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
-  // --- PLACEHOLDERS EXPANDIDOS ---
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
@@ -179,7 +177,6 @@ export default function SearchPage() {
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
       
-      // Limpieza al cambiar operación
       if (name === 'operacion') {
         newState = { 
             ...newState, 
@@ -193,7 +190,6 @@ export default function SearchPage() {
       
       if (name === 'zona') newState.barrios = []; 
       
-      // Lógica LOTE: Limpia campos irrelevantes
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, 
@@ -204,8 +200,9 @@ export default function SearchPage() {
     });
   };
 
+  // --- LOGIC: Handler de Checkbox + Popup Mascotas ---
   const handleCheckboxChange = (name) => {
-    // Popup Mascotas (Solo al activar)
+    // Si el usuario activa Mascotas, mostramos el aviso
     if (name === 'pets' && !filters.pets) {
         Swal.fire({
             title: 'Política de Mascotas 🐾',
@@ -370,8 +367,7 @@ export default function SearchPage() {
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
-        
-        {/* FILA 1: Palabra Clave + Tipo */}
+        {/* Fila 1 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Palabra Clave</label>
@@ -390,7 +386,7 @@ export default function SearchPage() {
             </div>
         </div>
 
-        {/* FILA 2: Barrios */}
+        {/* Fila 2 */}
         {barrioOptions.length > 0 && (
           <div className="mb-4">
             <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -398,7 +394,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* FILA 3: Características (Oculto si es Lote) */}
+        {/* Fila 3 */}
         {filters.tipo !== 'lote' && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div>
@@ -406,7 +402,7 @@ export default function SearchPage() {
                     <input type="number" value={filters.bedrooms} onChange={(e) => handleFilterChange('bedrooms', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad de Pasajeros</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad Pasajeros</label>
                     <input type="number" value={filters.pax} onChange={(e) => handleFilterChange('pax', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
@@ -420,7 +416,7 @@ export default function SearchPage() {
             </div>
         )}
 
-        {/* FILA 4: Fechas (Solo Alquiler Temporal) */}
+        {/* Fila 4 */}
         {filters.operacion === 'alquiler_temporal' && (
             <div className="mb-4 bg-white p-3 rounded border border-slate-100">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
@@ -444,23 +440,23 @@ export default function SearchPage() {
             </div>
         )}
 
-        {/* FILA 5: Extras (Oculto si es Lote) */}
-        {filters.tipo !== 'lote' && (
-            <div className="flex flex-row gap-6 pt-2">
+        {/* Fila 5 */}
+        <div className="flex flex-row gap-6 pt-2">
+            {filters.tipo !== 'lote' && (
                 <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" name="pool" checked={filters.pool} onChange={() => handleCheckboxChange('pool')} className="h-5 w-5" />
                     <span className="text-sm font-medium text-gray-700">Con Pileta</span>
                 </label>
-                
-                {/* Ocultar mascotas en Venta */}
-                {filters.operacion !== 'venta' && (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" name="pets" checked={filters.pets} onChange={handleMascotasChange} className="h-5 w-5" />
-                        <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
-                    </label>
-                )}
-            </div>
-        )}
+            )}
+            
+            {/* Ocultar mascotas en Venta */}
+            {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="pets" checked={filters.pets} onChange={() => handleCheckboxChange('pets')} className="h-5 w-5" />
+                    <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
+                </label>
+            )}
+        </div>
       </div>
     );
   };
@@ -512,7 +508,11 @@ export default function SearchPage() {
       <Head><title>Buscador Inteligente | MCV Propiedades</title></Head>
       <ContactModal isOpen={isModalOpen} onRequestClose={() => setIsModalOpen(false)} {...contactPayload} />
       <div ref={contentRef} className="max-w-7xl mx-auto px-4 pb-20">
-        <main>{renderFiltrosActivos()}{renderAsistente()}{renderMainContent()}</main>
+        <main>
+          {renderFiltrosActivos()}
+          {renderAsistente()} 
+          {renderMainContent()}
+        </main>
       </div>
     </div>
   );
