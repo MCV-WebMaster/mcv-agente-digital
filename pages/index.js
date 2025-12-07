@@ -9,9 +9,8 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
-import FloatingButton from '@/components/FloatingChatButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
-// import Footer from '@/components/Footer'; <--- ELIMINADO PARA EVITAR DOBLE PIE
+// Footer y FloatingButton eliminados para no duplicar en Iframe
 import Swal from 'sweetalert2';
 
 registerLocale('es', es);
@@ -79,6 +78,7 @@ export default function SearchPage() {
   const [error, setError] = useState(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
+  // --- TEXTOS COMPLETOS PARA PLACEHOLDERS ---
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
@@ -109,7 +109,6 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!filters.operacion) return;
-    
     async function loadFilters() {
       setIsLoadingFilters(true);
       setError(null);
@@ -125,7 +124,6 @@ export default function SearchPage() {
           setListas({ zonas: [], barrios: {} });
         }
       } catch (err) {
-        console.error("Error cargando listas de filtros:", err);
         setError(err.message);
       } finally {
         setIsLoadingFilters(false);
@@ -143,22 +141,16 @@ export default function SearchPage() {
     }
     setIsSearching(true);
     setError(null);
-    
     try {
       const payload = { 
           ...currentFilters, 
           bedrooms_or_more: currentFilters.bedrooms_or_more 
       };
-
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'La respuesta de la red no fue OK');
-      }
       const data = await response.json();
       if (data.status === 'OK') {
         setResults(data.results);
@@ -182,11 +174,9 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- Handlers ---
   const handleFilterChange = (name, value) => {
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
-      
       if (name === 'operacion') {
         newState = { 
             ...newState, 
@@ -197,13 +187,12 @@ export default function SearchPage() {
         setDateRange([null, null]);
         setShowOtherDates(false);
       }
-      
       if (name === 'zona') newState.barrios = []; 
       
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
-          bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
-          minMts: '', maxMts: '',
+          bedrooms: '', pax: '', pax_or_more: false, 
+          pets: false, pool: false
         };
       }
       return newState;
@@ -287,7 +276,7 @@ export default function SearchPage() {
   };
 
   const generateContactMessages = () => {
-    const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
+    const targetAgentNumber = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
     let whatsappMessage, adminEmailHtml;
     
     if (results.length > 0 && results.length <= 10) {
@@ -312,7 +301,7 @@ export default function SearchPage() {
   };
 
   const handleContactSingleProperty = (property) => {
-    const targetAgentNumber = getAgentNumber(filters.operacion, property.zona);
+    const targetAgentNumber = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
     const whatsappMessage = `Hola! Me interesa: ${property.title}\n${property.url}`;
     const adminEmailHtml = `<ul><li><strong>${property.title}</strong><br><a href="${property.url}">${property.url}</a></li></ul>`;
     setContactPayload({ 
@@ -325,15 +314,7 @@ export default function SearchPage() {
     });
     setIsModalOpen(true);
   };
-  
-  const getAgentNumber = (op, zona) => {
-    if (op === 'venta' && zona === 'Costa Esmeralda') {
-      return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
-    }
-    return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
-  };
 
-  // --- RENDER VISUAL ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -362,14 +343,6 @@ export default function SearchPage() {
     
     if (isLoadingFilters) return <Spinner />;
     
-    if (error && !listas.zonas.length) {
-       return (
-         <div className="text-center text-red-600 bg-red-100 p-4 rounded-lg">
-           <p className="font-bold">{error}</p>
-         </div>
-      );
-    }
-
     if (!filters.zona) {
       const buttonColors = ['bg-mcv-azul text-white', 'bg-mcv-verde text-white', 'bg-mcv-gris text-white'];
       return (
@@ -391,7 +364,6 @@ export default function SearchPage() {
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
-        
         {/* Fila 1 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
@@ -419,7 +391,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Fila 3: Ocultar si es Lote */}
+        {/* Fila 3 */}
         {filters.tipo !== 'lote' && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div>
@@ -431,22 +403,22 @@ export default function SearchPage() {
                     <input type="number" value={filters.pax} onChange={(e) => handleFilterChange('pax', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mín (USD)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Presupuesto Mínimo (USD)</label>
                     <input type="number" value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio Máx (USD)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Presupuesto Máximo (USD)</label>
                     <input type="number" value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
             </div>
         )}
 
-        {/* Fila 4: Fechas (Solo Alquiler Temporal) */}
+        {/* Fila 4 */}
         {filters.operacion === 'alquiler_temporal' && (
             <div className="mb-4 bg-white p-3 rounded border border-slate-100">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                     <div>
-                        <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                         <select name="selectedPeriod" value={filters.selectedPeriod} onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)} disabled={showOtherDates} className="w-full p-2 rounded-md border text-sm disabled:opacity-50">
                         <option value="">Todas (Temporada 2026)</option>
                         {PERIOD_OPTIONS_2026.map(p => (<option key={p.value} value={p.value}>{p.label}</option>))}
@@ -465,7 +437,7 @@ export default function SearchPage() {
             </div>
         )}
 
-        {/* Fila 5: Extras */}
+        {/* Fila 5 */}
         <div className="flex flex-row gap-6 pt-2">
             {filters.tipo !== 'lote' && (
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -474,10 +446,9 @@ export default function SearchPage() {
                 </label>
             )}
             
-            {/* Solo mostramos Mascotas si NO es venta y NO es lote */}
             {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
                 <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="pets" checked={filters.pets} onChange={() => handleCheckboxChange('pets')} className="h-5 w-5" />
+                    <input type="checkbox" name="pets" checked={filters.pets} onChange={handleMascotasChange} className="h-5 w-5" />
                     <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
                 </label>
             )}
@@ -488,7 +459,6 @@ export default function SearchPage() {
 
   const renderMainContent = () => {
     if (isSearching) return <Spinner />;
-    
     if (error) return <div className="text-red-600 font-bold p-4">Error: {error}</div>;
 
     if (!filters.operacion) {
@@ -536,9 +506,7 @@ export default function SearchPage() {
       <Head>
         <title>Buscador Inteligente | MCV Propiedades</title>
       </Head>
-
       <ContactModal isOpen={isModalOpen} onRequestClose={() => setIsModalOpen(false)} {...contactPayload} />
-      
       <div ref={contentRef} className="max-w-7xl mx-auto px-4 pb-20">
         <main>
           {renderFiltrosActivos()}
@@ -546,8 +514,6 @@ export default function SearchPage() {
           {renderMainContent()}
         </main>
       </div>
-
-      <FloatingButton /> 
     </div>
   );
 }
