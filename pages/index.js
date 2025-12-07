@@ -16,15 +16,16 @@ registerLocale('es', es);
 
 Modal.setAppElement('#__next');
 
+// --- CONSTANTES DE PERIODO (CONSOLIDADAS) ---
 const PERIOD_OPTIONS_2026 = [
-  { value: 'Diciembre 2da Quincena', label: 'Diciembre 2da Quincena (15/12 al 31/12)' },
+  // Valor es el que se usa en el MAPEO. Label es lo que ve el usuario.
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
-  { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
-  { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
-  { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
-  { value: 'Febrero 2da Quincena', label: 'Febrero 2da Quincena (18/02 al 01/03)' },
+  { value: 'Enero Combinado', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' },
+  { value: 'Enero 1ra Quincena', label: 'Ene 1er q (02/01 al 15/01)' },
+  { value: 'Enero 2da Quincena', label: 'Ene 2da q (16/01 al 31/01)' },
+  { value: 'Febrero 1ra Quincena', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
+  { value: 'Febrero 2da Quincena', label: 'Feb 2da q (18/02 al 01/03)' },
 ];
 
 const EXCLUDE_DATES = [
@@ -77,7 +78,6 @@ export default function SearchPage() {
   const [error, setError] = useState(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
-  // --- PLACEHOLDERS EXPANDIDOS ---
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
@@ -176,7 +176,6 @@ export default function SearchPage() {
   const handleFilterChange = (name, value) => {
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
-      
       if (name === 'operacion') {
         newState = { 
             ...newState, 
@@ -187,9 +186,7 @@ export default function SearchPage() {
         setDateRange([null, null]);
         setShowOtherDates(false);
       }
-      
       if (name === 'zona') newState.barrios = []; 
-      
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, 
