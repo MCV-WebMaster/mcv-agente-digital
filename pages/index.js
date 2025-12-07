@@ -10,7 +10,6 @@ import Select from 'react-select';
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
-// Sin Footer ni FloatingButton
 import Swal from 'sweetalert2';
 
 registerLocale('es', es);
@@ -78,6 +77,7 @@ export default function SearchPage() {
   const [error, setError] = useState(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
+  // --- PLACEHOLDERS EXPANDIDOS ---
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
@@ -200,10 +200,8 @@ export default function SearchPage() {
     });
   };
 
-  // --- LOGIC: Handler de Checkbox + Popup Mascotas ---
-  const handleCheckboxChange = (name) => {
-    // Si el usuario activa Mascotas, mostramos el aviso
-    if (name === 'pets' && !filters.pets) {
+  const handleMascotasChange = () => {
+    if (!filters.pets) {
         Swal.fire({
             title: 'Política de Mascotas 🐾',
             html: `
@@ -223,6 +221,10 @@ export default function SearchPage() {
             confirmButtonColor: '#d97706',
         });
     }
+    setFilters(prev => ({ ...prev, pets: !prev.pets }));
+  };
+
+  const handleCheckboxChange = (name) => {
     setFilters(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
@@ -367,6 +369,7 @@ export default function SearchPage() {
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
+        
         {/* Fila 1 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
@@ -402,7 +405,7 @@ export default function SearchPage() {
                     <input type="number" value={filters.bedrooms} onChange={(e) => handleFilterChange('bedrooms', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad Pasajeros</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad de Pasajeros</label>
                     <input type="number" value={filters.pax} onChange={(e) => handleFilterChange('pax', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
@@ -449,10 +452,9 @@ export default function SearchPage() {
                 </label>
             )}
             
-            {/* Ocultar mascotas en Venta */}
             {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
                 <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="pets" checked={filters.pets} onChange={() => handleCheckboxChange('pets')} className="h-5 w-5" />
+                    <input type="checkbox" name="pets" checked={filters.pets} onChange={handleMascotasChange} className="h-5 w-5" />
                     <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
                 </label>
             )}
