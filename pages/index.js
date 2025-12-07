@@ -9,8 +9,9 @@ import es from 'date-fns/locale/es';
 import Select from 'react-select'; 
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
+// import FloatingButton from '@/components/FloatingChatButton'; <--- ELIMINADO
 import WelcomeCarousel from '@/components/WelcomeCarousel';
-// Footer y FloatingButton eliminados para no duplicar en Iframe
+// import Footer from '@/components/Footer'; <--- ELIMINADO
 import Swal from 'sweetalert2';
 
 registerLocale('es', es);
@@ -78,7 +79,7 @@ export default function SearchPage() {
   const [error, setError] = useState(null);
   const [hasHydrated, setHasHydrated] = useState(false);
 
-  // --- TEXTOS COMPLETOS PARA PLACEHOLDERS ---
+  // --- PLACEHOLDERS EXPANDIDOS ---
   const pricePlaceholder = {
     venta: "Ej: 300000",
     alquiler_temporal: "Ej: 1500",
@@ -177,6 +178,8 @@ export default function SearchPage() {
   const handleFilterChange = (name, value) => {
     setFilters(prev => {
       let newState = { ...prev, [name]: value };
+      
+      // Limpieza al cambiar operación
       if (name === 'operacion') {
         newState = { 
             ...newState, 
@@ -187,8 +190,10 @@ export default function SearchPage() {
         setDateRange([null, null]);
         setShowOtherDates(false);
       }
+      
       if (name === 'zona') newState.barrios = []; 
       
+      // Lógica LOTE: Limpia campos irrelevantes
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, 
@@ -200,6 +205,7 @@ export default function SearchPage() {
   };
 
   const handleCheckboxChange = (name) => {
+    // Popup Mascotas (Solo al activar)
     if (name === 'pets' && !filters.pets) {
         Swal.fire({
             title: 'Política de Mascotas 🐾',
@@ -364,11 +370,12 @@ export default function SearchPage() {
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
-        {/* Fila 1 */}
+        
+        {/* FILA 1: Palabra Clave + Tipo */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Palabra Clave</label>
-                <input type="text" name="searchText" value={filters.searchText} onChange={(e) => handleFilterChange('searchText', e.target.value)} placeholder="Ej. quincho, polo" className="w-full p-2 rounded-md border text-sm" />
+                <input type="text" name="searchText" value={filters.searchText} onChange={(e) => handleFilterChange('searchText', e.target.value)} placeholder="Ej. quincho, polo, lote 34" className="w-full p-2 rounded-md border text-sm" />
             </div>
             <div>
                 <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Propiedad</label>
@@ -383,7 +390,7 @@ export default function SearchPage() {
             </div>
         </div>
 
-        {/* Fila 2 */}
+        {/* FILA 2: Barrios */}
         {barrioOptions.length > 0 && (
           <div className="mb-4">
             <label htmlFor="barrio" className="block text-sm font-medium text-gray-700 mb-1">Barrio(s)</label>
@@ -391,7 +398,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Fila 3 */}
+        {/* FILA 3: Características (Oculto si es Lote) */}
         {filters.tipo !== 'lote' && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div>
@@ -399,7 +406,7 @@ export default function SearchPage() {
                     <input type="number" value={filters.bedrooms} onChange={(e) => handleFilterChange('bedrooms', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad Pasajeros</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad de Pasajeros</label>
                     <input type="number" value={filters.pax} onChange={(e) => handleFilterChange('pax', e.target.value)} className="w-full p-2 rounded-md border text-sm" />
                 </div>
                 <div>
@@ -413,12 +420,12 @@ export default function SearchPage() {
             </div>
         )}
 
-        {/* Fila 4 */}
+        {/* FILA 4: Fechas (Solo Alquiler Temporal) */}
         {filters.operacion === 'alquiler_temporal' && (
             <div className="mb-4 bg-white p-3 rounded border border-slate-100">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
+                        <label htmlFor="selectedPeriod" className="block text-sm font-medium text-gray-700 mb-1">Temporada 2026</label>
                         <select name="selectedPeriod" value={filters.selectedPeriod} onChange={(e) => handleFilterChange('selectedPeriod', e.target.value)} disabled={showOtherDates} className="w-full p-2 rounded-md border text-sm disabled:opacity-50">
                         <option value="">Todas (Temporada 2026)</option>
                         {PERIOD_OPTIONS_2026.map(p => (<option key={p.value} value={p.value}>{p.label}</option>))}
@@ -437,22 +444,23 @@ export default function SearchPage() {
             </div>
         )}
 
-        {/* Fila 5 */}
-        <div className="flex flex-row gap-6 pt-2">
-            {filters.tipo !== 'lote' && (
+        {/* FILA 5: Extras (Oculto si es Lote) */}
+        {filters.tipo !== 'lote' && (
+            <div className="flex flex-row gap-6 pt-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" name="pool" checked={filters.pool} onChange={() => handleCheckboxChange('pool')} className="h-5 w-5" />
                     <span className="text-sm font-medium text-gray-700">Con Pileta</span>
                 </label>
-            )}
-            
-            {filters.operacion !== 'venta' && filters.tipo !== 'lote' && (
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="pets" checked={filters.pets} onChange={handleMascotasChange} className="h-5 w-5" />
-                    <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
-                </label>
-            )}
-        </div>
+                
+                {/* Ocultar mascotas en Venta */}
+                {filters.operacion !== 'venta' && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="pets" checked={filters.pets} onChange={handleMascotasChange} className="h-5 w-5" />
+                        <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
+                    </label>
+                )}
+            </div>
+        )}
       </div>
     );
   };
@@ -466,9 +474,7 @@ export default function SearchPage() {
             <div className="text-center p-10 text-gray-500">
                 <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
                 <p>Seleccione una operación arriba para comenzar.</p>
-                <div className="mt-8">
-                    <WelcomeCarousel />
-                </div>
+                <div className="mt-8"><WelcomeCarousel /></div>
             </div>
         );
     }
@@ -503,16 +509,10 @@ export default function SearchPage() {
 
   return (
     <div id="__next" className="min-h-screen relative">
-      <Head>
-        <title>Buscador Inteligente | MCV Propiedades</title>
-      </Head>
+      <Head><title>Buscador Inteligente | MCV Propiedades</title></Head>
       <ContactModal isOpen={isModalOpen} onRequestClose={() => setIsModalOpen(false)} {...contactPayload} />
       <div ref={contentRef} className="max-w-7xl mx-auto px-4 pb-20">
-        <main>
-          {renderFiltrosActivos()}
-          {renderAsistente()} 
-          {renderMainContent()}
-        </main>
+        <main>{renderFiltrosActivos()}{renderAsistente()}{renderMainContent()}</main>
       </div>
     </div>
   );
