@@ -20,7 +20,7 @@ const buscarPropiedadesTool = tool({
     operacion: z.enum(['venta', 'alquiler_temporal', 'alquiler_anual']).optional(),
     zona: z.enum(['GBA Sur', 'Costa Esmeralda', 'Arelauquen (BRC)']).optional(),
     barrios: z.array(z.string()).optional(),
-    tipo: z.enum(['casa', 'departamento', 'lote', 'local', 'deposito']).optional(), // Agregados tipos comerciales
+    tipo: z.enum(['casa', 'departamento', 'lote', 'local', 'deposito']).optional(), 
     pax: z.string().optional(),
     pax_or_more: z.boolean().optional(),
     pets: z.boolean().optional(),

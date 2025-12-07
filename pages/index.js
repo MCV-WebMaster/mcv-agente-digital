@@ -12,7 +12,7 @@ import ContactModal from '@/components/ContactModal';
 import FloatingButton from '@/components/FloatingChatButton';
 import WelcomeCarousel from '@/components/WelcomeCarousel';
 import Footer from '@/components/Footer';
-import Swal from 'sweetalert2'; // Importamos SweetAlert
+import Swal from 'sweetalert2'; // <--- 1. IMPORT AGREGADO
 
 registerLocale('es', es);
 
@@ -25,7 +25,7 @@ const PERIOD_OPTIONS_2026 = [
   { value: 'Año Nuevo con 1ra Enero', label: 'Año Nuevo c/1ra Enero (30/12 al 15/01)' },
   { value: 'Enero 1ra Quincena', label: 'Enero 1ra Quincena (02/01 al 15/01)' },
   { value: 'Enero 2da Quincena', label: 'Enero 2da Quincena (16/01 al 31/01)' },
-  { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' }, // Incluye Carnaval (16/17 Feb)
+  { value: 'Febrero 1ra Quincena', label: 'Febrero 1ra Quincena (01/02 al 17/02)' },
   { value: 'Febrero 2da Quincena', label: 'Febrero 2da Quincena (18/02 al 01/03)' },
 ];
 
@@ -85,6 +85,7 @@ export default function SearchPage() {
     alquiler_anual: "Ej: 1000"
   };
 
+  // --- 0. LEER URL AL INICIO (Deep Linking) ---
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
       const { query } = router;
@@ -107,6 +108,7 @@ export default function SearchPage() {
     }
   }, [router.isReady, hasHydrated, router]);
 
+  // --- 1. CARGAR LISTAS DE FILTROS ---
   useEffect(() => {
     if (!filters.operacion) return;
     
@@ -134,6 +136,7 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
+  // --- 2. LÓGICA DE BÚSQUEDA "EN VIVO" ---
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) {
       setResults([]); 
@@ -182,10 +185,10 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // --- LOGIC: Handler de Checkbox + Popup Mascotas (SweetAlert) ---
-  const handleCheckboxChange = (name) => {
-    // Si el usuario activa Mascotas, mostramos el aviso
-    if (name === 'pets' && !filters.pets) {
+  // --- LOGIC E: Handler de Mascotas con SweetAlert (MEJORADO) ---
+  const handleMascotasChange = () => {
+    // Si se activa el filtro, mostramos alerta
+    if (!filters.pets) {
         Swal.fire({
             title: 'Política de Mascotas 🐾',
             html: `
@@ -207,14 +210,10 @@ export default function SearchPage() {
             focusConfirm: false,
         });
     }
-
-    setFilters(prev => ({
-      ...prev,
-      [name]: !prev[name],
-      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
-    }));
+    handleCheckboxChange('pets');
   };
 
+  // --- Handlers de Contacto ---
   const generateContactMessages = () => {
     const targetAgentNumber = getAgentNumber(filters.operacion, filters.zona);
     let whatsappMessage, adminEmailHtml;
@@ -258,6 +257,7 @@ export default function SearchPage() {
     setIsModalOpen(true);
   };
   
+  // --- LOGIC F: Routing WhatsApp a Agente 2 para Venta/Costa ---
   const getAgentNumber = (op, zona) => {
     if (op === 'venta' && zona === 'Costa Esmeralda') {
       return process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER;
@@ -265,6 +265,7 @@ export default function SearchPage() {
     return process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
   };
 
+  // --- Handlers de Filtros ---
   const handleFilterChange = (name, value) => {
     const defaultState = {
       operacion: null, zona: null, tipo: null, barrios: [],
@@ -282,12 +283,15 @@ export default function SearchPage() {
         setShowOtherDates(false);
       }
       if (name === 'zona') newState.barrios = []; 
+      
+      // Limpieza Lote:
       if (name === 'tipo' && value === 'lote') {
         newState = { ...newState,
           bedrooms: '', pax: '', pax_or_more: false, pets: false, pool: false,
           minMts: '', maxMts: '',
         };
       }
+      
       if (name === 'selectedPeriod') {
         newState.startDate = null;
         newState.endDate = null;
@@ -315,6 +319,14 @@ export default function SearchPage() {
     } else {
       setFilters(prev => ({ ...prev, startDate: null, endDate: null }));
     }
+  };
+
+  const handleCheckboxChange = (name) => {
+    setFilters(prev => ({
+      ...prev,
+      [name]: !prev[name],
+      ...(name === 'bedrooms_or_more' && { bedrooms_or_more: !prev.bedrooms_or_more }),
+    }));
   };
   
   const handleShowOtherDates = () => {
@@ -349,6 +361,7 @@ export default function SearchPage() {
     }
   };
 
+  // --- RENDERIZADO DEL ASISTENTE ---
   const renderFiltrosActivos = () => (
     <div className="flex flex-wrap gap-2 items-center min-h-[34px]">
       {filters.operacion && <ActiveFilterTag label={`${filters.operacion.replace('_', ' ')}`} onRemove={() => removeFilter('operacion')} />}
@@ -381,7 +394,9 @@ export default function SearchPage() {
       );
     }
     
-    if (isLoadingFilters) return <Spinner />;
+    if (isLoadingFilters) {
+      return <Spinner />;
+    }
     
     if (error && !listas.zonas.length) {
        return (
@@ -424,9 +439,6 @@ export default function SearchPage() {
 
     return (
       <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-mcv-gris">Afiná tu búsqueda:</h2>
-        </div>
         
         {/* --- FILA 1: BÚSQUEDA POR TEXTO Y TIPO --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -452,9 +464,7 @@ export default function SearchPage() {
                     <option value="">Cualquiera</option>
                     <option value="casa">Casa</option>
                     <option value="departamento">Departamento</option>
-                    <option value="lote">Lote</option>
-                    <option value="local">Local Comercial</option>
-                    <option value="deposito">Depósito</option>
+                    {filters.operacion === 'venta' && <option value="lote">Lote</option>}
                 </select>
             </div>
         </div>
@@ -469,7 +479,7 @@ export default function SearchPage() {
               options={barrioOptions}
               value={selectedBarrios}
               onChange={handleMultiBarrioChange}
-              placeholder="Seleccionar barrios..."
+              placeholder="Todos los barrios seleccionados, seleccionar uno o varios barrios para mejorar la búsqueda"
               className="text-sm"
               isMulti
             />
@@ -477,51 +487,78 @@ export default function SearchPage() {
         )}
 
         {/* --- FILA 3: CARACTERÍSTICAS Y PRECIO --- */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            {/* Dormitorios */}
-            <div>
-              <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dorm. (mín)</label>
-              <input
-                type="number" id="bedrooms" name="bedrooms" min="0"
-                value={filters.bedrooms}
-                onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
-                placeholder="Ej: 3"
-                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-              />
-            </div>
+        {/* Se oculta si es Lote */}
+        {filters.tipo !== 'lote' && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                
+                {/* Dormitorios (Ocultar si es Venta Lote - aunque ya se filtra por tipo arriba) */}
+                <div>
+                    <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">Dormitorios Mínimos</label>
+                    <input
+                        type="number" id="bedrooms" name="bedrooms" min="0"
+                        value={filters.bedrooms}
+                        onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
+                        placeholder="Ej: 3"
+                        className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                    />
+                    <label className="flex items-center gap-1 cursor-pointer mt-1">
+                        <input
+                        type="checkbox" name="bedrooms_or_more"
+                        checked={filters.bedrooms_or_more}
+                        onChange={() => handleCheckboxChange('bedrooms_or_more')}
+                        className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                        />
+                        <span className="text-xs text-gray-600">o más</span>
+                    </label>
+                </div>
 
-            {/* Pax */}
-            <div>
-              <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Personas</label>
-              <input
-                type="number" id="pax" name="pax" min="0"
-                value={filters.pax}
-                onChange={(e) => handleFilterChange('pax', e.target.value)}
-                placeholder="Ej: 6"
-                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-              />
+                {/* Pax (Ocultar en Venta) */}
+                {filters.operacion !== 'venta' ? (
+                    <div>
+                        <label htmlFor="pax" className="block text-sm font-medium text-gray-700 mb-1">Cantidad Pasajeros</label>
+                        <input
+                            type="number" id="pax" name="pax" min="0"
+                            value={filters.pax}
+                            onChange={(e) => handleFilterChange('pax', e.target.value)}
+                            placeholder="Ej: 6"
+                            className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                        />
+                        <label className="flex items-center gap-1 cursor-pointer mt-1">
+                            <input
+                            type="checkbox" name="pax_or_more"
+                            checked={filters.pax_or_more}
+                            onChange={() => handleCheckboxChange('pax_or_more')}
+                            className="h-3 w-3 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                            />
+                            <span className="text-xs text-gray-600">o más</span>
+                        </label>
+                    </div>
+                ) : (
+                    // Espacio vacío para mantener grilla si es venta
+                    <div></div>
+                )}
+            
+                {/* Precios */}
+                <div>
+                    <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio Mín (USD)</label>
+                    <input 
+                    type="number" id="minPrice" name="minPrice"
+                    placeholder={pricePlaceholder[filters.operacion] || 'Ej: 1000'}
+                    value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio Máx (USD)</label>
+                    <input 
+                    type="number" id="maxPrice" name="maxPrice"
+                    placeholder="Sin límite"
+                    value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+                    className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
+                    />
+                </div>
             </div>
-          
-            {/* Precios */}
-            <div>
-                <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (mín)</label>
-                <input 
-                type="number" id="minPrice" name="minPrice"
-                placeholder={pricePlaceholder[filters.operacion] || 'Ej: 1000'}
-                value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)}
-                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                />
-            </div>
-            <div>
-                <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 mb-1">Precio (máx)</label>
-                <input 
-                type="number" id="maxPrice" name="maxPrice"
-                placeholder="Sin límite"
-                value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
-                className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
-                />
-            </div>
-        </div>
+        )}
 
         {/* --- FILA 4: FECHAS (Solo Alquiler Temporal) --- */}
         {filters.operacion === 'alquiler_temporal' && (
@@ -563,7 +600,7 @@ export default function SearchPage() {
                                 onChange={handleDateChange}
                                 locale="es"
                                 dateFormat="dd/MM/yyyy"
-                                placeholderText="Seleccione rango de fechas"
+                                placeholderText="Seleccione un rango"
                                 className="w-full p-2 rounded-md bg-white border border-gray-300 text-sm"
                                 isClearable={true}
                                 minDate={new Date()}
@@ -576,27 +613,32 @@ export default function SearchPage() {
         )}
 
         {/* --- FILA 5: EXTRAS (Pileta y Mascotas) --- */}
-        <div className="flex flex-row gap-6 pt-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-            <input
-                type="checkbox" name="pool"
-                checked={filters.pool}
-                onChange={() => handleCheckboxChange('pool')}
-                className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-            />
-            <span className="text-sm font-medium text-gray-700">Con Pileta</span>
-            </label>
-            
-            <label className="flex items-center gap-2 cursor-pointer">
-            <input
-                type="checkbox" name="pets"
-                checked={filters.pets}
-                onChange={() => handleCheckboxChange('pets')}
-                className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
-            />
-            <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
-            </label>
-        </div>
+        {filters.tipo !== 'lote' && (
+            <div className="flex flex-row gap-6 pt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox" name="pool"
+                  checked={filters.pool}
+                  onChange={() => handleCheckboxChange('pool')}
+                  className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                />
+                <span className="text-sm font-medium text-gray-700">Con Pileta</span>
+              </label>
+              
+              {/* Ocultar mascotas en Venta */}
+              {filters.operacion !== 'venta' && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox" name="pets"
+                    checked={filters.pets}
+                    onChange={handleMascotasChange}
+                    className="h-5 w-5 rounded border-gray-300 text-mcv-azul focus:ring-mcv-azul"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Acepta Mascotas</span>
+                </label>
+              )}
+            </div>
+        )}
 
       </div>
     );
@@ -620,6 +662,11 @@ export default function SearchPage() {
             <div className="text-center text-gray-500 p-10 mt-8">
                 <h2 className="text-xl font-bold mb-4">Bienvenido al Buscador</h2>
                 <p>Seleccione una operación arriba para comenzar.</p>
+                
+                {/* --- MANTENEMOS EL CAROUSEL DE BIENVENIDA --- */}
+                <div className="mt-8">
+                    <WelcomeCarousel />
+                </div>
             </div>
         );
     }
@@ -678,8 +725,11 @@ export default function SearchPage() {
 
   // --- Render Principal (JSX) ---
   return (
-    <div id="__next" className="min-h-screen">
-      
+    <div id="__next" className="min-h-screen relative">
+      <Head>
+        <title>Buscador Inteligente | MCV Propiedades</title>
+      </Head>
+
       <ContactModal
         isOpen={isModalOpen}
         onRequestClose={() => setIsModalOpen(false)}
@@ -690,17 +740,16 @@ export default function SearchPage() {
         currentFilters={contactPayload.currentFilters}
       />
       
-      <div ref={contentRef} className="max-w-7xl mx-auto">
-        
+      <div ref={contentRef} className="max-w-7xl mx-auto px-4 pb-20">
         <main>
-          
           {renderFiltrosActivos()}
           {renderAsistente()} 
           {renderMainContent()}
-          
         </main>
-
       </div>
+
+      <Footer />
+      <FloatingButton /> 
     </div>
   );
 }
