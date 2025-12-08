@@ -1,18 +1,18 @@
 /** @type {import('tailwindcss').Config} */
-const config = {
+module.exports = {
   content: [
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
       colors: {
-        'mcv-azul': '#388BC2', // C75 M40 Y10 K0
-        'mcv-verde': '#2F6C00', // C75 M0 Y100 K40
-        'mcv-gris': '#595959', // K65
+        'mcv-azul': '#4A90E2',  // Azul corporativo
+        'mcv-verde': '#417505', // Verde corporativo
+        'mcv-gris': '#595959',  // Gris corporativo
+        'mcv-celeste': '#00AEEF' // Celeste complementario
       },
     },
   },
   plugins: [],
-};
-export default config;
+}

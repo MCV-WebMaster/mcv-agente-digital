@@ -3,16 +3,14 @@ import { FaBed, FaBath, FaRulerCombined, FaMapMarkerAlt, FaWhatsapp } from 'reac
 
 export default function PropertyCard({ property, onContact }) {
   
-  // 1. RECUPERACIÓN DE IMAGEN (Prioridad a thumbnail del JSON)
-  const imageUrl = property.thumbnail || property.thumbnail_url || '/images/placeholder-house.jpg';
+  // LÓGICA DE IMAGEN CORREGIDA: Usar 'thumbnail' primero
+  const imageUrl = property.thumbnail || property.thumbnail_url || 'https://via.placeholder.com/400x300?text=Sin+Imagen';
   
-  // 2. FORMATEO DE PRECIO ROBUSTO
   const formatPrice = (price) => {
     if (!price || price === 0) return 'Consultar';
     return price.toLocaleString('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   };
 
-  // Usamos el precio del periodo si existe, sino el precio general
   const displayPrice = property.final_display_price 
     ? formatPrice(property.final_display_price) 
     : formatPrice(property.price);
@@ -22,50 +20,46 @@ export default function PropertyCard({ property, onContact }) {
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 border border-gray-200 flex flex-col h-full group">
       
-      {/* SECCIÓN DE IMAGEN */}
+      {/* IMAGEN */}
       <div className="relative h-64 w-full bg-gray-200 overflow-hidden">
         <img 
           src={imageUrl} 
           alt={property.title} 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/400x300?text=MCV+Propiedades'; }}
+          onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/400x300?text=Sin+Imagen'; }}
         />
         
-        {/* Badge de Operación */}
+        {/* Badge Operación */}
         <div className="absolute top-3 right-3 bg-mcv-azul text-white px-3 py-1 rounded-full font-bold text-xs uppercase shadow-md tracking-wider">
           {property.operacion || 'Propiedad'}
         </div>
 
-        {/* Badge de Periodo (Solo si se filtró por fecha) */}
+        {/* Badge Periodo Encontrado */}
         {displayPeriodName && (
-           <div className="absolute bottom-3 left-3 bg-green-600 text-white px-3 py-1 rounded-md text-xs font-bold shadow-lg flex items-center gap-1">
+           <div className="absolute bottom-0 left-0 w-full bg-mcv-verde/90 text-white px-3 py-2 text-xs font-bold shadow-lg flex items-center justify-center">
              📅 {displayPeriodName}
            </div>
         )}
       </div>
 
-      {/* SECCIÓN DE CONTENIDO */}
+      {/* CONTENIDO */}
       <div className="p-5 flex flex-col flex-grow">
         
-        {/* Ubicación */}
         <div className="flex items-center text-gray-500 text-xs font-bold uppercase tracking-wide mb-2">
           <FaMapMarkerAlt className="mr-1 text-mcv-celeste" />
           {property.zona} <span className="mx-1">•</span> {property.barrio}
         </div>
 
-        {/* Título */}
         <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2 leading-snug min-h-[3rem]">
           <a href={property.url} target="_blank" rel="noopener noreferrer" className="hover:text-mcv-azul transition-colors">
             {property.title}
           </a>
         </h3>
 
-        {/* Precio */}
-        <div className="text-2xl font-extrabold text-blue-700 mb-4">
+        <div className="text-2xl font-extrabold text-mcv-azul mb-4">
           {displayPrice}
         </div>
 
-        {/* Iconos de características */}
         <div className="flex justify-between items-center text-sm text-gray-600 border-t border-gray-100 pt-4 mt-auto">
             <div className="flex gap-4">
                 {property.bedrooms > 0 && (
@@ -89,7 +83,6 @@ export default function PropertyCard({ property, onContact }) {
             </div>
         </div>
 
-        {/* Botones de Acción */}
         <div className="grid grid-cols-2 gap-3 mt-5">
            <a 
              href={property.url} 
@@ -101,7 +94,7 @@ export default function PropertyCard({ property, onContact }) {
            </a>
            <button 
              onClick={() => onContact(property)}
-             className="flex items-center justify-center w-full py-2.5 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition-colors shadow-sm text-sm"
+             className="flex items-center justify-center w-full py-2.5 bg-mcv-verde text-white font-bold rounded-lg hover:bg-opacity-90 transition-colors shadow-sm text-sm"
            >
              <FaWhatsapp className="mr-2 text-lg" /> Consultar
            </button>

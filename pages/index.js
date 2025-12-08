@@ -9,14 +9,13 @@ import Select from 'react-select';
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 import Swal from 'sweetalert2';
-import { FaWhatsapp } from 'react-icons/fa'; // <--- ESTO FALTABA
+import { FaWhatsapp } from 'react-icons/fa'; // Importación corregida
 import 'react-datepicker/dist/react-datepicker.css';
 
-// Configuración inicial
 registerLocale('es', es);
 Modal.setAppElement('#__next');
 
-// --- OPCIONES DE TEMPORADA SINCRONIZADAS ---
+// CLAVES SEGURAS PARA EL BUSCADOR
 const PERIOD_OPTIONS_2026 = [
   { value: 'ID_NAV', label: '🎄 Navidad (19/12 al 26/12)' },
   { value: 'ID_AN', label: '🥂 Año Nuevo (26/12 al 02/01)' },
@@ -31,7 +30,6 @@ export default function SearchPage() {
   const router = useRouter(); 
   const contentRef = useRef(null);
   
-  // Estado Principal
   const [filters, setFilters] = useState({
     operacion: null, 
     zona: null, 
@@ -61,7 +59,6 @@ export default function SearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
 
-  // Inicialización
   useEffect(() => {
     if (router.isReady && !hasHydrated) {
       const { query } = router;
@@ -70,7 +67,6 @@ export default function SearchPage() {
     }
   }, [router.isReady, hasHydrated]);
 
-  // Cargar Barrios/Zonas dinámicamente
   useEffect(() => {
     if (!filters.operacion) return;
     async function loadFilters() {
@@ -85,7 +81,6 @@ export default function SearchPage() {
     loadFilters();
   }, [filters.operacion]);
 
-  // Búsqueda de Propiedades
   const fetchProperties = useCallback(async (currentFilters) => {
     if (!currentFilters.operacion) { setResults([]); setPropertyCount(0); return; }
     setIsSearching(true);
@@ -104,7 +99,6 @@ export default function SearchPage() {
     finally { setIsSearching(false); }
   }, []);
 
-  // Debounce para búsqueda
   useEffect(() => {
     if (hasHydrated) {
         const handler = setTimeout(() => fetchProperties(filters), 500);
@@ -112,7 +106,6 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // Manejadores
   const handleFilterChange = (name, value) => {
     setFilters(prev => {
       const next = { ...prev, [name]: value };
@@ -123,7 +116,6 @@ export default function SearchPage() {
     });
   };
 
-  // Popup de Mascotas Detallado (RECUPERADO)
   const handleMascotasChange = () => {
     if (!filters.pets) {
         Swal.fire({
@@ -187,9 +179,6 @@ export default function SearchPage() {
       else handleFilterChange(key, key === 'pets' || key === 'pool' ? false : '');
   };
 
-  // --- COMPONENTES UI RECUPERADOS ---
-
-  // Tags de Filtros Activos
   const ActiveFilters = () => {
     const active = [];
     if (filters.zona) active.push({ key: 'zona', label: filters.zona });
@@ -207,99 +196,80 @@ export default function SearchPage() {
     return (
         <div className="flex flex-wrap gap-2 mb-6">
             {active.map(f => (
-                <button 
-                    key={f.key} 
-                    onClick={() => removeFilter(f.key)}
-                    className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold hover:bg-blue-200 transition"
-                >
+                <button key={f.key} onClick={() => removeFilter(f.key)} className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold hover:bg-blue-200 transition">
                     {f.label} ✕
                 </button>
             ))}
-            <button onClick={() => window.location.reload()} className="text-sm text-gray-500 hover:text-red-500 underline ml-2">
-                Limpiar todo
-            </button>
+            <button onClick={() => window.location.reload()} className="text-sm text-gray-500 hover:text-red-500 underline ml-2">Limpiar todo</button>
         </div>
     );
   };
 
-  // Renderizador Principal del Asistente
   const renderAsistente = () => {
-    if (isLoadingFilters) return <div className="p-10"><Spinner /></div>;
+    if (isLoadingFilters) return <div className="p-20 flex justify-center"><Spinner /></div>;
 
-    // 1. Selección de Operación
     if (!filters.operacion) {
         return (
-            <div className="text-center p-8 animate-fade-in">
-                <h1 className="text-4xl font-extrabold text-gray-800 mb-8">¿Qué estás buscando hoy?</h1>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-                    <button onClick={() => handleFilterChange('operacion', 'venta')} className="group p-8 bg-white border-2 border-gray-100 rounded-2xl shadow-xl hover:border-mcv-azul hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">🏠</div>
-                        <span className="text-2xl font-bold text-gray-700 group-hover:text-mcv-azul block">Comprar</span>
-                        <span className="text-sm text-gray-400 mt-2 block">Encuentra tu nuevo hogar</span>
+            <div className="text-center py-10 animate-fade-in">
+                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-700 mb-10 tracking-tight">¿Qué estás buscando hoy?</h1>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto px-4">
+                    <button onClick={() => handleFilterChange('operacion', 'venta')} className="group relative overflow-hidden bg-mcv-verde text-white p-8 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left">
+                        <div className="relative z-10"><h3 className="text-2xl font-bold mb-1">Comprar</h3><p className="text-sm font-medium opacity-90">Encuentra tu nuevo hogar</p></div>
                     </button>
-                    <button onClick={() => handleFilterChange('operacion', 'alquiler_temporal')} className="group p-8 bg-white border-2 border-gray-100 rounded-2xl shadow-xl hover:border-mcv-verde hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">🏖️</div>
-                        <span className="text-2xl font-bold text-gray-700 group-hover:text-mcv-verde block">Alquiler Temporal</span>
-                        <span className="text-sm text-gray-400 mt-2 block">Vacaciones y escapadas</span>
+                    <button onClick={() => handleFilterChange('operacion', 'alquiler_temporal')} className="group relative overflow-hidden bg-mcv-azul text-white p-8 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left">
+                        <div className="relative z-10"><h3 className="text-2xl font-bold mb-1">Alquiler Temporal</h3><p className="text-sm font-medium opacity-90">Vacaciones y escapadas</p></div>
                     </button>
-                    <button onClick={() => handleFilterChange('operacion', 'alquiler_anual')} className="group p-8 bg-white border-2 border-gray-100 rounded-2xl shadow-xl hover:border-mcv-gris hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">📅</div>
-                        <span className="text-2xl font-bold text-gray-700 group-hover:text-mcv-gris block">Alquiler Anual</span>
-                        <span className="text-sm text-gray-400 mt-2 block">Contratos largos</span>
+                    <button onClick={() => handleFilterChange('operacion', 'alquiler_anual')} className="group relative overflow-hidden bg-mcv-gris text-white p-8 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left">
+                        <div className="relative z-10"><h3 className="text-2xl font-bold mb-1">Alquiler Anual</h3><p className="text-sm font-medium opacity-90">Contratos largos</p></div>
                     </button>
                 </div>
             </div>
         );
     }
     
-    // 2. Selección de Zona (RECUPERADO CON ESTILOS)
     if (!filters.zona) {
         return (
-            <div className="text-center p-8 animate-fade-in">
-                <button onClick={() => setFilters(prev => ({...prev, operacion: null}))} className="mb-6 text-gray-500 hover:text-gray-800 font-medium">← Volver</button>
-                <h2 className="text-3xl font-bold mb-8 text-gray-800">¿En qué zona?</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-                    <button onClick={() => handleFilterChange('zona', 'GBA Sur')} className="group p-8 bg-white border-2 border-gray-100 rounded-2xl shadow-lg hover:shadow-2xl hover:border-blue-500 transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">🏡</div>
-                        <span className="text-2xl font-bold text-gray-700 group-hover:text-blue-600 block">GBA Sur</span>
-                        <span className="text-sm text-gray-400 mt-2 block">Hudson, Berazategui...</span>
+            <div className="text-center py-10 animate-fade-in">
+                <div className="flex justify-start max-w-6xl mx-auto px-4 mb-8">
+                    <button onClick={() => setFilters(prev => ({...prev, operacion: null}))} className="text-sm font-semibold text-gray-500 hover:text-mcv-azul transition-colors flex items-center gap-2">← Volver al inicio</button>
+                </div>
+                <h2 className="text-3xl font-extrabold text-gray-700 mb-10 tracking-tight">¿En qué zona?</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto px-4">
+                    <button onClick={() => handleFilterChange('zona', 'GBA Sur')} className="group bg-white border-l-8 border-mcv-verde p-8 rounded-r-lg shadow-sm hover:shadow-md transition-all duration-300 text-left border-y border-r border-gray-100 hover:border-gray-200">
+                        <h3 className="text-xl font-bold text-gray-800 mb-1 group-hover:text-mcv-verde transition-colors">GBA Sur</h3><p className="text-sm text-gray-500">Hudson, Berazategui y alrededores</p>
                     </button>
-                    <button onClick={() => handleFilterChange('zona', 'Costa Esmeralda')} className="group p-8 bg-white border-2 border-gray-100 rounded-2xl shadow-lg hover:shadow-2xl hover:border-green-500 transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">🌊</div>
-                        <span className="text-2xl font-bold text-gray-700 group-hover:text-green-600 block">Costa Esmeralda</span>
-                        <span className="text-sm text-gray-400 mt-2 block">Barrios privados y playa</span>
+                    <button onClick={() => handleFilterChange('zona', 'Costa Esmeralda')} className="group bg-white border-l-8 border-mcv-azul p-8 rounded-r-lg shadow-sm hover:shadow-md transition-all duration-300 text-left border-y border-r border-gray-100 hover:border-gray-200">
+                        <h3 className="text-xl font-bold text-gray-800 mb-1 group-hover:text-mcv-azul transition-colors">Costa Esmeralda</h3><p className="text-sm text-gray-500">Barrios privados y playa</p>
                     </button>
-                    <button onClick={() => handleFilterChange('zona', 'Arelauquen (BRC)')} className="group p-8 bg-white border-2 border-gray-100 rounded-2xl shadow-lg hover:shadow-2xl hover:border-cyan-600 transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">🏔️</div>
-                        <span className="text-2xl font-bold text-gray-700 group-hover:text-cyan-700 block">Bariloche</span>
-                        <span className="text-sm text-gray-400 mt-2 block">Arelauquen Golf & Country</span>
+                    <button onClick={() => handleFilterChange('zona', 'Arelauquen (BRC)')} className="group bg-white border-l-8 border-mcv-gris p-8 rounded-r-lg shadow-sm hover:shadow-md transition-all duration-300 text-left border-y border-r border-gray-100 hover:border-gray-200">
+                        <h3 className="text-xl font-bold text-gray-800 mb-1 group-hover:text-mcv-gris transition-colors">Bariloche</h3><p className="text-sm text-gray-500">Arelauquen Golf & Country</p>
                     </button>
                 </div>
             </div>
         );
     }
 
-    // 3. Panel de Filtros Completo
     const barrioOpts = (listas.barrios[filters.zona] || []).map(b => ({ value: b, label: b }));
     const selectedBarrios = filters.barrios.map(b => ({ value: b, label: b }));
 
     return (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-lg mb-8 animate-fade-in relative">
-            <button onClick={() => setFilters(prev => ({...prev, zona: null}))} className="absolute top-4 right-4 text-xs text-gray-400 hover:text-gray-800 border px-2 py-1 rounded">Cambiar Zona</button>
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-fade-in relative">
+             <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+                <h3 className="font-bold text-gray-700 text-lg">Filtros de búsqueda</h3>
+                <button onClick={() => setFilters(prev => ({...prev, zona: null}))} className="text-xs font-semibold text-mcv-azul hover:underline">Cambiar Zona</button>
+            </div>
             
             <ActiveFilters />
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                
-                {/* Columna Izquierda: Búsqueda y Tipo */}
                 <div className="md:col-span-3 space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Palabra Clave</label>
-                        <input type="text" value={filters.searchText} onChange={e => handleFilterChange('searchText', e.target.value)} placeholder="Ej: Golf, Laguna" className="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Palabra Clave</label>
+                        <input type="text" value={filters.searchText} onChange={e => handleFilterChange('searchText', e.target.value)} placeholder="Ej: Golf, Laguna" className="w-full p-2.5 rounded border border-gray-300 focus:border-mcv-azul focus:ring-1 focus:ring-mcv-azul outline-none text-sm transition-all" />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo de Propiedad</label>
-                        <select value={filters.tipo || ''} onChange={e => handleFilterChange('tipo', e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 bg-white text-sm">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Tipo de Propiedad</label>
+                        <select value={filters.tipo || ''} onChange={e => handleFilterChange('tipo', e.target.value)} className="w-full p-2.5 rounded border border-gray-300 bg-white text-sm focus:border-mcv-azul outline-none">
                             <option value="">Todos los tipos</option>
                             <option value="casa">Casa</option>
                             <option value="departamento">Departamento</option>
@@ -308,66 +278,61 @@ export default function SearchPage() {
                     </div>
                 </div>
 
-                {/* Columna Central: Filtros Específicos */}
                 <div className="md:col-span-6 space-y-4">
-                    {/* Barrios */}
                     {barrioOpts.length > 0 && (
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Barrio(s)</label>
-                            <Select options={barrioOpts} value={selectedBarrios} onChange={opts => handleFilterChange('barrios', opts ? opts.map(o => o.value) : [])} isMulti placeholder="Seleccionar..." className="text-sm" />
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Barrio(s)</label>
+                            <Select options={barrioOpts} value={selectedBarrios} onChange={opts => handleFilterChange('barrios', opts ? opts.map(o => o.value) : [])} isMulti placeholder="Seleccionar..." className="text-sm" styles={{ control: (base) => ({...base, borderColor: '#d1d5db', '&:hover': { borderColor: '#4A90E2' } }), option: (base, state) => ({...base, backgroundColor: state.isSelected ? '#4A90E2' : state.isFocused ? '#eff6ff' : 'white'}) }} />
                         </div>
                     )}
                     
-                    {/* Alquiler Temporal: Fechas */}
                     {filters.operacion === 'alquiler_temporal' && (
-                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                        <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
                             <div className="flex items-center justify-between mb-2">
-                                <label className="text-sm font-bold text-blue-800">📅 Temporada 2026</label>
+                                <label className="text-sm font-bold text-mcv-azul uppercase tracking-wider">Temporada 2026</label>
                                 <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={showOtherDates} onChange={() => { setShowOtherDates(!showOtherDates); setFilters(prev => ({...prev, selectedPeriod: ''})); }} className="h-4 w-4 text-blue-600 rounded" />
-                                    <span className="text-xs font-semibold text-blue-600">Otras fechas</span>
+                                    <input type="checkbox" checked={showOtherDates} onChange={() => { setShowOtherDates(!showOtherDates); setFilters(prev => ({...prev, selectedPeriod: ''})); }} className="h-4 w-4 text-mcv-azul rounded focus:ring-mcv-azul" />
+                                    <span className="text-xs font-semibold text-gray-600">Otras fechas</span>
                                 </label>
                             </div>
                             
                             {!showOtherDates ? (
-                                <select value={filters.selectedPeriod} onChange={e => handleFilterChange('selectedPeriod', e.target.value)} className="w-full p-3 rounded-lg border border-blue-200 bg-white font-medium text-gray-700 focus:ring-2 focus:ring-blue-400 outline-none">
+                                <select value={filters.selectedPeriod} onChange={e => handleFilterChange('selectedPeriod', e.target.value)} className="w-full p-2.5 rounded border border-blue-200 bg-white font-medium text-gray-700 focus:border-mcv-azul outline-none text-sm">
                                     <option value="">Seleccionar quincena...</option>
                                     {PERIOD_OPTIONS_2026.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                                 </select>
                             ) : (
-                                <DatePicker selectsRange startDate={dateRange[0]} endDate={dateRange[1]} onChange={handleDateChange} placeholderText="Seleccionar desde - hasta" className="w-full p-3 rounded-lg border border-blue-200" isClearable dateFormat="dd/MM/yyyy" />
+                                <DatePicker selectsRange startDate={dateRange[0]} endDate={dateRange[1]} onChange={handleDateChange} placeholderText="Seleccionar desde - hasta" className="w-full p-2.5 rounded border border-blue-200 text-sm" isClearable dateFormat="dd/MM/yyyy" />
                             )}
                         </div>
                     )}
 
-                    {/* Filtros Numéricos (Dorm, Precio) */}
                     {filters.tipo !== 'lote' && (
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-xs font-bold text-gray-400 mb-1">PRECIO MÍN</label><input type="number" placeholder="USD" value={filters.minPrice} onChange={e => handleFilterChange('minPrice', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
-                            <div><label className="block text-xs font-bold text-gray-400 mb-1">PRECIO MÁX</label><input type="number" placeholder="USD" value={filters.maxPrice} onChange={e => handleFilterChange('maxPrice', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
+                            <div><label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Precio Mín</label><input type="number" placeholder="USD" value={filters.minPrice} onChange={e => handleFilterChange('minPrice', e.target.value)} className="w-full p-2 border border-gray-300 rounded text-sm focus:border-mcv-gris outline-none" /></div>
+                            <div><label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Precio Máx</label><input type="number" placeholder="USD" value={filters.maxPrice} onChange={e => handleFilterChange('maxPrice', e.target.value)} className="w-full p-2 border border-gray-300 rounded text-sm focus:border-mcv-gris outline-none" /></div>
                         </div>
                     )}
                 </div>
 
-                {/* Columna Derecha: Extras */}
                 <div className="md:col-span-3 flex flex-col gap-3 justify-start">
-                    <label className="block text-xs font-bold text-gray-500 uppercase">Adicionales</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Adicionales</label>
                     {filters.tipo !== 'lote' && (
                         <>
-                            <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${filters.pool ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
-                                <input type="checkbox" checked={filters.pool} onChange={() => setFilters(prev => ({...prev, pool: !prev.pool}))} className="h-5 w-5 rounded text-blue-600" />
+                            <label className={`flex items-center gap-3 p-3 rounded border cursor-pointer transition-all ${filters.pool ? 'bg-blue-50 border-mcv-azul text-mcv-azul' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                                <input type="checkbox" checked={filters.pool} onChange={() => setFilters(prev => ({...prev, pool: !prev.pool}))} className="h-4 w-4 rounded text-mcv-azul focus:ring-mcv-azul" />
                                 <span className="font-semibold text-sm">Con Pileta</span>
                             </label>
                             
                             {filters.operacion !== 'venta' && (
-                                <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${filters.pets ? 'bg-orange-100 border-orange-300 text-orange-800' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
-                                    <input type="checkbox" checked={filters.pets} onChange={handleMascotasChange} className="h-5 w-5 rounded text-orange-500" />
+                                <label className={`flex items-center gap-3 p-3 rounded border cursor-pointer transition-all ${filters.pets ? 'bg-green-50 border-mcv-verde text-mcv-verde' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                                    <input type="checkbox" checked={filters.pets} onChange={handleMascotasChange} className="h-4 w-4 rounded text-mcv-verde focus:ring-mcv-verde" />
                                     <span className="font-semibold text-sm">Mascotas</span>
                                 </label>
                             )}
                             <div className="mt-2">
-                                <label className="block text-xs font-bold text-gray-400 mb-1">DORMITORIOS</label>
-                                <input type="number" min="1" max="10" value={filters.bedrooms} onChange={e => handleFilterChange('bedrooms', e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="Mínimo" />
+                                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Dormitorios</label>
+                                <input type="number" min="1" max="10" value={filters.bedrooms} onChange={e => handleFilterChange('bedrooms', e.target.value)} className="w-full p-2 border border-gray-300 rounded text-sm focus:border-mcv-gris outline-none" placeholder="Mínimo" />
                             </div>
                         </>
                     )}
@@ -377,7 +342,6 @@ export default function SearchPage() {
     );
   };
 
-  // Botón Contacto Global
   const generateContactAction = () => {
       const msg = results.length > 10 
         ? `Hola! Vi que hay ${propertyCount} propiedades para mi búsqueda en la web.` 
@@ -392,7 +356,6 @@ export default function SearchPage() {
         <Head><title>Buscador MCV Propiedades</title></Head>
         <ContactModal isOpen={isModalOpen} onRequestClose={() => setIsModalOpen(false)} {...contactPayload} />
         
-        {/* Header Simple */}
         <div className="bg-white shadow-sm py-4 mb-8">
             <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
                 <div className="text-2xl font-black text-gray-800 tracking-tight">MCV<span className="text-mcv-azul">PROPIEDADES</span></div>
@@ -403,13 +366,12 @@ export default function SearchPage() {
         <div ref={contentRef} className="max-w-6xl mx-auto px-4 pb-20">
             {renderAsistente()}
             
-            {/* Resultados */}
             {isSearching ? <div className="py-20"><Spinner /></div> : (
                 results.length > 0 ? (
                     <>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-gray-800">Encontramos {propertyCount} propiedades</h3>
-                            <select value={filters.sortBy} onChange={(e) => handleFilterChange('sortBy', e.target.value)} className="p-2 border rounded text-sm bg-white">
+                            <select value={filters.sortBy} onChange={(e) => handleFilterChange('sortBy', e.target.value)} className="p-2 border rounded text-sm bg-white focus:border-mcv-azul outline-none">
                                 <option value="default">Relevancia</option>
                                 <option value="price_asc">Precio: Menor a Mayor</option>
                                 <option value="price_desc">Precio: Mayor a Menor</option>
@@ -419,7 +381,7 @@ export default function SearchPage() {
                             {results.map(p => <PropertyCard key={p.property_id} property={p} filters={filters} onContact={handleContact} />)}
                         </div>
                         <div className="flex justify-center mt-12">
-                            <button onClick={generateContactAction} className="px-8 py-4 bg-green-600 text-white font-bold rounded-full shadow-xl hover:bg-green-700 transform hover:scale-105 transition-all flex items-center gap-2">
+                            <button onClick={generateContactAction} className="px-8 py-4 bg-mcv-verde text-white font-bold rounded-full shadow-xl hover:bg-green-700 transform hover:scale-105 transition-all flex items-center gap-2">
                                 <FaWhatsapp className="text-2xl" /> Consultar por este listado
                             </button>
                         </div>
@@ -427,7 +389,7 @@ export default function SearchPage() {
                 ) : ( 
                     filters.operacion && !isLoadingFilters && (
                         <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-200">
-                            <div className="text-6xl mb-4">🏠❓</div>
+                            <div className="text-6xl mb-4 grayscale opacity-50">🏠</div>
                             <h3 className="text-2xl font-bold text-gray-800 mb-2">No encontramos propiedades exactas</h3>
                             <p className="text-gray-500 mb-6">Intenta ampliar tu búsqueda o cambiar los filtros.</p>
                             <button onClick={() => setFilters(prev => ({...prev, barrios: [], minPrice: '', maxPrice: '', selectedPeriod: ''}))} className="text-mcv-azul font-bold hover:underline">Limpiar filtros</button>
