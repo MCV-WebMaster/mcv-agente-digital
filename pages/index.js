@@ -15,11 +15,11 @@ import Swal from 'sweetalert2';
 registerLocale('es', es);
 Modal.setAppElement('#__next');
 
-// ESTAS KEYS DEBEN COINCIDIR CON `PERIOD_KEYWORDS` EN EL SERVICE
+// LAS KEYS DE ESTE ARRAY DEBEN COINCIDIR CON DB_PERIODS_EXACT
 const PERIOD_OPTIONS_2026 = [
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  { value: 'Año Nuevo Combinado', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' },
+  { value: 'Año Nuevo Combinado', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' }, // LA CLAVE DEL ÉXITO
   { value: 'Enero 1ra', label: 'Ene 1er q (02/01 al 15/01)' },
   { value: 'Enero 2da', label: 'Ene 2da q (16/01 al 31/01)' },
   { value: 'Febrero 1ra', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
