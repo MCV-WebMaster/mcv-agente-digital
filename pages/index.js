@@ -15,15 +15,15 @@ import Swal from 'sweetalert2';
 registerLocale('es', es);
 Modal.setAppElement('#__next');
 
-// LAS KEYS DE ESTE ARRAY DEBEN COINCIDIR CON DB_PERIODS_EXACT
+// --- CLAVES LÓGICAS QUE COINCIDEN CON EL DICCIONARIO DEL SERVICIO ---
 const PERIOD_OPTIONS_2026 = [
-  { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
-  { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  { value: 'Año Nuevo Combinado', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' }, // LA CLAVE DEL ÉXITO
-  { value: 'Enero 1ra', label: 'Ene 1er q (02/01 al 15/01)' },
-  { value: 'Enero 2da', label: 'Ene 2da q (16/01 al 31/01)' },
-  { value: 'Febrero 1ra', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
-  { value: 'Febrero 2da', label: 'Feb 2da q (18/02 al 01/03)' },
+  { value: 'ID_NAV', label: 'Navidad (19/12 al 26/12)' },
+  { value: 'ID_AN', label: 'Año Nuevo (26/12 al 02/01)' },
+  { value: 'ID_COMBINED', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' }, // LA CLAVE PARA EL FIX
+  { value: 'ID_ENE1', label: 'Ene 1er q (02/01 al 15/01)' },
+  { value: 'ID_ENE2', label: 'Ene 2da q (16/01 al 31/01)' },
+  { value: 'ID_FEB1', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
+  { value: 'ID_FEB2', label: 'Feb 2da q (18/02 al 01/03)' },
 ];
 
 const EXCLUDE_DATES = [{ start: new Date('2025-12-19'), end: new Date('2026-03-01') }];
@@ -134,6 +134,8 @@ export default function SearchPage() {
   const handleMultiBarrio = (opts) => setFilters(prev => ({ ...prev, barrios: opts ? opts.map(o => o.value) : [] }));
 
   const renderAsistente = () => {
+    if (isLoadingFilters) return <Spinner />;
+
     if (!filters.operacion) {
         return (
             <div className="text-center p-8">
