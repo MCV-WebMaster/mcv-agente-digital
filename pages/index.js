@@ -15,7 +15,7 @@ import Swal from 'sweetalert2';
 registerLocale('es', es);
 Modal.setAppElement('#__next');
 
-// CLAVES EXACTAS PARA EL FILTRO SQL
+// ESTAS KEYS DEBEN COINCIDIR CON `PERIOD_KEYWORDS` EN EL SERVICE
 const PERIOD_OPTIONS_2026 = [
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
