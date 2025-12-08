@@ -9,13 +9,13 @@ import Select from 'react-select';
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 import Swal from 'sweetalert2';
-import { FaWhatsapp } from 'react-icons/fa'; // Importación corregida
+import { FaWhatsapp } from 'react-icons/fa'; 
 import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('es', es);
 Modal.setAppElement('#__next');
 
-// CLAVES SEGURAS PARA EL BUSCADOR
+// MISMAS CLAVES QUE EN EL SERVICIO
 const PERIOD_OPTIONS_2026 = [
   { value: 'ID_NAV', label: '🎄 Navidad (19/12 al 26/12)' },
   { value: 'ID_AN', label: '🥂 Año Nuevo (26/12 al 02/01)' },
@@ -31,21 +31,10 @@ export default function SearchPage() {
   const contentRef = useRef(null);
   
   const [filters, setFilters] = useState({
-    operacion: null, 
-    zona: null, 
-    tipo: null, 
-    barrios: [], 
-    pax: '', 
-    pets: false, 
-    pool: false, 
-    bedrooms: '', 
-    minPrice: '', 
-    maxPrice: '',
-    startDate: null, 
-    endDate: null, 
-    selectedPeriod: '', 
-    sortBy: 'default', 
-    searchText: '',
+    operacion: null, zona: null, tipo: null, barrios: [], 
+    pax: '', pets: false, pool: false, bedrooms: '', 
+    minPrice: '', maxPrice: '', startDate: null, endDate: null, 
+    selectedPeriod: '', sortBy: 'default', searchText: '',
   });
 
   const [dateRange, setDateRange] = useState([null, null]);
@@ -162,13 +151,7 @@ export default function SearchPage() {
       const agent = (filters.operacion === 'venta' && prop.zona === 'Costa Esmeralda') 
         ? process.env.NEXT_PUBLIC_WHATSAPP_AGENT2_NUMBER 
         : process.env.NEXT_PUBLIC_WHATSAPP_AGENT_NUMBER;
-      
-      setContactPayload({ 
-        whatsappMessage: `Hola! Me interesa esta propiedad: ${prop.title}\n${prop.url}`, 
-        adminEmailHtml: `<ul><li>${prop.title}</li></ul>`, 
-        propertyCount: 1, 
-        targetAgentNumber: agent 
-      });
+      setContactPayload({ whatsappMessage: `Hola! Me interesa esta propiedad: ${prop.title}\n${prop.url}`, adminEmailHtml: `<ul><li>${prop.title}</li></ul>`, propertyCount: 1, targetAgentNumber: agent });
       setIsModalOpen(true);
   };
 
@@ -190,9 +173,7 @@ export default function SearchPage() {
     }
     if (filters.pets) active.push({ key: 'pets', label: 'Mascotas' });
     if (filters.pool) active.push({ key: 'pool', label: 'Pileta' });
-    
     if (active.length === 0) return null;
-
     return (
         <div className="flex flex-wrap gap-2 mb-6">
             {active.map(f => (
