@@ -15,15 +15,15 @@ import Swal from 'sweetalert2';
 registerLocale('es', es);
 Modal.setAppElement('#__next');
 
-// CLAVES DEBEN COINCIDIR CON `PERIOD_DNA` en propertyService.js
+// LAS CLAVES (VALUE) DEBEN SER IDÉNTICAS A LAS DE propertyService.js
 const PERIOD_OPTIONS_2026 = [
   { value: 'Navidad', label: 'Navidad (19/12 al 26/12)' },
   { value: 'Año Nuevo', label: 'Año Nuevo (26/12 al 02/01)' },
-  { value: 'Año Nuevo Combinado', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' },
-  { value: 'Enero 1ra Quincena', label: 'Ene 1er q (02/01 al 15/01)' },
-  { value: 'Enero 2da Quincena', label: 'Ene 2da q (16/01 al 31/01)' },
-  { value: 'Febrero 1ra Quincena', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
-  { value: 'Febrero 2da Quincena', label: 'Feb 2da q (18/02 al 01/03)' },
+  { value: 'Año Nuevo Combinado', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' }, // <-- CLAVE IMPORTANTE
+  { value: 'Enero 1ra', label: 'Ene 1er q (02/01 al 15/01)' },
+  { value: 'Enero 2da', label: 'Ene 2da q (16/01 al 31/01)' },
+  { value: 'Febrero 1ra', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
+  { value: 'Febrero 2da', label: 'Feb 2da q (18/02 al 01/03)' },
 ];
 
 const EXCLUDE_DATES = [{ start: new Date('2025-12-19'), end: new Date('2026-03-01') }];
@@ -100,7 +100,6 @@ export default function SearchPage() {
     }
   }, [filters, fetchProperties, hasHydrated]);
 
-  // Handlers
   const handleFilterChange = (name, value) => {
     setFilters(prev => {
       const next = { ...prev, [name]: value };
@@ -134,7 +133,6 @@ export default function SearchPage() {
 
   const handleMultiBarrio = (opts) => setFilters(prev => ({ ...prev, barrios: opts ? opts.map(o => o.value) : [] }));
 
-  // Renderers
   const renderAsistente = () => {
     if (!filters.operacion) {
         return (
@@ -167,16 +165,12 @@ export default function SearchPage() {
 
     return (
         <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
-            {/* FILA 1 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div><label className="block text-sm font-bold text-gray-700 mb-2">Palabra Clave</label><input type="text" value={filters.searchText} onChange={e => handleFilterChange('searchText', e.target.value)} placeholder="Ej: Quincho, Polo" className="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500" /></div>
                 <div><label className="block text-sm font-bold text-gray-700 mb-2">Tipo de Propiedad</label><select value={filters.tipo || ''} onChange={e => handleFilterChange('tipo', e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 bg-white"><option value="">Cualquiera</option><option value="casa">Casa</option><option value="departamento">Departamento</option><option value="lote">Lote</option><option value="local">Local Comercial</option><option value="deposito">Depósito</option></select></div>
             </div>
-            
-            {/* FILA 2 */}
             {barrioOpts.length > 0 && <div className="mb-6"><label className="block text-sm font-bold text-gray-700 mb-2">Barrio(s)</label><Select options={barrioOpts} value={selectedBarrios} onChange={handleMultiBarrio} isMulti placeholder="Seleccionar barrios..." className="text-base" /></div>}
             
-            {/* FILA 3 */}
             {filters.tipo !== 'lote' && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     {filters.operacion !== 'venta' && <><div><label className="block text-xs font-bold text-gray-500 mb-1">DORMITORIOS MÍN.</label><input type="number" value={filters.bedrooms} onChange={e => handleFilterChange('bedrooms', e.target.value)} className="w-full p-2 border rounded" /></div><div><label className="block text-xs font-bold text-gray-500 mb-1">CANT. PASAJEROS</label><input type="number" value={filters.pax} onChange={e => handleFilterChange('pax', e.target.value)} className="w-full p-2 border rounded" /></div></>}
@@ -185,7 +179,6 @@ export default function SearchPage() {
                 </div>
             )}
 
-            {/* FILA 4 */}
             {filters.operacion === 'alquiler_temporal' && (
                 <div className="mb-6 bg-white p-4 rounded-lg border border-gray-200">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -196,7 +189,6 @@ export default function SearchPage() {
                 </div>
             )}
 
-            {/* FILA 5 */}
             {filters.tipo !== 'lote' && (
                 <div className="flex gap-6">
                     <label className="flex items-center gap-2 cursor-pointer bg-white px-4 py-2 rounded border hover:bg-gray-50"><input type="checkbox" checked={filters.pool} onChange={() => setFilters(prev => ({...prev, pool: !prev.pool}))} className="h-5 w-5 text-blue-600" /><span className="font-medium">Con Pileta</span></label>
