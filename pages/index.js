@@ -9,6 +9,7 @@ import Select from 'react-select';
 import Modal from 'react-modal';
 import ContactModal from '@/components/ContactModal';
 import Swal from 'sweetalert2';
+import { FaWhatsapp } from 'react-icons/fa'; // <--- ESTO FALTABA
 import 'react-datepicker/dist/react-datepicker.css';
 
 // Configuración inicial
