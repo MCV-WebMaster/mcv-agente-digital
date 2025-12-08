@@ -1,208 +1,101 @@
-import Link from 'next/link';
-import { FaWhatsapp } from 'react-icons/fa';
+// components/PropertyCard.js
+import React from 'react';
+import { FaBed, FaBath, FaRulerCombined, FaMapMarkerAlt, FaCamera, FaWhatsapp } from 'react-icons/fa';
 
-function formatPrice(value, currency = 'USD') {
-  if (!value || isNaN(Number(value))) {
-    return null;
-  }
-  const priceNum = Number(value);
-  return new Intl.NumberFormat(currency === 'ARS' ? 'es-AR' : 'en-US', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(priceNum);
-}
-
-function getDaysBetween(startDate, endDate) {
-  if (!startDate || !endDate) return 0;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-}
-
-const SEASON_START_DATE = '2025-12-19';
-const SEASON_END_DATE = '2026-03-01';
-
-// ¡NUEVO! Recibimos 'onContact'
-export default function PropertyCard({ property, filters, onContact }) {
-  const {
-    slug, title, url, thumbnail_url,
-    price, es_property_price_ars, min_rental_price,
-    found_period_price, found_period_duration,
-    pax, acepta_mascota, tiene_piscina, piscina_detalle,
-    barrio, zona, bedrooms, mts_cubiertos
-  } = property;
-
-  const imageUrl = thumbnail_url && thumbnail_url.endsWith('.pdf') 
-    ? "/logo_mcv_rectangular.png"
-    : thumbnail_url;
-
-  const ventaPrice = formatPrice(price, 'USD');
-  const alquilerAnualPrice = formatPrice(es_property_price_ars, 'ARS');
-  let alquilerTempDisplay;
-  let leyendaFecha = null;
-
-  const isTemporal = property.category_ids.includes(197) || property.category_ids.includes(196);
+export default function PropertyCard({ property, onContact }) {
+  // 1. LÓGICA DE IMAGEN A PRUEBA DE FALLOS
+  // El JSON muestra 'thumbnail', pero por las dudas chequeamos ambos.
+  const imageUrl = property.thumbnail || property.thumbnail_url || '/images/placeholder-house.jpg';
   
-  if (isTemporal) {
-    const userSelectedDates = filters.startDate && filters.endDate;
-    const userSelectedPeriod = filters.selectedPeriod;
-    const isOffSeason = userSelectedDates && (filters.endDate < SEASON_START_DATE || filters.startDate > SEASON_END_DATE);
-    
-    if (userSelectedPeriod) {
-        alquilerTempDisplay = found_period_price ? (
-          <div>
-            <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(found_period_price, 'USD')}</h4>
-            <p className="text-xs text-gray-500">{filters.selectedPeriod}</p>
-          </div>
-        ) : (
-          <div>
-            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-            <p className="text-xs text-gray-500">{filters.selectedPeriod}</p>
-          </div>
-        );
-    } else if (userSelectedDates && isOffSeason) {
-      alquilerTempDisplay = (
-        <div>
-          <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-          <p className="text-xs text-gray-500">Disponibilidad</p> 
-        </div>
-      );
-    } else if (userSelectedDates && !isOffSeason) {
-       alquilerTempDisplay = (
-         <div>
-            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-            <p className="text-xs text-gray-500">en fecha selcc.</p>
-        </div>
-      );      
-      
-      if (found_period_price) {
-        const userDuration = getDaysBetween(filters.startDate, filters.endDate);
-        if (userDuration < found_period_duration) {
-          leyendaFecha = "Preguntar por disponibilidad de fecha";
-        }
-      }
-      
-    } else {
-      alquilerTempDisplay = min_rental_price ? (
-        <div>
-          <h4 className="text-xl font-bold text-mcv-verde">{formatPrice(min_rental_price, 'USD')}</h4>
-          <p className="text-xs text-gray-500">Alquiler desde</p>
-        </div>
-      ) : (
-        <div>
-            <h4 className="text-lg font-bold text-mcv-verde">Consultar</h4>
-            <p className="text-xs text-gray-500">Disponibilidad</p>
-        </div>
-      );
-    }
-  }
-  
+  // Formateo de precio seguro
+  const formatPrice = (price) => {
+    if (!price) return 'Consultar';
+    return price.toLocaleString('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  };
+
+  // Detectar si hay precio de periodo específico encontrado por el buscador
+  const displayPrice = property.found_period_price 
+    ? formatPrice(property.found_period_price) 
+    : formatPrice(property.price);
+
+  const displayPeriodName = property.found_period_name || '';
+
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden shadow-lg bg-white transition-transform duration-300 hover:shadow-xl flex flex-col justify-between">
-      
-      <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 border border-gray-200 flex flex-col h-full">
+      {/* IMAGEN */}
+      <div className="relative h-64 w-full bg-gray-200">
         <img 
-          src={imageUrl || '/logo_mcv_rectangular.png'}
-          alt={title} 
-          className="w-full h-48 object-cover bg-gray-100"
-          onError={(e) => { e.target.onerror = null; e.target.src='/logo_mcv_rectangular.png'; }}
+          src={imageUrl} 
+          alt={property.title} 
+          className="w-full h-full object-cover"
+          onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/400x300?text=No+Imagen'; }}
         />
-      </a>
-
-      <div className="p-4 flex-grow">
-        
-        <div className="flex justify-between items-start mb-2 min-h-[50px]">
-          <div className="flex-1 pr-2">
-            {(ventaPrice || alquilerAnualPrice) ? (
-              <>
-                {ventaPrice && (
-                  <div>
-                    <h4 className="text-xl font-bold text-mcv-verde">{ventaPrice}</h4>
-                    <p className="text-xs text-gray-500">Venta</p>
-                  </div>
-                )}
-                {alquilerAnualPrice && (
-                  <div>
-                    <h4 className="text-xl font-bold text-mcv-verde">{alquilerAnualPrice}</h4>
-                    <p className="text-xs text-gray-500">Alquiler Anual</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              !isTemporal && <div className="min-h-[40px]"></div>
-            )}
-          </div>
-          
-          {isTemporal && (
-            <div className="flex-1 pl-2 border-l border-gray-200">
-              {alquilerTempDisplay}
-            </div>
-          )}
+        <div className="absolute top-0 right-0 bg-mcv-azul text-white px-3 py-1 m-2 rounded-md font-bold text-sm">
+          {property.operacion || 'Venta / Alquiler'}
         </div>
-        
-        {leyendaFecha && (
-            <p className="text-xs text-red-600 font-bold mb-2">
-                {leyendaFecha}
-            </p>
+        {displayPeriodName && (
+           <div className="absolute bottom-0 left-0 bg-green-600 text-white px-2 py-1 m-2 rounded text-xs font-bold shadow">
+             🗓 {displayPeriodName}
+           </div>
         )}
-        
-        <h3 className="text-lg font-bold text-mcv-azul mb-2 h-14 overflow-hidden">
-          <a href={url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-            {title}
+      </div>
+
+      {/* CONTENIDO */}
+      <div className="p-4 flex flex-col flex-grow">
+        <div className="flex items-center text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">
+          <FaMapMarkerAlt className="mr-1" />
+          {property.zona} &bull; {property.barrio}
+        </div>
+
+        <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 leading-tight">
+          <a href={property.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+            {property.title}
           </a>
         </h3>
-        
-        <p className="text-sm text-mcv-gris mb-4">{barrio || zona || 'Ubicación no especificada'}</p>
 
-        <div className="flex flex-wrap gap-2 text-sm">
-          {bedrooms ? (
-            <span className="bg-gray-200 text-mcv-gris px-2 py-1 rounded-full">
-              {bedrooms} Dorm.
-            </span>
-          ) : null}
-          {mts_cubiertos ? (
-             <span className="bg-gray-200 text-mcv-gris px-2 py-1 rounded-full">
-              {mts_cubiertos} mts²
-            </span>
-          ) : null}
-          {pax ? (
-            <span className="bg-gray-200 text-mcv-gris px-2 py-1 rounded-full">
-              {pax} Pax
-            </span>
-          ) : null}
-          {acepta_mascota && (
-            <span className="bg-mcv-verde text-white px-2 py-1 rounded-full">
-              Mascotas
-            </span>
-          )}
-          {tiene_piscina && (
-            <span className="bg-mcv-azul text-white px-2 py-1 rounded-full">
-              {piscina_detalle || 'Pileta'}
-            </span>
-          )}
+        {/* PRECIO */}
+        <div className="text-2xl font-bold text-blue-700 mb-4">
+          {displayPrice}
         </div>
-      </div>
-      
-      <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
-         <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-mcv-azul font-bold hover:underline"
-          >
-            Ver más detalles &rarr;
-          </a>
-          {/* --- ¡NUEVO! Botón que llama al Modal --- */}
-          <button
-            onClick={() => onContact(property)} // Llama al handler del padre
-            className="text-green-500 hover:text-green-600 transition-colors"
-            aria-label="Consultar por esta propiedad"
-          >
-            <FaWhatsapp size={28} />
-          </button>
+
+        {/* CARACTERÍSTICAS */}
+        <div className="flex justify-between items-center text-sm text-gray-600 border-t border-gray-100 pt-4 mt-auto">
+            <div className="flex gap-4">
+                {property.bedrooms > 0 && (
+                    <span className="flex items-center" title="Dormitorios">
+                        <FaBed className="mr-1" /> {property.bedrooms}
+                    </span>
+                )}
+                {property.bathrooms > 0 && (
+                    <span className="flex items-center" title="Baños">
+                        <FaBath className="mr-1" /> {property.bathrooms}
+                    </span>
+                )}
+                {property.mts_cubiertos > 0 && (
+                    <span className="flex items-center" title="Metros Cubiertos">
+                        <FaRulerCombined className="mr-1" /> {property.mts_cubiertos}m²
+                    </span>
+                )}
+            </div>
+        </div>
+
+        {/* BOTONES */}
+        <div className="grid grid-cols-2 gap-2 mt-4">
+           <a 
+             href={property.url} 
+             target="_blank" 
+             rel="noopener noreferrer"
+             className="flex items-center justify-center w-full py-2 border border-blue-600 text-blue-600 font-bold rounded hover:bg-blue-50 transition"
+           >
+             Ver Ficha
+           </a>
+           <button 
+             onClick={() => onContact(property)}
+             className="flex items-center justify-center w-full py-2 bg-green-500 text-white font-bold rounded hover:bg-green-600 transition"
+           >
+             <FaWhatsapp className="mr-2" /> Consultar
+           </button>
+        </div>
       </div>
     </div>
   );

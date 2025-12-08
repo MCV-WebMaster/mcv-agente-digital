@@ -19,7 +19,7 @@ Modal.setAppElement('#__next');
 const PERIOD_OPTIONS_2026 = [
   { value: 'ID_NAV', label: 'Navidad (19/12 al 26/12)' },
   { value: 'ID_AN', label: 'Año Nuevo (26/12 al 02/01)' },
-  { value: 'ID_COMBINED', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' }, // LA CLAVE PARA EL FIX
+  { value: 'ID_COMBINED', label: 'Año Nuevo c/1er q Enero (30/12 al 15/01)' }, // ESTA ES LA CLAVE CRÍTICA
   { value: 'ID_ENE1', label: 'Ene 1er q (02/01 al 15/01)' },
   { value: 'ID_ENE2', label: 'Ene 2da q (16/01 al 31/01)' },
   { value: 'ID_FEB1', label: 'Feb 1er q c/CARNAVAL (01/02 al 17/02)' },
